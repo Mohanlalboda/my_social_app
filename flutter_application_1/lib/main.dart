@@ -67,17 +67,24 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
+// HomeScreen క్లాస్ లోపల ఈ మార్పులు చేయండి
 class _HomeScreenState extends State<HomeScreen> {
-  // ఇమేజ్ పిక్కర్ ఫంక్షన్ ఇక్కడ క్లాస్ లోపల ఉండాలి
+  // కొత్త పోస్ట్‌లను స్టోర్ చేయడానికి ఒక లిస్ట్
+  List<File> myPosts = [];
+
   Future<void> _pickImage() async {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(source: ImageSource.gallery);
 
     if (image != null) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Photo Selected: ${image.name}")));
+      setState(() {
+        // సెలెక్ట్ చేసిన ఫోటోను మన లిస్ట్‌లో యాడ్ చేస్తున్నాం
+        myPosts.insert(0, File(image.path));
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Post Added Successfully! 🚀")),
+      );
     }
   }
 
@@ -102,20 +109,14 @@ class _HomeScreenState extends State<HomeScreen> {
               color: Colors.black,
               size: 28,
             ),
-            onPressed: _pickImage, // ఫోటో అప్‌లోడ్ బటన్
+            onPressed: _pickImage,
           ),
-          IconButton(
-            icon: const Icon(Icons.favorite_border, color: Colors.black),
-            onPressed: () {},
-          ),
-          IconButton(
-            icon: const Icon(Icons.send_outlined, color: Colors.black),
-            onPressed: () {},
-          ),
+          // మిగిలిన ఐకాన్స్...
         ],
       ),
       body: Column(
         children: [
+          // 1. Stories Section (యధావిధిగా ఉంటుంది)
           SizedBox(
             height: 140,
             child: ListView.builder(
@@ -125,10 +126,43 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           const Divider(height: 1),
+
+          // 2. Main Feed Section
           Expanded(
-            child: ListView.builder(
-              itemCount: 10,
-              itemBuilder: (context, index) => PostWidget(index: index),
+            child: ListView(
+              children: [
+                // మనం కొత్తగా యాడ్ చేసిన పోస్ట్‌లు ఇక్కడ కనిపిస్తాయి
+                ...myPosts
+                    .map(
+                      (file) => Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const ListTile(
+                            leading: CircleAvatar(backgroundColor: Colors.blue),
+                            title: Text(
+                              "Mohanlal (You)",
+                              style: TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                          Image.file(
+                            file,
+                            height: 400,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                          ),
+                          const Padding(
+                            padding: EdgeInsets.all(8.0),
+                            child: Icon(Icons.favorite_border),
+                          ),
+                          const Divider(),
+                        ],
+                      ),
+                    )
+                    .toList(),
+
+                // పాత డమ్మీ పోస్ట్‌లు (ListView.builder లాగా)
+                ...List.generate(10, (index) => PostWidget(index: index)),
+              ],
             ),
           ),
         ],
