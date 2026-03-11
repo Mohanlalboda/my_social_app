@@ -27,6 +27,7 @@ class _MainNavigationState extends State<MainNavigation> {
   final List<Widget> _screens = [
     const HomeScreen(),
     const SearchScreen(),
+    const ReelsScreen(),
     const ProfileScreen(),
   ];
 
@@ -46,6 +47,10 @@ class _MainNavigationState extends State<MainNavigation> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
           BottomNavigationBarItem(icon: Icon(Icons.search), label: "Search"),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.video_library),
+            label: "Reels",
+          ), // కొత్త ఐకాన్
           BottomNavigationBarItem(icon: Icon(Icons.person), label: "Profile"),
         ],
       ),
@@ -360,6 +365,99 @@ class StoryWidget extends StatelessWidget {
           const SizedBox(height: 5),
           Text("User_$index", style: const TextStyle(fontSize: 12)),
         ],
+      ),
+    );
+  }
+}
+
+class ReelsScreen extends StatelessWidget {
+  const ReelsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor:
+          Colors.black, // రీల్స్ ఎప్పుడూ బ్లాక్ బ్యాక్‌గ్రౌండ్‌లో బాగుంటాయి
+      body: PageView.builder(
+        scrollDirection: Axis.vertical, // నిలువుగా స్క్రోల్ అవుతుంది
+        itemCount: 5,
+        itemBuilder: (context, index) {
+          return Stack(
+            children: [
+              // 1. వీడియో ప్లేస్ (ప్రస్తుతానికి ఇమేజ్ వాడుతున్నాం)
+              SizedBox.expand(
+                child: Image.network(
+                  "https://picsum.photos/id/${index + 120}/1080/1920",
+                  fit: BoxFit.cover,
+                ),
+              ),
+
+              // 2. బ్లాక్ గ్రేడియంట్ (టెక్స్ట్ కనిపించడానికి)
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.black.withOpacity(0.5), Colors.transparent],
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.center,
+                  ),
+                ),
+              ),
+
+              // 3. సైడ్ ఐకాన్స్ (Like, Comment, Share)
+              Positioned(
+                right: 15,
+                bottom: 100,
+                child: Column(
+                  children: [
+                    const Icon(Icons.favorite, color: Colors.white, size: 35),
+                    const Text("1.2k", style: TextStyle(color: Colors.white)),
+                    const SizedBox(height: 20),
+                    const Icon(
+                      Icons.chat_bubble_outline,
+                      color: Colors.white,
+                      size: 35,
+                    ),
+                    const Text("45", style: TextStyle(color: Colors.white)),
+                    const SizedBox(height: 20),
+                    const Icon(Icons.send, color: Colors.white, size: 35),
+                  ],
+                ),
+              ),
+
+              // 4. యూజర్ వివరాలు (Bottom Overlay)
+              Positioned(
+                left: 15,
+                bottom: 30,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const CircleAvatar(
+                          radius: 18,
+                          backgroundColor: Colors.white,
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          "User_$index",
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      "Learning Flutter for my Law Project! ⚖️🚀",
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
