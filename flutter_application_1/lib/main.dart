@@ -1,5 +1,7 @@
+import 'package:video_player/video_player.dart';
 import 'package:flutter/material.dart';
 
+// 1. మెయిన్ ఎంట్రీ పాయింట్
 void main() => runApp(const MySocialApp());
 
 class MySocialApp extends StatelessWidget {
@@ -14,6 +16,7 @@ class MySocialApp extends StatelessWidget {
   }
 }
 
+// 2. మెయిన్ నావిగేషన్ (స్క్రీన్లను మార్చే బుర్ర)
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
   @override
@@ -23,7 +26,6 @@ class MainNavigation extends StatefulWidget {
 class _MainNavigationState extends State<MainNavigation> {
   int _selectedIndex = 0;
 
-  // స్క్రీన్‌ల లిస్ట్
   final List<Widget> _screens = [
     const HomeScreen(),
     const SearchScreen(),
@@ -37,20 +39,18 @@ class _MainNavigationState extends State<MainNavigation> {
       body: _screens[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
-        onTap: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
+        onTap: (index) => setState(() => _selectedIndex = index),
         selectedItemColor: Colors.black,
         unselectedItemColor: Colors.grey,
+        type: BottomNavigationBarType
+            .fixed, // 4 ఐకాన్లు ఉన్నప్పుడు ఇది వాడటం మంచిది
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
           BottomNavigationBarItem(icon: Icon(Icons.search), label: "Search"),
           BottomNavigationBarItem(
             icon: Icon(Icons.video_library),
             label: "Reels",
-          ), // కొత్త ఐకాన్
+          ),
           BottomNavigationBarItem(icon: Icon(Icons.person), label: "Profile"),
         ],
       ),
@@ -58,7 +58,7 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 }
 
-// --- HOME SCREEN ---
+// --- 3. హోమ్ స్క్రీన్ (Stories + Feed) ---
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
   @override
@@ -109,7 +109,134 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-// --- PROFILE SCREEN ---
+// --- 4. సెర్చ్ స్క్రీన్ (Explore Grid) ---
+class SearchScreen extends StatelessWidget {
+  const SearchScreen({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        title: Container(
+          height: 40,
+          decoration: BoxDecoration(
+            color: Colors.grey[200],
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const TextField(
+            decoration: InputDecoration(
+              hintText: "Search",
+              prefixIcon: Icon(Icons.search, color: Colors.grey),
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.only(top: 5),
+            ),
+          ),
+        ),
+      ),
+      body: GridView.builder(
+        itemCount: 21,
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
+          crossAxisSpacing: 2,
+          mainAxisSpacing: 2,
+        ),
+        itemBuilder: (context, index) => Image.network(
+          "https://picsum.photos/id/${index + 60}/300/300",
+          fit: BoxFit.cover,
+        ),
+      ),
+    );
+  }
+}
+
+// --- 5. రీల్స్ స్క్రీన్ (Vertical Scroll) ---
+class ReelsScreen extends StatelessWidget {
+  const ReelsScreen({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: PageView.builder(
+        scrollDirection: Axis.vertical,
+        itemCount: 5,
+        itemBuilder: (context, index) {
+          return Stack(
+            children: [
+              // ReelsScreen లోని Stack లోపల మొదటి ఐటమ్ గా ఇది పెట్టండి:
+              SizedBox.expand(
+                child: VideoReelItem(
+                  videoUrl:
+                      "https://flutter.github.io/assets-for-api-docs/assets/videos/bee.mp4",
+                ),
+              ),
+              Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.black.withOpacity(0.5), Colors.transparent],
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.center,
+                  ),
+                ),
+              ),
+              Positioned(
+                right: 15,
+                bottom: 100,
+                child: Column(
+                  children: [
+                    const Icon(Icons.favorite, color: Colors.white, size: 35),
+                    const Text("1.2k", style: TextStyle(color: Colors.white)),
+                    const SizedBox(height: 20),
+                    const Icon(
+                      Icons.chat_bubble_outline,
+                      color: Colors.white,
+                      size: 35,
+                    ),
+                    const Text("45", style: TextStyle(color: Colors.white)),
+                    const SizedBox(height: 20),
+                    const Icon(Icons.send, color: Colors.white, size: 35),
+                  ],
+                ),
+              ),
+              Positioned(
+                left: 15,
+                bottom: 30,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const CircleAvatar(
+                          radius: 18,
+                          backgroundColor: Colors.white,
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          "User_$index",
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      "Learning Flutter for my Law Project! ⚖️🚀",
+                      style: TextStyle(color: Colors.white),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+// --- 6. ప్రొఫైల్ స్క్రీన్ ---
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
   @override
@@ -143,7 +270,6 @@ class ProfileScreen extends StatelessWidget {
                     ),
                   ),
                 ),
-                // ప్రొఫైల్ స్టాట్స్ మళ్ళీ యాడ్ చేశాను
                 const Column(
                   children: [
                     Text("12", style: TextStyle(fontWeight: FontWeight.bold)),
@@ -226,48 +352,7 @@ class ProfileScreen extends StatelessWidget {
   }
 }
 
-// --- SEARCH SCREEN ---
-class SearchScreen extends StatelessWidget {
-  const SearchScreen({super.key});
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        title: Container(
-          height: 40,
-          decoration: BoxDecoration(
-            color: Colors.grey[200],
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const TextField(
-            decoration: InputDecoration(
-              hintText: "Search",
-              prefixIcon: Icon(Icons.search, color: Colors.grey),
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.only(top: 5),
-            ),
-          ),
-        ),
-      ),
-      body: GridView.builder(
-        itemCount: 21,
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
-          crossAxisSpacing: 2,
-          mainAxisSpacing: 2,
-        ),
-        itemBuilder: (context, index) => Image.network(
-          "https://picsum.photos/id/${index + 60}/300/300",
-          fit: BoxFit.cover,
-        ),
-      ),
-    );
-  }
-}
-
-// --- POST WIDGET ---
+// --- 7. సహాయక విడ్జెట్లు (Post & Story) ---
 class PostWidget extends StatefulWidget {
   final int index;
   const PostWidget({super.key, required this.index});
@@ -328,7 +413,6 @@ class _PostWidgetState extends State<PostWidget> {
   }
 }
 
-// --- STORY WIDGET ---
 class StoryWidget extends StatelessWidget {
   final int index;
   const StoryWidget({super.key, required this.index});
@@ -370,95 +454,45 @@ class StoryWidget extends StatelessWidget {
   }
 }
 
-class ReelsScreen extends StatelessWidget {
-  const ReelsScreen({super.key});
+class VideoReelItem extends StatefulWidget {
+  final String videoUrl;
+  const VideoReelItem({super.key, required this.videoUrl});
+
+  @override
+  State<VideoReelItem> createState() => _VideoReelItemState();
+}
+
+class _VideoReelItemState extends State<VideoReelItem> {
+  late VideoPlayerController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    // వీడియోను ఇంటర్నెట్ నుండి లోడ్ చేయడం
+    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl))
+      ..initialize().then((_) {
+        setState(() {}); // వీడియో రెడీ అవ్వగానే స్క్రీన్‌ని రిఫ్రెష్ చేస్తుంది
+        _controller.play(); // ఆటోమేటిక్‌గా ప్లే చేస్తుంది
+        _controller.setLooping(true); // వీడియో మళ్ళీ మళ్ళీ వస్తుంది
+      });
+  }
+
+  @override
+  void dispose() {
+    _controller
+        .dispose(); // మెమరీ సేవ్ చేయడానికి వీడియో కంట్రోలర్‌ని క్లోజ్ చేస్తుంది
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor:
-          Colors.black, // రీల్స్ ఎప్పుడూ బ్లాక్ బ్యాక్‌గ్రౌండ్‌లో బాగుంటాయి
-      body: PageView.builder(
-        scrollDirection: Axis.vertical, // నిలువుగా స్క్రోల్ అవుతుంది
-        itemCount: 5,
-        itemBuilder: (context, index) {
-          return Stack(
-            children: [
-              // 1. వీడియో ప్లేస్ (ప్రస్తుతానికి ఇమేజ్ వాడుతున్నాం)
-              SizedBox.expand(
-                child: Image.network(
-                  "https://picsum.photos/id/${index + 120}/1080/1920",
-                  fit: BoxFit.cover,
-                ),
-              ),
-
-              // 2. బ్లాక్ గ్రేడియంట్ (టెక్స్ట్ కనిపించడానికి)
-              Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Colors.black.withOpacity(0.5), Colors.transparent],
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.center,
-                  ),
-                ),
-              ),
-
-              // 3. సైడ్ ఐకాన్స్ (Like, Comment, Share)
-              Positioned(
-                right: 15,
-                bottom: 100,
-                child: Column(
-                  children: [
-                    const Icon(Icons.favorite, color: Colors.white, size: 35),
-                    const Text("1.2k", style: TextStyle(color: Colors.white)),
-                    const SizedBox(height: 20),
-                    const Icon(
-                      Icons.chat_bubble_outline,
-                      color: Colors.white,
-                      size: 35,
-                    ),
-                    const Text("45", style: TextStyle(color: Colors.white)),
-                    const SizedBox(height: 20),
-                    const Icon(Icons.send, color: Colors.white, size: 35),
-                  ],
-                ),
-              ),
-
-              // 4. యూజర్ వివరాలు (Bottom Overlay)
-              Positioned(
-                left: 15,
-                bottom: 30,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const CircleAvatar(
-                          radius: 18,
-                          backgroundColor: Colors.white,
-                        ),
-                        const SizedBox(width: 10),
-                        Text(
-                          "User_$index",
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    const Text(
-                      "Learning Flutter for my Law Project! ⚖️🚀",
-                      style: TextStyle(color: Colors.white),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
+    return _controller.value.isInitialized
+        ? Center(
+            child: AspectRatio(
+              aspectRatio: _controller.value.aspectRatio,
+              child: VideoPlayer(_controller),
+            ),
+          )
+        : const Center(child: CircularProgressIndicator(color: Colors.white));
   }
 }
