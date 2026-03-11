@@ -83,13 +83,32 @@ class HomeScreen extends StatelessWidget {
         ],
       ),
       // HomeScreen లోని body ని ఇలా మార్చండి
-      body: ListView.builder(
-        itemCount: 10,
-        itemBuilder: (context, index) {
-          return PostWidget(
-            index: index,
-          ); // మనం పైన తయారు చేసిన కొత్త క్లాస్ ని ఇక్కడ వాడుతున్నాం
-        },
+      body: Column(
+        children: [
+          // 1. అడ్డంగా స్క్రోల్ అయ్యే స్టోరీస్ (Horizontal Stories)
+          SizedBox(
+            height: 140,
+            child: ListView.builder(
+              scrollDirection:
+                  Axis.horizontal, // ఇది అడ్డంగా స్క్రోల్ అయ్యేలా చేస్తుంది
+              itemCount: 10,
+              itemBuilder: (context, index) {
+                return StoryWidget(index: index);
+              },
+            ),
+          ),
+
+          const Divider(height: 1), // స్టోరీస్ కి ఫీడ్ కి మధ్య ఒక చిన్న గీత
+          // 2. నిలువుగా స్క్రోల్ అయ్యే పోస్ట్ ఫీడ్ (Vertical Feed)
+          Expanded(
+            child: ListView.builder(
+              itemCount: 10,
+              itemBuilder: (context, index) {
+                return PostWidget(index: index);
+              },
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -243,6 +262,54 @@ class _PostWidgetState extends State<PostWidget> {
         ),
         const Divider(),
       ],
+    );
+  }
+}
+
+class StoryWidget extends StatelessWidget {
+  final int index;
+  const StoryWidget({super.key, required this.index});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 10.0),
+      child: Column(
+        children: [
+          // స్టోరీ చుట్టూ కలర్ బోర్డర్ కోసం ఒక Container
+          Container(
+            padding: const EdgeInsets.all(3), // బోర్డర్ మందం
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: [
+                  Colors.yellow,
+                  Colors.orange,
+                  Colors.red,
+                  Colors.purple,
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            child: Container(
+              padding: const EdgeInsets.all(2),
+              decoration: const BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white,
+              ),
+              child: CircleAvatar(
+                radius: 35,
+                backgroundImage: NetworkImage(
+                  "https://picsum.photos/id/${index + 50}/100/100",
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 5),
+          Text("User_${index}", style: const TextStyle(fontSize: 12)),
+        ],
+      ),
     );
   }
 }
