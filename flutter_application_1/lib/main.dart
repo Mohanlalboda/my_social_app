@@ -23,17 +23,16 @@ class MainNavigation extends StatefulWidget {
 class _MainNavigationState extends State<MainNavigation> {
   int _selectedIndex = 0;
 
-  // మీ స్క్రీన్‌లను ఇక్కడ లిస్ట్ చేస్తున్నాం
+  // స్క్రీన్‌ల లిస్ట్
   final List<Widget> _screens = [
-    const HomeScreen(), // ఫీడ్ పేజీ
-    const SearchScreen(), // సెర్చ్ ప్లేస్‌హోల్డర్
-    const ProfileScreen(), // ప్రొఫైల్ పేజీ
+    const HomeScreen(),
+    const SearchScreen(),
+    const ProfileScreen(),
   ];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // ఎంచుకున్న ఇండెక్స్ ప్రకారం స్క్రీన్ మారుతుంది
       body: _screens[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
@@ -54,7 +53,7 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 }
 
-// --- ఇక్కడ నుండి మీ హోమ్ స్క్రీన్ కోడ్ ---
+// --- HOME SCREEN ---
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
   @override
@@ -82,30 +81,21 @@ class HomeScreen extends StatelessWidget {
           ),
         ],
       ),
-      // HomeScreen లోని body ని ఇలా మార్చండి
       body: Column(
         children: [
-          // 1. అడ్డంగా స్క్రోల్ అయ్యే స్టోరీస్ (Horizontal Stories)
           SizedBox(
             height: 140,
             child: ListView.builder(
-              scrollDirection:
-                  Axis.horizontal, // ఇది అడ్డంగా స్క్రోల్ అయ్యేలా చేస్తుంది
+              scrollDirection: Axis.horizontal,
               itemCount: 10,
-              itemBuilder: (context, index) {
-                return StoryWidget(index: index);
-              },
+              itemBuilder: (context, index) => StoryWidget(index: index),
             ),
           ),
-
-          const Divider(height: 1), // స్టోరీస్ కి ఫీడ్ కి మధ్య ఒక చిన్న గీత
-          // 2. నిలువుగా స్క్రోల్ అయ్యే పోస్ట్ ఫీడ్ (Vertical Feed)
+          const Divider(height: 1),
           Expanded(
             child: ListView.builder(
               itemCount: 10,
-              itemBuilder: (context, index) {
-                return PostWidget(index: index);
-              },
+              itemBuilder: (context, index) => PostWidget(index: index),
             ),
           ),
         ],
@@ -114,7 +104,7 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-// --- ఇక్కడ నుండి మీ ప్రొఫైల్ స్క్రీన్ కోడ్ ---
+// --- PROFILE SCREEN ---
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
   @override
@@ -139,18 +129,33 @@ class ProfileScreen extends StatelessWidget {
                 CircleAvatar(
                   radius: 40,
                   backgroundColor: Colors.grey[200],
-                  // ClipOval వాడితే లోపల వచ్చే ఫోటో కరెక్ట్ గా రౌండ్ గా మారుతుంది
                   child: ClipOval(
                     child: Image.network(
-                      "https://ui-avatars.com/api/?name=Lal&background=random&size=128",
+                      "https://ui-avatars.com/api/?name=Mohanlal&background=random&size=128",
                       fit: BoxFit.cover,
                       width: 80,
                       height: 80,
-                      // ఒకవేళ ఇంటర్నెట్ సరిగ్గా లేకపోతే ఈ కింద ఐకాన్ కనిపిస్తుంది
-                      errorBuilder: (context, error, stackTrace) =>
-                          Icon(Icons.person, size: 50),
                     ),
                   ),
+                ),
+                // ప్రొఫైల్ స్టాట్స్ మళ్ళీ యాడ్ చేశాను
+                const Column(
+                  children: [
+                    Text("12", style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text("Posts"),
+                  ],
+                ),
+                const Column(
+                  children: [
+                    Text("450", style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text("Followers"),
+                  ],
+                ),
+                const Column(
+                  children: [
+                    Text("300", style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text("Following"),
+                  ],
                 ),
               ],
             ),
@@ -183,140 +188,42 @@ class ProfileScreen extends StatelessWidget {
               ),
             ),
           ),
-          const Divider(height: 40),
-          const Expanded(
-            child: Center(
-              child: Text("Your posts will appear here in a Grid!"),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class PostWidget extends StatefulWidget {
-  final int index;
-  const PostWidget({super.key, required this.index});
-
-  @override
-  State<PostWidget> createState() => _PostWidgetState();
-}
-
-class _PostWidgetState extends State<PostWidget> {
-  bool isLiked = false; // ఇది లైక్ అయిందా లేదా అని గుర్తుంచుకుంటుంది
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // 1. యూజర్ హెడర్
-        Padding(
-          padding: const EdgeInsets.all(10.0),
-          child: Row(
+          const SizedBox(height: 10),
+          const Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              CircleAvatar(
-                backgroundColor: Colors.grey[300],
-                backgroundImage: NetworkImage(
-                  "https://picsum.photos/id/${widget.index + 20}/50/50",
-                ),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                "User_${widget.index}",
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
+              Icon(Icons.grid_on, color: Colors.black),
+              Icon(Icons.video_collection_outlined, color: Colors.grey),
+              Icon(Icons.person_pin_outlined, color: Colors.grey),
             ],
           ),
-        ),
-        // 2. మెయిన్ ఫోటో
-        Image.network(
-          "https://picsum.photos/id/${widget.index + 10}/500/500",
-          height: 400,
-          width: double.infinity,
-          fit: BoxFit.cover,
-        ),
-        // 3. లైక్ బటన్ లాజిక్
-        Row(
-          children: [
-            IconButton(
-              icon: Icon(
-                isLiked ? Icons.favorite : Icons.favorite_border,
-                color: isLiked ? Colors.red : Colors.black,
+          const Divider(),
+          Expanded(
+            child: GridView.builder(
+              padding: const EdgeInsets.all(1),
+              itemCount: 12,
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+                crossAxisSpacing: 2,
+                mainAxisSpacing: 2,
               ),
-              onPressed: () {
-                // ఇక్కడ మ్యాజిక్ జరుగుతుంది!
-                setState(() {
-                  isLiked =
-                      !isLiked; // false ఉంటే true, true ఉంటే false చేస్తుంది
-                });
+              itemBuilder: (context, index) {
+                return Image.network(
+                  "https://picsum.photos/id/${index + 80}/300/300",
+                  fit: BoxFit.cover,
+                );
               },
             ),
-            IconButton(
-              icon: const Icon(Icons.chat_bubble_outline),
-              onPressed: () {},
-            ),
-            IconButton(icon: const Icon(Icons.send_outlined), onPressed: () {}),
-          ],
-        ),
-        const Divider(),
-      ],
-    );
-  }
-}
-
-class StoryWidget extends StatelessWidget {
-  final int index;
-  const StoryWidget({super.key, required this.index});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 10.0),
-      child: Column(
-        children: [
-          // స్టోరీ చుట్టూ కలర్ బోర్డర్ కోసం ఒక Container
-          Container(
-            padding: const EdgeInsets.all(3), // బోర్డర్ మందం
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                colors: [
-                  Colors.yellow,
-                  Colors.orange,
-                  Colors.red,
-                  Colors.purple,
-                ],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-            ),
-            child: Container(
-              padding: const EdgeInsets.all(2),
-              decoration: const BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.white,
-              ),
-              child: CircleAvatar(
-                radius: 35,
-                backgroundImage: NetworkImage(
-                  "https://picsum.photos/id/${index + 50}/100/100",
-                ),
-              ),
-            ),
           ),
-          const SizedBox(height: 5),
-          Text("User_${index}", style: const TextStyle(fontSize: 12)),
         ],
       ),
     );
   }
 }
 
+// --- SEARCH SCREEN ---
 class SearchScreen extends StatelessWidget {
   const SearchScreen({super.key});
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -340,18 +247,119 @@ class SearchScreen extends StatelessWidget {
         ),
       ),
       body: GridView.builder(
-        itemCount: 30, // 30 ఫోటోలు చూపిద్దాం
+        itemCount: 21,
         gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3, // ఒక వరుసలో 3 ఫోటోలు
-          crossAxisSpacing: 2, // ఫోటోల మధ్య అడ్డంగా గ్యాప్
-          mainAxisSpacing: 2, // ఫోటోల మధ్య నిలువుగా గ్యాప్
+          crossAxisCount: 3,
+          crossAxisSpacing: 2,
+          mainAxisSpacing: 2,
         ),
-        itemBuilder: (context, index) {
-          return Image.network(
-            "https://picsum.photos/id/${index + 60}/300/300",
-            fit: BoxFit.cover,
-          );
-        },
+        itemBuilder: (context, index) => Image.network(
+          "https://picsum.photos/id/${index + 60}/300/300",
+          fit: BoxFit.cover,
+        ),
+      ),
+    );
+  }
+}
+
+// --- POST WIDGET ---
+class PostWidget extends StatefulWidget {
+  final int index;
+  const PostWidget({super.key, required this.index});
+  @override
+  State<PostWidget> createState() => _PostWidgetState();
+}
+
+class _PostWidgetState extends State<PostWidget> {
+  bool isLiked = false;
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(10.0),
+          child: Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: Colors.grey[300],
+                backgroundImage: NetworkImage(
+                  "https://picsum.photos/id/${widget.index + 20}/50/50",
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                "User_${widget.index}",
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+        ),
+        Image.network(
+          "https://picsum.photos/id/${widget.index + 10}/500/500",
+          height: 400,
+          width: double.infinity,
+          fit: BoxFit.cover,
+        ),
+        Row(
+          children: [
+            IconButton(
+              icon: Icon(
+                isLiked ? Icons.favorite : Icons.favorite_border,
+                color: isLiked ? Colors.red : Colors.black,
+              ),
+              onPressed: () => setState(() => isLiked = !isLiked),
+            ),
+            IconButton(
+              icon: const Icon(Icons.chat_bubble_outline),
+              onPressed: () {},
+            ),
+            IconButton(icon: const Icon(Icons.send_outlined), onPressed: () {}),
+          ],
+        ),
+        const Divider(),
+      ],
+    );
+  }
+}
+
+// --- STORY WIDGET ---
+class StoryWidget extends StatelessWidget {
+  final int index;
+  const StoryWidget({super.key, required this.index});
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(8.0),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(3),
+            decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: LinearGradient(
+                colors: [
+                  Colors.yellow,
+                  Colors.orange,
+                  Colors.red,
+                  Colors.purple,
+                ],
+              ),
+            ),
+            child: CircleAvatar(
+              radius: 35,
+              backgroundColor: Colors.white,
+              child: CircleAvatar(
+                radius: 32,
+                backgroundImage: NetworkImage(
+                  "https://picsum.photos/id/${index + 50}/100/100",
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 5),
+          Text("User_$index", style: const TextStyle(fontSize: 12)),
+        ],
       ),
     );
   }
