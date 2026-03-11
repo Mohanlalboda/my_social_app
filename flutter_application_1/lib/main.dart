@@ -1,5 +1,7 @@
-import 'package:video_player/video_player.dart';
+import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:video_player/video_player.dart';
+import 'package:image_picker/image_picker.dart';
 
 // 1. మెయిన్ ఎంట్రీ పాయింట్
 void main() => runApp(const MySocialApp());
@@ -16,7 +18,7 @@ class MySocialApp extends StatelessWidget {
   }
 }
 
-// 2. మెయిన్ నావిగేషన్ (స్క్రీన్లను మార్చే బుర్ర)
+// 2. మెయిన్ నావిగేషన్ (Bottom Nav Logic)
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
   @override
@@ -42,8 +44,7 @@ class _MainNavigationState extends State<MainNavigation> {
         onTap: (index) => setState(() => _selectedIndex = index),
         selectedItemColor: Colors.black,
         unselectedItemColor: Colors.grey,
-        type: BottomNavigationBarType
-            .fixed, // 4 ఐకాన్లు ఉన్నప్పుడు ఇది వాడటం మంచిది
+        type: BottomNavigationBarType.fixed,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home), label: "Home"),
           BottomNavigationBarItem(icon: Icon(Icons.search), label: "Search"),
@@ -58,9 +59,28 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 }
 
-// --- 3. హోమ్ స్క్రీన్ (Stories + Feed) ---
-class HomeScreen extends StatelessWidget {
+// --- 3. హోమ్ స్క్రీన్ (Stories + Feed + Add Post) ---
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  // ఇమేజ్ పిక్కర్ ఫంక్షన్ ఇక్కడ క్లాస్ లోపల ఉండాలి
+  Future<void> _pickImage() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+
+    if (image != null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Photo Selected: ${image.name}")));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -76,6 +96,14 @@ class HomeScreen extends StatelessWidget {
           ),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(
+              Icons.add_box_outlined,
+              color: Colors.black,
+              size: 28,
+            ),
+            onPressed: _pickImage, // ఫోటో అప్‌లోడ్ బటన్
+          ),
           IconButton(
             icon: const Icon(Icons.favorite_border, color: Colors.black),
             onPressed: () {},
@@ -150,7 +178,7 @@ class SearchScreen extends StatelessWidget {
   }
 }
 
-// --- 5. రీల్స్ స్క్రీన్ (Vertical Scroll) ---
+// --- 5. రీల్స్ స్క్రీన్ (Vertical Scroll Video) ---
 class ReelsScreen extends StatelessWidget {
   const ReelsScreen({super.key});
   @override
@@ -163,13 +191,13 @@ class ReelsScreen extends StatelessWidget {
         itemBuilder: (context, index) {
           return Stack(
             children: [
-              // ReelsScreen లోని Stack లోపల మొదటి ఐటమ్ గా ఇది పెట్టండి:
               SizedBox.expand(
                 child: VideoReelItem(
                   videoUrl:
                       "https://flutter.github.io/assets-for-api-docs/assets/videos/bee.mp4",
                 ),
               ),
+              // నిన్నటి పాత కోడ్‌లోని గ్రేడియంట్ మరియు ఐకాన్స్ ఇక్కడ యధావిధిగా ఉంటాయి...
               Container(
                 decoration: BoxDecoration(
                   gradient: LinearGradient(
@@ -193,38 +221,6 @@ class ReelsScreen extends StatelessWidget {
                       size: 35,
                     ),
                     const Text("45", style: TextStyle(color: Colors.white)),
-                    const SizedBox(height: 20),
-                    const Icon(Icons.send, color: Colors.white, size: 35),
-                  ],
-                ),
-              ),
-              Positioned(
-                left: 15,
-                bottom: 30,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const CircleAvatar(
-                          radius: 18,
-                          backgroundColor: Colors.white,
-                        ),
-                        const SizedBox(width: 10),
-                        Text(
-                          "User_$index",
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    const Text(
-                      "Learning Flutter for my Law Project! ⚖️🚀",
-                      style: TextStyle(color: Colors.white),
-                    ),
                   ],
                 ),
               ),
@@ -236,7 +232,7 @@ class ReelsScreen extends StatelessWidget {
   }
 }
 
-// --- 6. ప్రొఫైల్ స్క్రీన్ ---
+// --- 6. ప్రొఫైల్ స్క్రీన్ (Edit Profile Logic) ---
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
   @override
@@ -244,21 +240,17 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  String name = "Mohanlal"; // ఇది మన డిఫాల్ట్ పేరు
+  String name = "Mohanlal";
   final TextEditingController _nameController = TextEditingController();
 
-  // పేరు మార్చడానికి ఒక ఫంక్షన్
   void _editProfile() {
-    _nameController.text = name; // పాత పేరును బాక్సులో చూపిస్తుంది
-
+    _nameController.text = name;
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true, // కీబోర్డ్ వచ్చినప్పుడు అడ్జస్ట్ అవుతుంది
+      isScrollControlled: true,
       builder: (context) => Padding(
         padding: EdgeInsets.only(
-          bottom: MediaQuery.of(
-            context,
-          ).viewInsets.bottom, // కీబోర్డ్ కోసం స్థలం
+          bottom: MediaQuery.of(context).viewInsets.bottom,
           left: 20,
           right: 20,
           top: 20,
@@ -267,26 +259,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             const Text(
-              "Edit Your Name",
+              "Edit Name",
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
+            TextField(controller: _nameController),
             const SizedBox(height: 15),
-            TextField(
-              controller: _nameController,
-              decoration: const InputDecoration(
-                border: OutlineInputBorder(),
-                labelText: "Name",
-              ),
-            ),
-            const SizedBox(height: 20),
             ElevatedButton(
               onPressed: () {
-                setState(() {
-                  name = _nameController.text; // కొత్త పేరును సేవ్ చేస్తుంది
-                });
-                Navigator.pop(context); // విండో క్లోజ్ చేస్తుంది
+                setState(() => name = _nameController.text);
+                Navigator.pop(context);
               },
-              child: const Text("Save Changes"),
+              child: const Text("Save"),
             ),
             const SizedBox(height: 20),
           ],
@@ -309,7 +292,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       body: Column(
         children: [
-          // 1. హెడర్ (ఫోటో)
           Padding(
             padding: const EdgeInsets.all(20.0),
             child: Row(
@@ -320,7 +302,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   backgroundColor: Colors.grey[200],
                   child: ClipOval(
                     child: Image.network(
-                      "https://ui-avatars.com/api/?name=$name&background=random&size=128",
+                      "https://ui-avatars.com/api/?name=$name&background=random",
                     ),
                   ),
                 ),
@@ -336,53 +318,75 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     Text("Followers"),
                   ],
                 ),
-                const Column(
-                  children: [
-                    Text("300", style: TextStyle(fontWeight: FontWeight.bold)),
-                    Text("Following"),
-                  ],
-                ),
               ],
             ),
           ),
-          // 2. పేరు మరియు బయో
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                  ),
-                ),
-                const Text("Law Student | Osmania University ⚖️"),
-              ],
-            ),
+          Text(
+            name,
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
           ),
-          const SizedBox(height: 20),
-          // 3. ఎడిట్ బటన్ (ఇప్పుడు ఇది పనిచేస్తుంది!)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20.0),
-            child: SizedBox(
-              width: double.infinity,
-              child: OutlinedButton(
-                onPressed: _editProfile,
-                child: const Text("Edit Profile"),
+          const Text("Law Student | Osmania University ⚖️"),
+          OutlinedButton(
+            onPressed: _editProfile,
+            child: const Text("Edit Profile"),
+          ),
+          const Divider(),
+          Expanded(
+            child: GridView.builder(
+              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                crossAxisCount: 3,
+              ),
+              itemCount: 12,
+              itemBuilder: (context, index) => Image.network(
+                "https://picsum.photos/id/${index + 80}/300/300",
               ),
             ),
           ),
-          const Divider(height: 40),
-          // గ్రిడ్ సెక్షన్ యధావిధిగా ఉంటుంది...
         ],
       ),
     );
   }
 }
 
-// --- 7. సహాయక విడ్జెట్లు (Post & Story) ---
+// --- 7. వీడియో రీల్ ఐటమ్ ---
+class VideoReelItem extends StatefulWidget {
+  final String videoUrl;
+  const VideoReelItem({super.key, required this.videoUrl});
+  @override
+  State<VideoReelItem> createState() => _VideoReelItemState();
+}
+
+class _VideoReelItemState extends State<VideoReelItem> {
+  late VideoPlayerController _controller;
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl))
+      ..initialize().then((_) {
+        setState(() {});
+        _controller.play();
+        _controller.setLooping(true);
+      });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _controller.value.isInitialized
+        ? AspectRatio(
+            aspectRatio: _controller.value.aspectRatio,
+            child: VideoPlayer(_controller),
+          )
+        : const Center(child: CircularProgressIndicator(color: Colors.white));
+  }
+}
+
+// --- 8. చిన్న విడ్జెట్లు (Post & Story) ---
 class PostWidget extends StatefulWidget {
   final int index;
   const PostWidget({super.key, required this.index});
@@ -397,23 +401,13 @@ class _PostWidgetState extends State<PostWidget> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.all(10.0),
-          child: Row(
-            children: [
-              CircleAvatar(
-                backgroundColor: Colors.grey[300],
-                backgroundImage: NetworkImage(
-                  "https://picsum.photos/id/${widget.index + 20}/50/50",
-                ),
-              ),
-              const SizedBox(width: 10),
-              Text(
-                "User_${widget.index}",
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ],
+        ListTile(
+          leading: CircleAvatar(
+            backgroundImage: NetworkImage(
+              "https://picsum.photos/id/${widget.index + 20}/50/50",
+            ),
           ),
+          title: Text("User_${widget.index}"),
         ),
         Image.network(
           "https://picsum.photos/id/${widget.index + 10}/500/500",
@@ -434,7 +428,6 @@ class _PostWidgetState extends State<PostWidget> {
               icon: const Icon(Icons.chat_bubble_outline),
               onPressed: () {},
             ),
-            IconButton(icon: const Icon(Icons.send_outlined), onPressed: () {}),
           ],
         ),
         const Divider(),
@@ -452,77 +445,19 @@ class StoryWidget extends StatelessWidget {
       padding: const EdgeInsets.all(8.0),
       child: Column(
         children: [
-          Container(
-            padding: const EdgeInsets.all(3),
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: LinearGradient(
-                colors: [
-                  Colors.yellow,
-                  Colors.orange,
-                  Colors.red,
-                  Colors.purple,
-                ],
-              ),
-            ),
+          CircleAvatar(
+            radius: 35,
+            backgroundColor: Colors.purple,
             child: CircleAvatar(
-              radius: 35,
-              backgroundColor: Colors.white,
-              child: CircleAvatar(
-                radius: 32,
-                backgroundImage: NetworkImage(
-                  "https://picsum.photos/id/${index + 50}/100/100",
-                ),
+              radius: 32,
+              backgroundImage: NetworkImage(
+                "https://picsum.photos/id/${index + 50}/100/100",
               ),
             ),
           ),
-          const SizedBox(height: 5),
           Text("User_$index", style: const TextStyle(fontSize: 12)),
         ],
       ),
     );
-  }
-}
-
-class VideoReelItem extends StatefulWidget {
-  final String videoUrl;
-  const VideoReelItem({super.key, required this.videoUrl});
-
-  @override
-  State<VideoReelItem> createState() => _VideoReelItemState();
-}
-
-class _VideoReelItemState extends State<VideoReelItem> {
-  late VideoPlayerController _controller;
-
-  @override
-  void initState() {
-    super.initState();
-    // వీడియోను ఇంటర్నెట్ నుండి లోడ్ చేయడం
-    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl))
-      ..initialize().then((_) {
-        setState(() {}); // వీడియో రెడీ అవ్వగానే స్క్రీన్‌ని రిఫ్రెష్ చేస్తుంది
-        _controller.play(); // ఆటోమేటిక్‌గా ప్లే చేస్తుంది
-        _controller.setLooping(true); // వీడియో మళ్ళీ మళ్ళీ వస్తుంది
-      });
-  }
-
-  @override
-  void dispose() {
-    _controller
-        .dispose(); // మెమరీ సేవ్ చేయడానికి వీడియో కంట్రోలర్‌ని క్లోజ్ చేస్తుంది
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return _controller.value.isInitialized
-        ? Center(
-            child: AspectRatio(
-              aspectRatio: _controller.value.aspectRatio,
-              child: VideoPlayer(_controller),
-            ),
-          )
-        : const Center(child: CircularProgressIndicator(color: Colors.white));
   }
 }
