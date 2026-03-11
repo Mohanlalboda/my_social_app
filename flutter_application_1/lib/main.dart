@@ -82,67 +82,13 @@ class HomeScreen extends StatelessWidget {
           ),
         ],
       ),
+      // HomeScreen లోని body ని ఇలా మార్చండి
       body: ListView.builder(
         itemCount: 10,
         itemBuilder: (context, index) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Padding(
-                padding: EdgeInsets.all(10.0),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      backgroundColor: Colors.grey,
-                      radius: 18,
-                      child: Icon(Icons.person, color: Colors.white),
-                    ),
-                    SizedBox(width: 10),
-                    Text(
-                      "User_Name",
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-              ),
-              // పాత Container ప్లేస్‌లో ఇది పెట్టండి
-              ClipRRect(
-                child: Image.network(
-                  "https://picsum.photos/id/${index + 10}/500/500", // ప్రతి పోస్ట్‌కి ఒక వేర్వేరు ఫోటో వస్తుంది
-                  height: 400,
-                  width: double.infinity,
-                  fit: BoxFit.cover, // ఫోటో స్క్రీన్ కి సరిపోయేలా చేస్తుంది
-                  loadingBuilder: (context, child, loadingProgress) {
-                    if (loadingProgress == null) return child;
-                    return Container(
-                      height: 400,
-                      color: Colors.grey[200],
-                      child: const Center(
-                        child: CircularProgressIndicator(),
-                      ), // లోడ్ అయ్యే వరకు తిరుగుతుంది
-                    );
-                  },
-                ),
-              ),
-              Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.favorite_border),
-                    onPressed: () {},
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.chat_bubble_outline),
-                    onPressed: () {},
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.send_outlined),
-                    onPressed: () {},
-                  ),
-                ],
-              ),
-              const Divider(),
-            ],
-          );
+          return PostWidget(
+            index: index,
+          ); // మనం పైన తయారు చేసిన కొత్త క్లాస్ ని ఇక్కడ వాడుతున్నాం
         },
       ),
     );
@@ -226,6 +172,77 @@ class ProfileScreen extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+}
+
+class PostWidget extends StatefulWidget {
+  final int index;
+  const PostWidget({super.key, required this.index});
+
+  @override
+  State<PostWidget> createState() => _PostWidgetState();
+}
+
+class _PostWidgetState extends State<PostWidget> {
+  bool isLiked = false; // ఇది లైక్ అయిందా లేదా అని గుర్తుంచుకుంటుంది
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // 1. యూజర్ హెడర్
+        Padding(
+          padding: const EdgeInsets.all(10.0),
+          child: Row(
+            children: [
+              CircleAvatar(
+                backgroundColor: Colors.grey[300],
+                backgroundImage: NetworkImage(
+                  "https://picsum.photos/id/${widget.index + 20}/50/50",
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                "User_${widget.index}",
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+        ),
+        // 2. మెయిన్ ఫోటో
+        Image.network(
+          "https://picsum.photos/id/${widget.index + 10}/500/500",
+          height: 400,
+          width: double.infinity,
+          fit: BoxFit.cover,
+        ),
+        // 3. లైక్ బటన్ లాజిక్
+        Row(
+          children: [
+            IconButton(
+              icon: Icon(
+                isLiked ? Icons.favorite : Icons.favorite_border,
+                color: isLiked ? Colors.red : Colors.black,
+              ),
+              onPressed: () {
+                // ఇక్కడ మ్యాజిక్ జరుగుతుంది!
+                setState(() {
+                  isLiked =
+                      !isLiked; // false ఉంటే true, true ఉంటే false చేస్తుంది
+                });
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.chat_bubble_outline),
+              onPressed: () {},
+            ),
+            IconButton(icon: const Icon(Icons.send_outlined), onPressed: () {}),
+          ],
+        ),
+        const Divider(),
+      ],
     );
   }
 }
