@@ -6,21 +6,62 @@ import 'package:image_picker/image_picker.dart';
 // 1. మెయిన్ ఎంట్రీ పాయింట్
 void main() => runApp(const MySocialApp());
 
-class MySocialApp extends StatelessWidget {
+class MySocialApp extends StatefulWidget {
   const MySocialApp({super.key});
+
+  @override
+  State<MySocialApp> createState() => _MySocialAppState();
+}
+
+class _MySocialAppState extends State<MySocialApp> {
+  // ఇది మన థీమ్ కంట్రోలర్
+  ThemeMode _themeMode = ThemeMode.light;
+
+  // థీమ్ మార్చడానికి ఒక ఫంక్షన్
+  void _toggleTheme() {
+    setState(() {
+      _themeMode = _themeMode == ThemeMode.light
+          ? ThemeMode.dark
+          : ThemeMode.light;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(primarySwatch: Colors.blue),
-      home: const MainNavigation(),
+      // 1. లైట్ థీమ్ (పగటి పూట)
+      theme: ThemeData(
+        brightness: Brightness.light,
+        primarySwatch: Colors.blue,
+        scaffoldBackgroundColor: Colors.white,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.white,
+          foregroundColor: Colors.black,
+        ),
+      ),
+      // 2. డార్క్ థీమ్ (రాత్రి పూట)
+      darkTheme: ThemeData(
+        brightness: Brightness.dark,
+        scaffoldBackgroundColor: Colors.black,
+        appBarTheme: const AppBarTheme(
+          backgroundColor: Colors.black,
+          foregroundColor: Colors.white,
+        ),
+      ),
+      themeMode: _themeMode, // ప్రస్తుతం ఏ థీమ్ ఉండాలో ఇది నిర్ణయిస్తుంది
+      home: MainNavigation(
+        toggleTheme: _toggleTheme,
+      ), // నావిగేషన్ కి ఈ ఫంక్షన్ ని పంపిస్తున్నాం
     );
   }
 }
 
 // 2. మెయిన్ నావిగేషన్ (Bottom Nav Logic)
 class MainNavigation extends StatefulWidget {
-  const MainNavigation({super.key});
+  final VoidCallback toggleTheme; // ఇది థీమ్ మార్చే ఫంక్షన్
+  const MainNavigation({super.key, required this.toggleTheme});
+
   @override
   State<MainNavigation> createState() => _MainNavigationState();
 }
@@ -38,6 +79,16 @@ class _MainNavigationState extends State<MainNavigation> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: const Text("Instagram"),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.brightness_6),
+            onPressed:
+                widget.toggleTheme, // ఇక్కడ క్లిక్ చేస్తే థీమ్ మారిపోతుంది!
+          ),
+        ],
+      ),
       body: _screens[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
