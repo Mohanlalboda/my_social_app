@@ -26,7 +26,7 @@ class _MainNavigationState extends State<MainNavigation> {
   // మీ స్క్రీన్‌లను ఇక్కడ లిస్ట్ చేస్తున్నాం
   final List<Widget> _screens = [
     const HomeScreen(), // ఫీడ్ పేజీ
-    const Center(child: Text("Search Coming Soon...")), // సెర్చ్ ప్లేస్‌హోల్డర్
+    const SearchScreen(), // సెర్చ్ ప్లేస్‌హోల్డర్
     const ProfileScreen(), // ప్రొఫైల్ పేజీ
   ];
 
@@ -309,6 +309,49 @@ class StoryWidget extends StatelessWidget {
           const SizedBox(height: 5),
           Text("User_${index}", style: const TextStyle(fontSize: 12)),
         ],
+      ),
+    );
+  }
+}
+
+class SearchScreen extends StatelessWidget {
+  const SearchScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        backgroundColor: Colors.white,
+        elevation: 0,
+        title: Container(
+          height: 40,
+          decoration: BoxDecoration(
+            color: Colors.grey[200],
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: const TextField(
+            decoration: InputDecoration(
+              hintText: "Search",
+              prefixIcon: Icon(Icons.search, color: Colors.grey),
+              border: InputBorder.none,
+              contentPadding: EdgeInsets.only(top: 5),
+            ),
+          ),
+        ),
+      ),
+      body: GridView.builder(
+        itemCount: 30, // 30 ఫోటోలు చూపిద్దాం
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3, // ఒక వరుసలో 3 ఫోటోలు
+          crossAxisSpacing: 2, // ఫోటోల మధ్య అడ్డంగా గ్యాప్
+          mainAxisSpacing: 2, // ఫోటోల మధ్య నిలువుగా గ్యాప్
+        ),
+        itemBuilder: (context, index) {
+          return Image.network(
+            "https://picsum.photos/id/${index + 60}/300/300",
+            fit: BoxFit.cover,
+          );
+        },
       ),
     );
   }
