@@ -25,7 +25,7 @@ class _MainNavigationState extends State<MainNavigation> {
 
   // మీ స్క్రీన్‌లను ఇక్కడ లిస్ట్ చేస్తున్నాం
   final List<Widget> _screens = [
-    const HomeScreen(),   // ఫీడ్ పేజీ
+    const HomeScreen(), // ఫీడ్ పేజీ
     const Center(child: Text("Search Coming Soon...")), // సెర్చ్ ప్లేస్‌హోల్డర్
     const ProfileScreen(), // ప్రొఫైల్ పేజీ
   ];
@@ -34,7 +34,7 @@ class _MainNavigationState extends State<MainNavigation> {
   Widget build(BuildContext context) {
     return Scaffold(
       // ఎంచుకున్న ఇండెక్స్ ప్రకారం స్క్రీన్ మారుతుంది
-      body: _screens[_selectedIndex], 
+      body: _screens[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (index) {
@@ -63,12 +63,23 @@ class HomeScreen extends StatelessWidget {
       appBar: AppBar(
         backgroundColor: Colors.white,
         elevation: 1,
-        title: const Text("Instagram Clone",
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 24),
+        title: const Text(
+          "Instagram Clone",
+          style: TextStyle(
+            color: Colors.black,
+            fontWeight: FontWeight.bold,
+            fontSize: 24,
+          ),
         ),
         actions: [
-          IconButton(icon: const Icon(Icons.favorite_border, color: Colors.black), onPressed: () {}),
-          IconButton(icon: const Icon(Icons.send_outlined, color: Colors.black), onPressed: () {}),
+          IconButton(
+            icon: const Icon(Icons.favorite_border, color: Colors.black),
+            onPressed: () {},
+          ),
+          IconButton(
+            icon: const Icon(Icons.send_outlined, color: Colors.black),
+            onPressed: () {},
+          ),
         ],
       ),
       body: ListView.builder(
@@ -81,21 +92,52 @@ class HomeScreen extends StatelessWidget {
                 padding: EdgeInsets.all(10.0),
                 child: Row(
                   children: [
-                    CircleAvatar(backgroundColor: Colors.grey, radius: 18, child: Icon(Icons.person, color: Colors.white)),
+                    CircleAvatar(
+                      backgroundColor: Colors.grey,
+                      radius: 18,
+                      child: Icon(Icons.person, color: Colors.white),
+                    ),
                     SizedBox(width: 10),
-                    Text("User_Name", style: TextStyle(fontWeight: FontWeight.bold)),
+                    Text(
+                      "User_Name",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
                   ],
                 ),
               ),
-              Container(
-                height: 400, width: double.infinity, color: Colors.grey[300],
-                child: const Icon(Icons.image, size: 80, color: Colors.white),
+              // పాత Container ప్లేస్‌లో ఇది పెట్టండి
+              ClipRRect(
+                child: Image.network(
+                  "https://picsum.photos/id/${index + 10}/500/500", // ప్రతి పోస్ట్‌కి ఒక వేర్వేరు ఫోటో వస్తుంది
+                  height: 400,
+                  width: double.infinity,
+                  fit: BoxFit.cover, // ఫోటో స్క్రీన్ కి సరిపోయేలా చేస్తుంది
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return Container(
+                      height: 400,
+                      color: Colors.grey[200],
+                      child: const Center(
+                        child: CircularProgressIndicator(),
+                      ), // లోడ్ అయ్యే వరకు తిరుగుతుంది
+                    );
+                  },
+                ),
               ),
               Row(
                 children: [
-                  IconButton(icon: const Icon(Icons.favorite_border), onPressed: () {}),
-                  IconButton(icon: const Icon(Icons.chat_bubble_outline), onPressed: () {}),
-                  IconButton(icon: const Icon(Icons.send_outlined), onPressed: () {}),
+                  IconButton(
+                    icon: const Icon(Icons.favorite_border),
+                    onPressed: () {},
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.chat_bubble_outline),
+                    onPressed: () {},
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.send_outlined),
+                    onPressed: () {},
+                  ),
                 ],
               ),
               const Divider(),
@@ -115,8 +157,12 @@ class ProfileScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         title: const Text("Profile", style: TextStyle(color: Colors.black)),
-        backgroundColor: Colors.white, elevation: 0,
-        actions: [const Icon(Icons.menu, color: Colors.black), const SizedBox(width: 15)],
+        backgroundColor: Colors.white,
+        elevation: 0,
+        actions: [
+          const Icon(Icons.menu, color: Colors.black),
+          const SizedBox(width: 15),
+        ],
       ),
       body: Column(
         children: [
@@ -125,10 +171,22 @@ class ProfileScreen extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const CircleAvatar(radius: 40, backgroundColor: Colors.blueAccent, child: Icon(Icons.person, size: 50, color: Colors.white)),
-                Column(children: [const Text("10", style: TextStyle(fontWeight: FontWeight.bold)), const Text("Posts")]),
-                Column(children: [const Text("500", style: TextStyle(fontWeight: FontWeight.bold)), const Text("Followers")]),
-                Column(children: [const Text("300", style: TextStyle(fontWeight: FontWeight.bold)), const Text("Following")]),
+                CircleAvatar(
+                  radius: 40,
+                  backgroundColor: Colors.grey[200],
+                  // ClipOval వాడితే లోపల వచ్చే ఫోటో కరెక్ట్ గా రౌండ్ గా మారుతుంది
+                  child: ClipOval(
+                    child: Image.network(
+                      "https://ui-avatars.com/api/?name=Lal&background=random&size=128",
+                      fit: BoxFit.cover,
+                      width: 80,
+                      height: 80,
+                      // ఒకవేళ ఇంటర్నెట్ సరిగ్గా లేకపోతే ఈ కింద ఐకాన్ కనిపిస్తుంది
+                      errorBuilder: (context, error, stackTrace) =>
+                          Icon(Icons.person, size: 50),
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -137,19 +195,35 @@ class ProfileScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text("Your Name", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                Text(
+                  "Mohanlal",
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+                ),
                 Text("Law Student | Osmania University ⚖️"),
-                Text("Building the next viral social app! 🚀", style: TextStyle(color: Colors.grey)),
+                Text(
+                  "Building the next viral social app! 🚀",
+                  style: TextStyle(color: Colors.grey),
+                ),
               ],
             ),
           ),
           const SizedBox(height: 20),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20.0),
-            child: SizedBox(width: double.infinity, child: OutlinedButton(onPressed: () {}, child: const Text("Edit Profile"))),
+            child: SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () {},
+                child: const Text("Edit Profile"),
+              ),
+            ),
           ),
           const Divider(height: 40),
-          const Expanded(child: Center(child: Text("Your posts will appear here in a Grid!"))),
+          const Expanded(
+            child: Center(
+              child: Text("Your posts will appear here in a Grid!"),
+            ),
+          ),
         ],
       ),
     );
