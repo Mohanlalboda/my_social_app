@@ -937,6 +937,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
 }
 
 // --- 7. సెర్చ్ స్క్రీన్ ---
+// --- 7. సెర్చ్ & ఎక్స్‌ప్లోర్ స్క్రీన్ ---
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
   @override
@@ -963,65 +964,106 @@ class _SearchScreenState extends State<SearchScreen> {
           },
         ),
       ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('users').snapshots(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return const Center(child: Text("No users found"));
-          }
-
-          var filteredUsers = snapshot.data!.docs.where((doc) {
-            String username = doc['username'].toString().toLowerCase();
-            return username.contains(_searchName);
-          }).toList();
-
-          return ListView.builder(
-            itemCount: filteredUsers.length,
-            itemBuilder: (context, index) {
-              var user = filteredUsers[index].data() as Map<String, dynamic>;
-              if (user['uid'] == FirebaseAuth.instance.currentUser!.uid) {
-                return const SizedBox.shrink();
-              }
-
-              return ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: Colors.grey[300],
-                  backgroundImage:
-                      (user['profilePic'] != null &&
-                          user['profilePic'].toString().isNotEmpty)
-                      ? MemoryImage(base64Decode(user['profilePic']))
-                      : null,
-                  child:
-                      (user['profilePic'] == null ||
-                          user['profilePic'].toString().isEmpty)
-                      ? Text(
-                          user['username'][0].toUpperCase(),
-                          style: const TextStyle(color: Colors.black),
-                        )
-                      : null,
-                ),
-                title: Text(
-                  user['username'],
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                subtitle: Text(user['bio'] ?? ""),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) =>
-                          OtherUserProfileScreen(uid: user['uid']),
-                    ),
+      // ఇక్కడే మన మ్యాజిక్ లాజిక్ రాశాం! 👇
+      body: _searchName.isEmpty
+          ? StreamBuilder<QuerySnapshot>(
+              // 1. సెర్చ్ బాక్స్ ఖాళీగా ఉంటే అందరి పోస్ట్స్ (Explore Grid) చూపిస్తాం
+              stream: FirebaseFirestore.instance
+                  .collection('posts')
+                  .orderBy('timestamp', descending: true)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snapshot.data!.docs.isEmpty) {
+                  return const Center(
+                    child: Text("No posts to explore yet! 🌎"),
                   );
-                },
-              );
-            },
-          );
-        },
-      ),
+                }
+                return GridView.builder(
+                  padding: const EdgeInsets.all(2),
+                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                    crossAxisCount: 3,
+                    crossAxisSpacing: 2,
+                    mainAxisSpacing: 2,
+                  ),
+                  itemCount: snapshot.data!.docs.length,
+                  itemBuilder: (context, index) {
+                    var post =
+                        snapshot.data!.docs[index].data()
+                            as Map<String, dynamic>;
+                    return Image.memory(
+                      base64Decode(post['postData']),
+                      fit: BoxFit.cover,
+                    );
+                  },
+                );
+              },
+            )
+          : StreamBuilder<QuerySnapshot>(
+              // 2. సెర్చ్ బాక్స్ లో ఏదైనా టైప్ చేస్తే యూజర్ల లిస్ట్ చూపిస్తాం
+              stream: FirebaseFirestore.instance
+                  .collection('users')
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return const Center(child: Text("No users found"));
+                }
+
+                var filteredUsers = snapshot.data!.docs.where((doc) {
+                  String username = doc['username'].toString().toLowerCase();
+                  return username.contains(_searchName);
+                }).toList();
+
+                return ListView.builder(
+                  itemCount: filteredUsers.length,
+                  itemBuilder: (context, index) {
+                    var user =
+                        filteredUsers[index].data() as Map<String, dynamic>;
+                    if (user['uid'] == FirebaseAuth.instance.currentUser!.uid) {
+                      return const SizedBox.shrink();
+                    }
+
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: Colors.grey[300],
+                        backgroundImage:
+                            (user['profilePic'] != null &&
+                                user['profilePic'].toString().isNotEmpty)
+                            ? MemoryImage(base64Decode(user['profilePic']))
+                            : null,
+                        child:
+                            (user['profilePic'] == null ||
+                                user['profilePic'].toString().isEmpty)
+                            ? Text(
+                                user['username'][0].toUpperCase(),
+                                style: const TextStyle(color: Colors.black),
+                              )
+                            : null,
+                      ),
+                      title: Text(
+                        user['username'],
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      subtitle: Text(user['bio'] ?? ""),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                OtherUserProfileScreen(uid: user['uid']),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                );
+              },
+            ),
     );
   }
 }
