@@ -1,13 +1,14 @@
 import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_database/firebase_database.dart';
+import 'package:firebase_database/ui/firebase_animated_list.dart';
 import 'firebase_options.dart';
-import 'package:firebase_database/firebase_database.dart'; // పైన ఇది యాడ్ చేయండి
 
-// 1. మెయిన్ ఎంట్రీ పాయింట్
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -16,43 +17,24 @@ void main() async {
 
 class MySocialApp extends StatefulWidget {
   const MySocialApp({super.key});
-
   @override
   State<MySocialApp> createState() => _MySocialAppState();
 }
 
 class _MySocialAppState extends State<MySocialApp> {
   ThemeMode _themeMode = ThemeMode.light;
-
-  void _toggleTheme() {
-    setState(() {
-      _themeMode = _themeMode == ThemeMode.light
-          ? ThemeMode.dark
-          : ThemeMode.light;
-    });
-  }
+  void _toggleTheme() => setState(
+    () => _themeMode = _themeMode == ThemeMode.light
+        ? ThemeMode.dark
+        : ThemeMode.light,
+  );
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.light,
-        primaryColor: Colors.blue,
-        scaffoldBackgroundColor: Colors.white,
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black,
-        ),
-      ),
-      darkTheme: ThemeData(
-        brightness: Brightness.dark,
-        scaffoldBackgroundColor: Colors.black,
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.black,
-          foregroundColor: Colors.white,
-        ),
-      ),
+      theme: ThemeData(brightness: Brightness.light, primaryColor: Colors.blue),
+      darkTheme: ThemeData(brightness: Brightness.dark),
       themeMode: _themeMode,
       home: StreamBuilder<User?>(
         stream: FirebaseAuth.instance.authStateChanges(),
@@ -72,18 +54,16 @@ class _MySocialAppState extends State<MySocialApp> {
   }
 }
 
-// 2. మెయిన్ నావిగేషన్
+// --- 2. మెయిన్ నావిగేషన్ ---
 class MainNavigation extends StatefulWidget {
   final VoidCallback toggleTheme;
   const MainNavigation({super.key, required this.toggleTheme});
-
   @override
   State<MainNavigation> createState() => _MainNavigationState();
 }
 
 class _MainNavigationState extends State<MainNavigation> {
   int _selectedIndex = 0;
-
   final List<Widget> _screens = [
     const HomeScreen(),
     const SearchScreen(),
@@ -114,7 +94,7 @@ class _MainNavigationState extends State<MainNavigation> {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (index) => setState(() => _selectedIndex = index),
-        selectedItemColor: Colors.black,
+        selectedItemColor: Colors.blue,
         unselectedItemColor: Colors.grey,
         type: BottomNavigationBarType.fixed,
         items: const [
@@ -139,19 +119,43 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  List<File> myPosts = [];
+  bool _isUploading = false;
 
-  Future<void> _pickImage() async {
+  Future<void> _uploadPost() async {
     final ImagePicker picker = ImagePicker();
-    final XFile? image = await picker.pickImage(source: ImageSource.gallery);
+    final XFile? image = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 25,
+      maxWidth: 800, // వెడల్పును 800 పిక్సెల్స్ కి పరిమితం చేయండి
+      maxHeight: 800,
+    );
 
     if (image != null) {
-      setState(() {
-        myPosts.insert(0, File(image.path));
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Post Added Successfully! 🚀")),
-      );
+      setState(() => _isUploading = true);
+      try {
+        File imageFile = File(image.path);
+        String base64Image = base64Encode(await imageFile.readAsBytes());
+        String uid = FirebaseAuth.instance.currentUser!.uid;
+        String postId = DateTime.now().millisecondsSinceEpoch.toString();
+
+        await FirebaseDatabase.instance.ref("posts").child(postId).set({
+          "postId": postId,
+          "ownerId": uid,
+          "postData": base64Image,
+          "username": FirebaseAuth.instance.currentUser!.email!.split('@')[0],
+          "timestamp": ServerValue.timestamp,
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text("Post Shared! 🌎")));
+        }
+      } catch (e) {
+        debugPrint("Error: $e");
+      } finally {
+        if (mounted) setState(() => _isUploading = false);
+      }
     }
   }
 
@@ -159,27 +163,52 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       floatingActionButton: FloatingActionButton(
-        onPressed: _pickImage,
+        onPressed: _uploadPost,
         child: const Icon(Icons.add_a_photo),
       ),
       body: Column(
         children: [
           SizedBox(
-            height: 120,
+            height: 110,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
-              itemCount: 10,
+              itemCount: 8,
               itemBuilder: (context, index) => StoryWidget(index: index),
             ),
           ),
           const Divider(height: 1),
           Expanded(
-            child: ListView(
-              children: [
-                ...myPosts.map((file) => PostItem(file: file)),
-                ...List.generate(10, (index) => PostWidget(index: index)),
-              ],
-            ),
+            child: _isUploading
+                ? const Center(child: CircularProgressIndicator())
+                : FirebaseAnimatedList(
+                    query: FirebaseDatabase.instance.ref("posts"),
+                    reverse: true,
+                    itemBuilder: (context, snapshot, animation, index) {
+                      Map post = snapshot.value as Map;
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          ListTile(
+                            leading: CircleAvatar(
+                              child: Text(post['username'][0].toUpperCase()),
+                            ),
+                            title: Text(post['username'] ?? "User"),
+                          ),
+                          Image.memory(
+                            base64Decode(post['postData']),
+                            height: 400,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                          ),
+                          const Padding(
+                            padding: EdgeInsets.all(8.0),
+                            child: Icon(Icons.favorite_border),
+                          ),
+                          const Divider(),
+                        ],
+                      );
+                    },
+                  ),
           ),
         ],
       ),
@@ -205,9 +234,11 @@ class _LoginScreenState extends State<LoginScreen> {
         password: _passwordController.text.trim(),
       );
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
+      }
     }
   }
 
@@ -254,12 +285,10 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
             TextButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const SignUpScreen()),
-                );
-              },
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SignUpScreen()),
+              ),
               child: const Text("Don't have an account? Sign Up"),
             ),
           ],
@@ -281,7 +310,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _usernameController = TextEditingController();
 
-  // SignUpScreen లోని _signUp ఫంక్షన్ లో Firestore బదులు ఇది వాడండి:
   Future<void> _signUp() async {
     try {
       UserCredential userCredential = await FirebaseAuth.instance
@@ -289,24 +317,23 @@ class _SignUpScreenState extends State<SignUpScreen> {
             email: _emailController.text.trim(),
             password: _passwordController.text.trim(),
           );
-
-      // Realtime Database లో డేటా సేవ్ చేయడం
-      DatabaseReference ref = FirebaseDatabase.instance.ref(
-        "users/${userCredential.user!.uid}",
-      );
-
-      await ref.set({
-        "username": _usernameController.text.trim(),
-        "email": _emailController.text.trim(),
-        "uid": userCredential.user!.uid,
-        "bio": "Law Student | Building my app ⚖️",
-      });
-
-      if (mounted) Navigator.pop(context);
+      await FirebaseDatabase.instance
+          .ref("users/${userCredential.user!.uid}")
+          .set({
+            "username": _usernameController.text.trim(),
+            "email": _emailController.text.trim(),
+            "uid": userCredential.user!.uid,
+            "bio": "Law Student | Building my app ⚖️",
+          });
+      if (mounted) {
+        Navigator.pop(context);
+      }
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
+      }
     }
   }
 
@@ -318,7 +345,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
         padding: const EdgeInsets.all(20.0),
         child: Column(
           children: [
-            const SizedBox(height: 20),
             TextField(
               controller: _usernameController,
               decoration: const InputDecoration(
@@ -359,39 +385,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 }
 
-// --- 6. సహాయక విడ్జెట్లు (Widgets) ---
-
-class PostItem extends StatelessWidget {
-  final File file;
-  const PostItem({super.key, required this.file});
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const ListTile(
-          leading: CircleAvatar(backgroundColor: Colors.blue),
-          title: Text(
-            "Mohanlal (You)",
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
-        ),
-        Image.file(
-          file,
-          height: 400,
-          width: double.infinity,
-          fit: BoxFit.cover,
-        ),
-        const Padding(
-          padding: EdgeInsets.all(8.0),
-          child: Icon(Icons.favorite_border),
-        ),
-        const Divider(),
-      ],
-    );
-  }
-}
-
+// --- 6. సెర్చ్ స్క్రీన్ ---
 class SearchScreen extends StatelessWidget {
   const SearchScreen({super.key});
   @override
@@ -411,6 +405,7 @@ class SearchScreen extends StatelessWidget {
   }
 }
 
+// --- 7. రీల్స్ స్క్రీన్ ---
 class ReelsScreen extends StatelessWidget {
   const ReelsScreen({super.key});
   @override
@@ -444,85 +439,62 @@ class ReelsScreen extends StatelessWidget {
   }
 }
 
+// --- 8. ప్రొఫైల్ స్క్రీన్ ---
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
-
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  // ప్రస్తుత యూజర్ ఐడిని తీసుకుంటున్నాం
-  final String uid = FirebaseAuth.instance.currentUser!.uid;
-
   @override
   Widget build(BuildContext context) {
-    // Realtime Database నుండి డేటా తెచ్చుకోవడానికి StreamBuilder వాడుతున్నాం
+    final String uid = FirebaseAuth.instance.currentUser!.uid;
     return StreamBuilder(
       stream: FirebaseDatabase.instance.ref("users/$uid").onValue,
       builder: (context, AsyncSnapshot<DatabaseEvent> snapshot) {
-        // డేటా వచ్చే వరకు లోడింగ్ చూపిస్తుంది
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
-
-        // డేటాబేస్ ఖాళీగా ఉంటే లేదా ఎర్రర్ వస్తే
-        if (!snapshot.hasData || snapshot.data!.snapshot.value == null) {
-          return const Center(child: Text("No Profile Data Found"));
-        }
-
-        // డేటాను Map రూపంలోకి మారుస్తున్నాం
-        Map userData = snapshot.data!.snapshot.value as Map;
-        String username = userData['username'] ?? "No Name";
-        String bio = userData['bio'] ?? "No Bio";
-
+        String name =
+            snapshot.data?.snapshot.child("username").value.toString() ??
+            "User";
+        String bio =
+            snapshot.data?.snapshot.child("bio").value.toString() ?? "";
         return Column(
           children: [
             Padding(
               padding: const EdgeInsets.all(20),
               child: Row(
                 children: [
-                  CircleAvatar(
-                    radius: 40,
-                    child: ClipOval(
-                      child: Image.network(
-                        "https://ui-avatars.com/api/?name=$username&background=random",
-                      ),
-                    ),
-                  ),
+                  CircleAvatar(radius: 40, child: Text(name[0].toUpperCase())),
                   const SizedBox(width: 20),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        username,
+                        name,
                         style: const TextStyle(
                           fontWeight: FontWeight.bold,
-                          fontSize: 20,
+                          fontSize: 18,
                         ),
                       ),
-                      Text(bio, style: const TextStyle(color: Colors.grey)),
+                      Text(bio),
                     ],
                   ),
                 ],
               ),
             ),
             const Divider(),
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 10),
-              child: Text(
-                "My Posts",
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
+            const Text("My Activity"),
             Expanded(
               child: GridView.builder(
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 3,
                 ),
-                itemCount: 12,
+                itemCount: 9,
                 itemBuilder: (context, index) => Image.network(
-                  "https://picsum.photos/id/${index + 120}/300/300",
+                  "https://picsum.photos/id/${index + 10}/200/200",
                   fit: BoxFit.cover,
                 ),
               ),
@@ -534,6 +506,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
+// --- 9. వీడియో రీల్ ఐటమ్ ---
 class VideoReelItem extends StatefulWidget {
   final String videoUrl;
   const VideoReelItem({super.key, required this.videoUrl});
@@ -548,7 +521,7 @@ class _VideoReelItemState extends State<VideoReelItem> {
     super.initState();
     _controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl))
       ..initialize().then((_) {
-        setState(() {});
+        if (mounted) setState(() {});
         _controller.play();
         _controller.setLooping(true);
       });
@@ -571,47 +544,7 @@ class _VideoReelItemState extends State<VideoReelItem> {
   }
 }
 
-class PostWidget extends StatefulWidget {
-  final int index;
-  const PostWidget({super.key, required this.index});
-  @override
-  State<PostWidget> createState() => _PostWidgetState();
-}
-
-class _PostWidgetState extends State<PostWidget> {
-  bool isLiked = false;
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ListTile(
-          leading: CircleAvatar(
-            backgroundImage: NetworkImage(
-              "https://picsum.photos/id/${widget.index + 20}/50/50",
-            ),
-          ),
-          title: Text("User_${widget.index}"),
-        ),
-        Image.network(
-          "https://picsum.photos/id/${widget.index + 10}/500/500",
-          height: 400,
-          width: double.infinity,
-          fit: BoxFit.cover,
-        ),
-        IconButton(
-          icon: Icon(
-            isLiked ? Icons.favorite : Icons.favorite_border,
-            color: isLiked ? Colors.red : Colors.black,
-          ),
-          onPressed: () => setState(() => isLiked = !isLiked),
-        ),
-        const Divider(),
-      ],
-    );
-  }
-}
-
+// --- 10. స్టోరీ విడ్జెట్ ---
 class StoryWidget extends StatelessWidget {
   final int index;
   const StoryWidget({super.key, required this.index});
