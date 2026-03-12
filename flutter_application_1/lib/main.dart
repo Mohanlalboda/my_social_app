@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
+import 'package:firebase_database/firebase_database.dart'; // పైన ఇది యాడ్ చేయండి
 
 // 1. మెయిన్ ఎంట్రీ పాయింట్
 void main() async {
@@ -280,19 +281,31 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _usernameController = TextEditingController();
 
-  Future<void> _signUp() async {
-    try {
-      await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-      );
-      if (mounted) Navigator.pop(context);
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Registration Failed: ${e.toString()}")),
-      );
-    }
+ // SignUpScreen లోని _signUp ఫంక్షన్ లో Firestore బదులు ఇది వాడండి:
+Future<void> _signUp() async {
+  try {
+    UserCredential userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+      email: _emailController.text.trim(),
+      password: _passwordController.text.trim(),
+    );
+
+    // Realtime Database లో డేటా సేవ్ చేయడం
+    DatabaseReference ref = FirebaseDatabase.instance.ref("users/${userCredential.user!.uid}");
+
+    await ref.set({
+      "username": _usernameController.text.trim(),
+      "email": _emailController.text.trim(),
+      "uid": userCredential.user!.uid,
+      "bio": "Law Student | Building my app ⚖️"
+    });
+
+    if (mounted) Navigator.pop(context);
+  } catch (e) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text("Error: ${e.toString()}")),
+    );
   }
+}
 
   @override
   Widget build(BuildContext context) {
