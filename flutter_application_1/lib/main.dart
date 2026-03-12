@@ -13,6 +13,7 @@ void main() async {
   runApp(const MySocialApp());
 }
 
+// --- 1. రూట్ యాప్ ---
 class MySocialApp extends StatefulWidget {
   const MySocialApp({super.key});
   @override
@@ -167,7 +168,9 @@ class _HomeScreenState extends State<HomeScreen> {
           "commentCount": 0,
         });
 
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text("Shared! 🌎")));
@@ -415,7 +418,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// --- 4. ప్రొఫైల్ స్క్రీన్ ---
+// --- 4. ప్రొఫైల్ స్క్రీన్ (ఫోటో అప్‌లోడ్ ఫీచర్‌తో) ---
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
   @override
@@ -425,6 +428,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _bioController = TextEditingController();
+  bool _isUploadingPic = false;
 
   void _showEditDialog(String currentName, String currentBio) {
     _nameController.text = currentName;
@@ -464,7 +468,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       "username": _nameController.text.trim(),
                       "bio": _bioController.text.trim(),
                     });
-                if (!context.mounted) return;
+                if (!context.mounted) {
+                  return;
+                }
                 Navigator.pop(context);
               },
               child: const Text("Save"),
@@ -473,6 +479,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
         );
       },
     );
+  }
+
+  Future<void> _uploadProfilePic() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? image = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 10,
+      maxWidth: 200,
+    );
+
+    if (image != null) {
+      setState(() {
+        _isUploadingPic = true;
+      });
+      try {
+        File imageFile = File(image.path);
+        String base64Image = base64Encode(await imageFile.readAsBytes());
+        String uid = FirebaseAuth.instance.currentUser!.uid;
+
+        await FirebaseFirestore.instance.collection('users').doc(uid).update({
+          "profilePic": base64Image,
+        });
+
+        if (!mounted) {
+          return;
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Profile Photo Updated! 📸")),
+        );
+      } catch (e) {
+        debugPrint("Error: $e");
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isUploadingPic = false;
+          });
+        }
+      }
+    }
   }
 
   @override
@@ -490,6 +535,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         var userData = snapshot.data?.data() as Map<String, dynamic>? ?? {};
         String name = userData['username'] ?? "User";
         String bio = userData['bio'] ?? "";
+        String profilePic = userData['profilePic'] ?? "";
 
         return Column(
           children: [
@@ -497,11 +543,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
               padding: const EdgeInsets.all(20),
               child: Row(
                 children: [
-                  CircleAvatar(
-                    radius: 40,
-                    child: Text(
-                      name.isNotEmpty ? name[0].toUpperCase() : "U",
-                      style: const TextStyle(fontSize: 24),
+                  GestureDetector(
+                    onTap: _uploadProfilePic,
+                    child: CircleAvatar(
+                      radius: 40,
+                      backgroundColor: Colors.grey[300],
+                      backgroundImage: profilePic.isNotEmpty
+                          ? MemoryImage(base64Decode(profilePic))
+                          : null,
+                      child: profilePic.isEmpty
+                          ? (_isUploadingPic
+                                ? const CircularProgressIndicator()
+                                : Text(
+                                    name.isNotEmpty
+                                        ? name[0].toUpperCase()
+                                        : "U",
+                                    style: const TextStyle(
+                                      fontSize: 24,
+                                      color: Colors.black,
+                                    ),
+                                  ))
+                          : null,
                     ),
                   ),
                   const SizedBox(width: 20),
@@ -602,7 +664,9 @@ class _LoginScreenState extends State<LoginScreen> {
         password: _passwordController.text.trim(),
       );
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
@@ -695,11 +759,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
             "uid": userCredential.user!.uid,
             "bio": "Law Student | OU ⚖️",
             "createdAt": DateTime.now(),
+            "profilePic": "",
           });
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       Navigator.pop(context);
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
@@ -805,7 +874,16 @@ class _SearchScreenState extends State<SearchScreen> {
               }
               return ListTile(
                 leading: CircleAvatar(
-                  child: Text(user['username'][0].toUpperCase()),
+                  backgroundImage:
+                      (user['profilePic'] != null &&
+                          user['profilePic'].toString().isNotEmpty)
+                      ? MemoryImage(base64Decode(user['profilePic']))
+                      : null,
+                  child:
+                      (user['profilePic'] == null ||
+                          user['profilePic'].toString().isEmpty)
+                      ? Text(user['username'][0].toUpperCase())
+                      : null,
                 ),
                 title: Text(user['username']),
                 subtitle: Text(user['bio'] ?? ""),
