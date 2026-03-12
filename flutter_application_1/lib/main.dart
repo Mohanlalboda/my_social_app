@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // ఇది తప్పనిసరి
 import 'firebase_options.dart';
 
 // 1. మెయిన్ ఎంట్రీ పాయింట్
@@ -20,7 +21,6 @@ class MySocialApp extends StatefulWidget {
 }
 
 class _MySocialAppState extends State<MySocialApp> {
-  // థీమ్ కంట్రోలర్ - ఇది స్టేట్ క్లాస్ లోపల ఉండాలి
   ThemeMode _themeMode = ThemeMode.light;
 
   void _toggleTheme() {
@@ -53,7 +53,21 @@ class _MySocialAppState extends State<MySocialApp> {
         ),
       ),
       themeMode: _themeMode,
-      home: MainNavigation(toggleTheme: _toggleTheme),
+      // Firebase Auth స్థితిని బట్టి ఏ స్క్రీన్ చూపించాలో ఇది నిర్ణయిస్తుంది
+      home: StreamBuilder<User?>(
+        stream: FirebaseAuth.instance.authStateChanges(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            );
+          }
+          if (snapshot.hasData) {
+            return MainNavigation(toggleTheme: _toggleTheme);
+          }
+          return const LoginScreen();
+        },
+      ),
     );
   }
 }
@@ -80,12 +94,20 @@ class _MainNavigationState extends State<MainNavigation> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      // AppBar ఇక్కడ ఒకేసారి ఉంటే సరిపోతుంది
       appBar: AppBar(
-        title: const Text("Instagram"),
+        title: const Text(
+          "Instagram",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.brightness_6),
             onPressed: widget.toggleTheme,
+          ),
+          IconButton(
+            icon: const Icon(Icons.logout),
+            onPressed: () => FirebaseAuth.instance.signOut(),
           ),
         ],
       ),
@@ -136,55 +158,143 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        SizedBox(
-          height: 140,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            itemCount: 10,
-            itemBuilder: (context, index) => StoryWidget(index: index),
+    return Scaffold(
+      // హోమ్ స్క్రీన్ కోసం ప్రత్యేకంగా యాడ్ బటన్
+      floatingActionButton: FloatingActionButton(
+        onPressed: _pickImage,
+        child: const Icon(Icons.add_a_photo),
+      ),
+      body: Column(
+        children: [
+          SizedBox(
+            height: 120,
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: 10,
+              itemBuilder: (context, index) => StoryWidget(index: index),
+            ),
           ),
-        ),
-        const Divider(height: 1),
-        Expanded(
-          child: ListView(
-            children: [
-              ...myPosts.map(
-                (file) => Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const ListTile(
-                      leading: CircleAvatar(backgroundColor: Colors.blue),
-                      title: Text(
-                        "Mohanlal (You)",
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
-                    Image.file(
-                      file,
-                      height: 400,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                    ),
-                    const Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: Icon(Icons.favorite_border),
-                    ),
-                    const Divider(),
-                  ],
-                ),
+          const Divider(height: 1),
+          Expanded(
+            child: ListView(
+              children: [
+                ...myPosts.map((file) => PostItem(file: file)),
+                ...List.generate(10, (index) => PostWidget(index: index)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// --- 4. లాగిన్ స్క్రీన్ ---
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+
+  Future<void> _login() async {
+    try {
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              "Instagram Clone",
+              style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                fontStyle: FontStyle.italic,
               ),
-              ...List.generate(10, (index) => PostWidget(index: index)),
-            ],
+            ),
+            const SizedBox(height: 40),
+            TextField(
+              controller: _emailController,
+              decoration: const InputDecoration(
+                labelText: "Email",
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 15),
+            TextField(
+              controller: _passwordController,
+              decoration: const InputDecoration(
+                labelText: "Password",
+                border: OutlineInputBorder(),
+              ),
+              obscureText: true,
+            ),
+            const SizedBox(height: 25),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: _login,
+                child: const Text("Log In"),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// --- 5. ఇతర సహాయక విడ్జెట్లు & స్క్రీన్లు ---
+
+class PostItem extends StatelessWidget {
+  final File file;
+  const PostItem({super.key, required this.file});
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const ListTile(
+          leading: CircleAvatar(backgroundColor: Colors.blue),
+          title: Text(
+            "Mohanlal (You)",
+            style: TextStyle(fontWeight: FontWeight.bold),
           ),
         ),
+        Image.file(
+          file,
+          height: 400,
+          width: double.infinity,
+          fit: BoxFit.cover,
+        ),
+        const Padding(
+          padding: EdgeInsets.all(8.0),
+          child: Icon(Icons.favorite_border),
+        ),
+        const Divider(),
       ],
     );
   }
 }
 
-// --- 4. సెర్చ్ స్క్రీన్ ---
 class SearchScreen extends StatelessWidget {
   const SearchScreen({super.key});
   @override
@@ -204,7 +314,6 @@ class SearchScreen extends StatelessWidget {
   }
 }
 
-// --- 5. రీల్స్ స్క్రీన్ ---
 class ReelsScreen extends StatelessWidget {
   const ReelsScreen({super.key});
   @override
@@ -221,15 +330,6 @@ class ReelsScreen extends StatelessWidget {
                     "https://flutter.github.io/assets-for-api-docs/assets/videos/bee.mp4",
               ),
             ),
-            Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Colors.black.withOpacity(0.5), Colors.transparent],
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.center,
-                ),
-              ),
-            ),
             Positioned(
               right: 15,
               bottom: 100,
@@ -237,13 +337,6 @@ class ReelsScreen extends StatelessWidget {
                 children: [
                   const Icon(Icons.favorite, color: Colors.white, size: 35),
                   const Text("1.2k", style: TextStyle(color: Colors.white)),
-                  const SizedBox(height: 20),
-                  const Icon(
-                    Icons.chat_bubble_outline,
-                    color: Colors.white,
-                    size: 35,
-                  ),
-                  const Text("45", style: TextStyle(color: Colors.white)),
                 ],
               ),
             ),
@@ -254,7 +347,6 @@ class ReelsScreen extends StatelessWidget {
   }
 }
 
-// --- 6. ప్రొఫైల్ స్క్రీన్ ---
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
   @override
@@ -263,37 +355,21 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   String name = "Mohanlal";
-  final TextEditingController _nameController = TextEditingController();
-
   void _editProfile() {
-    _nameController.text = name;
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true,
-      builder: (context) => Padding(
-        padding: EdgeInsets.only(
-          bottom: MediaQuery.of(context).viewInsets.bottom,
-          left: 20,
-          right: 20,
-          top: 20,
-        ),
+      builder: (context) => Container(
+        padding: const EdgeInsets.all(20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
-              "Edit Name",
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-            ),
-            TextField(controller: _nameController),
-            const SizedBox(height: 15),
-            ElevatedButton(
-              onPressed: () {
-                setState(() => name = _nameController.text);
+            const Text("Edit Profile Name"),
+            TextField(
+              onSubmitted: (val) {
+                setState(() => name = val);
                 Navigator.pop(context);
               },
-              child: const Text("Save"),
             ),
-            const SizedBox(height: 20),
           ],
         ),
       ),
@@ -305,38 +381,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.all(20.0),
+          padding: const EdgeInsets.all(20),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               CircleAvatar(
                 radius: 40,
                 child: ClipOval(
                   child: Image.network(
-                    "https://ui-avatars.com/api/?name=$name&background=random",
+                    "https://ui-avatars.com/api/?name=$name",
                   ),
                 ),
               ),
-              const Column(
-                children: [
-                  Text("12", style: TextStyle(fontWeight: FontWeight.bold)),
-                  Text("Posts"),
-                ],
-              ),
-              const Column(
-                children: [
-                  Text("450", style: TextStyle(fontWeight: FontWeight.bold)),
-                  Text("Followers"),
-                ],
-              ),
+              const SizedBox(width: 20),
+              Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
             ],
           ),
         ),
-        Text(
-          name,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-        ),
-        const Text("Law Student | Osmania University ⚖️"),
         OutlinedButton(
           onPressed: _editProfile,
           child: const Text("Edit Profile"),
@@ -357,7 +417,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
-// --- 7. వీడియో రీల్ ఐటమ్ ---
 class VideoReelItem extends StatefulWidget {
   final String videoUrl;
   const VideoReelItem({super.key, required this.videoUrl});
@@ -391,11 +450,10 @@ class _VideoReelItemState extends State<VideoReelItem> {
             aspectRatio: _controller.value.aspectRatio,
             child: VideoPlayer(_controller),
           )
-        : const Center(child: CircularProgressIndicator(color: Colors.white));
+        : const Center(child: CircularProgressIndicator());
   }
 }
 
-// --- 8. చిన్న విడ్జెట్లు (Post & Story) ---
 class PostWidget extends StatefulWidget {
   final int index;
   const PostWidget({super.key, required this.index});
@@ -424,17 +482,12 @@ class _PostWidgetState extends State<PostWidget> {
           width: double.infinity,
           fit: BoxFit.cover,
         ),
-        Row(
-          children: [
-            IconButton(
-              icon: Icon(
-                isLiked ? Icons.favorite : Icons.favorite_border,
-                color: isLiked ? Colors.red : Colors.black,
-              ),
-              onPressed: () => setState(() => isLiked = !isLiked),
-            ),
-            const Icon(Icons.chat_bubble_outline),
-          ],
+        IconButton(
+          icon: Icon(
+            isLiked ? Icons.favorite : Icons.favorite_border,
+            color: isLiked ? Colors.red : Colors.black,
+          ),
+          onPressed: () => setState(() => isLiked = !isLiked),
         ),
         const Divider(),
       ],
@@ -448,20 +501,16 @@ class StoryWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.all(8.0),
+      padding: const EdgeInsets.all(8),
       child: Column(
         children: [
           CircleAvatar(
-            radius: 35,
-            backgroundColor: Colors.purple,
-            child: CircleAvatar(
-              radius: 32,
-              backgroundImage: NetworkImage(
-                "https://picsum.photos/id/${index + 100}/300/300",
-              ),
+            radius: 30,
+            backgroundImage: NetworkImage(
+              "https://picsum.photos/id/${index + 100}/100/100",
             ),
           ),
-          Text("User_$index", style: const TextStyle(fontSize: 12)),
+          Text("User_$index"),
         ],
       ),
     );
