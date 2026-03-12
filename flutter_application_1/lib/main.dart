@@ -278,12 +278,81 @@ class _HomeScreenState extends State<HomeScreen> {
 }
 
 // 5. ప్రొఫైల్ స్క్రీన్ (Updated with Expanded to fix overflow)
-class ProfileScreen extends StatelessWidget {
+// 6. ప్రొఫైల్ స్క్రీన్ (Edit Profile ఆప్షన్‌తో)
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _bioController = TextEditingController();
+
+  // ప్రొఫైల్ వివరాలను సవరించడానికి డైలాగ్ బాక్స్
+  void _showEditDialog(String currentName, String currentBio) {
+    _nameController.text = currentName;
+    _bioController.text = currentBio;
+
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text(
+          "Edit Profile",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _nameController,
+              decoration: const InputDecoration(labelText: "Display Name"),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _bioController,
+              decoration: const InputDecoration(labelText: "Bio"),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              String uid = FirebaseAuth.instance.currentUser!.uid;
+
+              // Firestore లో ఉన్న డాక్యుమెంట్‌ని అప్‌డేట్ చేస్తున్నాం
+              await FirebaseFirestore.instance
+                  .collection('users')
+                  .doc(uid)
+                  .update({
+                    "username": _nameController.text.trim(),
+                    "bio": _bioController.text.trim(),
+                  });
+
+              if (mounted) Navigator.pop(context);
+
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text("Profile Updated Successfully! ✅"),
+                ),
+              );
+            },
+            child: const Text("Save"),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final String uid = FirebaseAuth.instance.currentUser!.uid;
+
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance
           .collection('users')
@@ -294,7 +363,7 @@ class ProfileScreen extends StatelessWidget {
           return const Center(child: CircularProgressIndicator());
         }
         if (!snapshot.hasData || !snapshot.data!.exists) {
-          return const Center(child: Text("No Profile Data"));
+          return const Center(child: Text("No Profile Data Found"));
         }
 
         var userData = snapshot.data!.data() as Map<String, dynamic>;
@@ -315,7 +384,6 @@ class ProfileScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 20),
-                  // ఇక్కడ Expanded ని జోడించాం - ఇది ఓవర్‌ఫ్లో సమస్యను ఫిక్స్ చేస్తుంది
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -324,7 +392,7 @@ class ProfileScreen extends StatelessWidget {
                           name,
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
-                            fontSize: 18,
+                            fontSize: 20,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -340,9 +408,38 @@ class ProfileScreen extends StatelessWidget {
                 ],
               ),
             ),
+            // Edit Profile బటన్
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: SizedBox(
+                width: double.infinity,
+                child: OutlinedButton(
+                  onPressed: () => _showEditDialog(name, bio),
+                  style: OutlinedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  child: const Text(
+                    "Edit Profile",
+                    style: TextStyle(color: Colors.black),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
             const Divider(),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 10),
+              child: Text(
+                "My Posts",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
             const Expanded(
-              child: Center(child: Text("Post grid will appear here")),
+              child: Center(
+                child: Text("Your personal post grid will be shown here!"),
+              ),
             ),
           ],
         );
