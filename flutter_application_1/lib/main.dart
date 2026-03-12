@@ -2,9 +2,15 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 
 // 1. మెయిన్ ఎంట్రీ పాయింట్
-void main() => runApp(const MySocialApp());
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  runApp(const MySocialApp());
+}
 
 class MySocialApp extends StatefulWidget {
   const MySocialApp({super.key});
@@ -14,10 +20,9 @@ class MySocialApp extends StatefulWidget {
 }
 
 class _MySocialAppState extends State<MySocialApp> {
-  // ఇది మన థీమ్ కంట్రోలర్
+  // థీమ్ కంట్రోలర్ - ఇది స్టేట్ క్లాస్ లోపల ఉండాలి
   ThemeMode _themeMode = ThemeMode.light;
 
-  // థీమ్ మార్చడానికి ఒక ఫంక్షన్
   void _toggleTheme() {
     setState(() {
       _themeMode = _themeMode == ThemeMode.light
@@ -30,7 +35,6 @@ class _MySocialAppState extends State<MySocialApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      // 1. లైట్ థీమ్ (పగటి పూట)
       theme: ThemeData(
         brightness: Brightness.light,
         primarySwatch: Colors.blue,
@@ -40,7 +44,6 @@ class _MySocialAppState extends State<MySocialApp> {
           foregroundColor: Colors.black,
         ),
       ),
-      // 2. డార్క్ థీమ్ (రాత్రి పూట)
       darkTheme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: Colors.black,
@@ -49,17 +52,15 @@ class _MySocialAppState extends State<MySocialApp> {
           foregroundColor: Colors.white,
         ),
       ),
-      themeMode: _themeMode, // ప్రస్తుతం ఏ థీమ్ ఉండాలో ఇది నిర్ణయిస్తుంది
-      home: MainNavigation(
-        toggleTheme: _toggleTheme,
-      ), // నావిగేషన్ కి ఈ ఫంక్షన్ ని పంపిస్తున్నాం
+      themeMode: _themeMode,
+      home: MainNavigation(toggleTheme: _toggleTheme),
     );
   }
 }
 
-// 2. మెయిన్ నావిగేషన్ (Bottom Nav Logic)
+// 2. మెయిన్ నావిగేషన్
 class MainNavigation extends StatefulWidget {
-  final VoidCallback toggleTheme; // ఇది థీమ్ మార్చే ఫంక్షన్
+  final VoidCallback toggleTheme;
   const MainNavigation({super.key, required this.toggleTheme});
 
   @override
@@ -84,8 +85,7 @@ class _MainNavigationState extends State<MainNavigation> {
         actions: [
           IconButton(
             icon: const Icon(Icons.brightness_6),
-            onPressed:
-                widget.toggleTheme, // ఇక్కడ క్లిక్ చేస్తే థీమ్ మారిపోతుంది!
+            onPressed: widget.toggleTheme,
           ),
         ],
       ),
@@ -110,17 +110,14 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 }
 
-// --- 3. హోమ్ స్క్రీన్ (Stories + Feed + Add Post) ---
+// --- 3. హోమ్ స్క్రీన్ ---
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
-
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-// HomeScreen క్లాస్ లోపల ఈ మార్పులు చేయండి
 class _HomeScreenState extends State<HomeScreen> {
-  // కొత్త పోస్ట్‌లను స్టోర్ చేయడానికి ఒక లిస్ట్
   List<File> myPosts = [];
 
   Future<void> _pickImage() async {
@@ -129,10 +126,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (image != null) {
       setState(() {
-        // సెలెక్ట్ చేసిన ఫోటోను మన లిస్ట్‌లో యాడ్ చేస్తున్నాం
         myPosts.insert(0, File(image.path));
       });
-
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Post Added Successfully! 🚀")),
       );
@@ -141,183 +136,125 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 1,
-        title: const Text(
-          "Instagram Clone",
-          style: TextStyle(
-            color: Colors.black,
-            fontWeight: FontWeight.bold,
-            fontSize: 24,
+    return Column(
+      children: [
+        SizedBox(
+          height: 140,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: 10,
+            itemBuilder: (context, index) => StoryWidget(index: index),
           ),
         ),
-        actions: [
-          IconButton(
-            icon: const Icon(
-              Icons.add_box_outlined,
-              color: Colors.black,
-              size: 28,
-            ),
-            onPressed: _pickImage,
-          ),
-          // మిగిలిన ఐకాన్స్...
-        ],
-      ),
-      body: Column(
-        children: [
-          // 1. Stories Section (యధావిధిగా ఉంటుంది)
-          SizedBox(
-            height: 140,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: 10,
-              itemBuilder: (context, index) => StoryWidget(index: index),
-            ),
-          ),
-          const Divider(height: 1),
-
-          // 2. Main Feed Section
-          Expanded(
-            child: ListView(
-              children: [
-                // మనం కొత్తగా యాడ్ చేసిన పోస్ట్‌లు ఇక్కడ కనిపిస్తాయి
-                ...myPosts
-                    .map(
-                      (file) => Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const ListTile(
-                            leading: CircleAvatar(backgroundColor: Colors.blue),
-                            title: Text(
-                              "Mohanlal (You)",
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
-                          Image.file(
-                            file,
-                            height: 400,
-                            width: double.infinity,
-                            fit: BoxFit.cover,
-                          ),
-                          const Padding(
-                            padding: EdgeInsets.all(8.0),
-                            child: Icon(Icons.favorite_border),
-                          ),
-                          const Divider(),
-                        ],
+        const Divider(height: 1),
+        Expanded(
+          child: ListView(
+            children: [
+              ...myPosts.map(
+                (file) => Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const ListTile(
+                      leading: CircleAvatar(backgroundColor: Colors.blue),
+                      title: Text(
+                        "Mohanlal (You)",
+                        style: TextStyle(fontWeight: FontWeight.bold),
                       ),
-                    )
-                    .toList(),
-
-                // పాత డమ్మీ పోస్ట్‌లు (ListView.builder లాగా)
-                ...List.generate(10, (index) => PostWidget(index: index)),
-              ],
-            ),
+                    ),
+                    Image.file(
+                      file,
+                      height: 400,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                    ),
+                    const Padding(
+                      padding: EdgeInsets.all(8.0),
+                      child: Icon(Icons.favorite_border),
+                    ),
+                    const Divider(),
+                  ],
+                ),
+              ),
+              ...List.generate(10, (index) => PostWidget(index: index)),
+            ],
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
 
-// --- 4. సెర్చ్ స్క్రీన్ (Explore Grid) ---
+// --- 4. సెర్చ్ స్క్రీన్ ---
 class SearchScreen extends StatelessWidget {
   const SearchScreen({super.key});
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.white,
-        elevation: 0,
-        title: Container(
-          height: 40,
-          decoration: BoxDecoration(
-            color: Colors.grey[200],
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const TextField(
-            decoration: InputDecoration(
-              hintText: "Search",
-              prefixIcon: Icon(Icons.search, color: Colors.grey),
-              border: InputBorder.none,
-              contentPadding: EdgeInsets.only(top: 5),
-            ),
-          ),
-        ),
+    return GridView.builder(
+      itemCount: 21,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 3,
+        crossAxisSpacing: 2,
+        mainAxisSpacing: 2,
       ),
-      body: GridView.builder(
-        itemCount: 21,
-        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: 3,
-          crossAxisSpacing: 2,
-          mainAxisSpacing: 2,
-        ),
-        itemBuilder: (context, index) => Image.network(
-          "https://picsum.photos/id/${index + 60}/300/300",
-          fit: BoxFit.cover,
-        ),
+      itemBuilder: (context, index) => Image.network(
+        "https://picsum.photos/id/${index + 60}/300/300",
+        fit: BoxFit.cover,
       ),
     );
   }
 }
 
-// --- 5. రీల్స్ స్క్రీన్ (Vertical Scroll Video) ---
+// --- 5. రీల్స్ స్క్రీన్ ---
 class ReelsScreen extends StatelessWidget {
   const ReelsScreen({super.key});
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: PageView.builder(
-        scrollDirection: Axis.vertical,
-        itemCount: 5,
-        itemBuilder: (context, index) {
-          return Stack(
-            children: [
-              SizedBox.expand(
-                child: VideoReelItem(
-                  videoUrl:
-                      "https://flutter.github.io/assets-for-api-docs/assets/videos/bee.mp4",
+    return PageView.builder(
+      scrollDirection: Axis.vertical,
+      itemCount: 5,
+      itemBuilder: (context, index) {
+        return Stack(
+          children: [
+            SizedBox.expand(
+              child: VideoReelItem(
+                videoUrl:
+                    "https://flutter.github.io/assets-for-api-docs/assets/videos/bee.mp4",
+              ),
+            ),
+            Container(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.black.withOpacity(0.5), Colors.transparent],
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.center,
                 ),
               ),
-              // నిన్నటి పాత కోడ్‌లోని గ్రేడియంట్ మరియు ఐకాన్స్ ఇక్కడ యధావిధిగా ఉంటాయి...
-              Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [Colors.black.withOpacity(0.5), Colors.transparent],
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.center,
+            ),
+            Positioned(
+              right: 15,
+              bottom: 100,
+              child: Column(
+                children: [
+                  const Icon(Icons.favorite, color: Colors.white, size: 35),
+                  const Text("1.2k", style: TextStyle(color: Colors.white)),
+                  const SizedBox(height: 20),
+                  const Icon(
+                    Icons.chat_bubble_outline,
+                    color: Colors.white,
+                    size: 35,
                   ),
-                ),
+                  const Text("45", style: TextStyle(color: Colors.white)),
+                ],
               ),
-              Positioned(
-                right: 15,
-                bottom: 100,
-                child: Column(
-                  children: [
-                    const Icon(Icons.favorite, color: Colors.white, size: 35),
-                    const Text("1.2k", style: TextStyle(color: Colors.white)),
-                    const SizedBox(height: 20),
-                    const Icon(
-                      Icons.chat_bubble_outline,
-                      color: Colors.white,
-                      size: 35,
-                    ),
-                    const Text("45", style: TextStyle(color: Colors.white)),
-                  ],
-                ),
-              ),
-            ],
-          );
-        },
-      ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
 
-// --- 6. ప్రొఫైల్ స్క్రీన్ (Edit Profile Logic) ---
+// --- 6. ప్రొఫైల్ స్క్రీన్ ---
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
   @override
@@ -365,70 +302,57 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text("Profile", style: TextStyle(color: Colors.black)),
-        backgroundColor: Colors.white,
-        elevation: 0,
-        actions: [
-          const Icon(Icons.menu, color: Colors.black),
-          const SizedBox(width: 15),
-        ],
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(20.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                CircleAvatar(
-                  radius: 40,
-                  backgroundColor: Colors.grey[200],
-                  child: ClipOval(
-                    child: Image.network(
-                      "https://ui-avatars.com/api/?name=$name&background=random",
-                    ),
+    return Column(
+      children: [
+        Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              CircleAvatar(
+                radius: 40,
+                child: ClipOval(
+                  child: Image.network(
+                    "https://ui-avatars.com/api/?name=$name&background=random",
                   ),
                 ),
-                const Column(
-                  children: [
-                    Text("12", style: TextStyle(fontWeight: FontWeight.bold)),
-                    Text("Posts"),
-                  ],
-                ),
-                const Column(
-                  children: [
-                    Text("450", style: TextStyle(fontWeight: FontWeight.bold)),
-                    Text("Followers"),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          Text(
-            name,
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-          ),
-          const Text("Law Student | Osmania University ⚖️"),
-          OutlinedButton(
-            onPressed: _editProfile,
-            child: const Text("Edit Profile"),
-          ),
-          const Divider(),
-          Expanded(
-            child: GridView.builder(
-              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                crossAxisCount: 3,
               ),
-              itemCount: 12,
-              itemBuilder: (context, index) => Image.network(
-                "https://picsum.photos/id/${index + 80}/300/300",
+              const Column(
+                children: [
+                  Text("12", style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text("Posts"),
+                ],
               ),
-            ),
+              const Column(
+                children: [
+                  Text("450", style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text("Followers"),
+                ],
+              ),
+            ],
           ),
-        ],
-      ),
+        ),
+        Text(
+          name,
+          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+        ),
+        const Text("Law Student | Osmania University ⚖️"),
+        OutlinedButton(
+          onPressed: _editProfile,
+          child: const Text("Edit Profile"),
+        ),
+        const Divider(),
+        Expanded(
+          child: GridView.builder(
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+            ),
+            itemCount: 12,
+            itemBuilder: (context, index) =>
+                Image.network("https://picsum.photos/id/${index + 80}/300/300"),
+          ),
+        ),
+      ],
     );
   }
 }
@@ -509,10 +433,7 @@ class _PostWidgetState extends State<PostWidget> {
               ),
               onPressed: () => setState(() => isLiked = !isLiked),
             ),
-            IconButton(
-              icon: const Icon(Icons.chat_bubble_outline),
-              onPressed: () {},
-            ),
+            const Icon(Icons.chat_bubble_outline),
           ],
         ),
         const Divider(),
@@ -536,7 +457,7 @@ class StoryWidget extends StatelessWidget {
             child: CircleAvatar(
               radius: 32,
               backgroundImage: NetworkImage(
-                "https://picsum.photos/id/${index + 50}/100/100",
+                "https://picsum.photos/id/${index + 100}/300/300",
               ),
             ),
           ),
