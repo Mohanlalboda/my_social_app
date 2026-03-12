@@ -14,6 +14,7 @@ void main() async {
   runApp(const MySocialApp());
 }
 
+// --- 1. రూట్ యాప్ ---
 class MySocialApp extends StatefulWidget {
   const MySocialApp({super.key});
   @override
@@ -63,6 +64,7 @@ class _MySocialAppState extends State<MySocialApp> {
   }
 }
 
+// --- 2. మెయిన్ నావిగేషన్ ---
 class MainNavigation extends StatefulWidget {
   final VoidCallback toggleTheme;
   const MainNavigation({super.key, required this.toggleTheme});
@@ -91,9 +93,22 @@ class _MainNavigationState extends State<MainNavigation> {
       appBar: AppBar(
         title: const Text(
           "Instagram",
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            fontStyle: FontStyle.italic,
+          ),
         ),
         actions: [
+          // 👇 కొత్తగా యాడ్ చేసిన INBOX బటన్ (ఇది నొక్కితే InboxScreen కి వెళ్తాం)
+          IconButton(
+            icon: const Icon(Icons.send_rounded),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const InboxScreen()),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.brightness_6),
             onPressed: widget.toggleTheme,
@@ -129,6 +144,7 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 }
 
+// --- 3. హోమ్ స్క్రీన్ ---
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
   @override
@@ -223,6 +239,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Text("No comments yet. Be the first!"),
                       );
                     }
+
                     return ListView.builder(
                       itemCount: snapshot.data!.docs.length,
                       itemBuilder: (context, index) {
@@ -481,6 +498,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
+// --- 4. ప్రొఫైల్ స్క్రీన్ ---
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
   @override
@@ -740,6 +758,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
+// --- 5. లాగిన్ & సైన్అప్ ---
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
   @override
@@ -917,6 +936,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 }
 
+// --- 7. సెర్చ్ స్క్రీన్ ---
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
   @override
@@ -1006,6 +1026,7 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 }
 
+// --- 8. ఇతరుల ప్రొఫైల్ చూసే స్క్రీన్ ---
 class OtherUserProfileScreen extends StatelessWidget {
   final String uid;
   const OtherUserProfileScreen({super.key, required this.uid});
@@ -1097,8 +1118,6 @@ class OtherUserProfileScreen extends StatelessWidget {
                   ],
                 ),
               ),
-
-              // 👇 ఇక్కడ ఫాలో బటన్ పక్కన "మెసేజ్" బటన్ యాడ్ చేశాం
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Row(
@@ -1153,7 +1172,6 @@ class OtherUserProfileScreen extends StatelessWidget {
                     Expanded(
                       child: OutlinedButton(
                         onPressed: () {
-                          // చాట్ స్క్రీన్ కి నావిగేట్ అవ్వడం
                           Navigator.push(
                             context,
                             MaterialPageRoute(
@@ -1217,7 +1235,88 @@ class OtherUserProfileScreen extends StatelessWidget {
   }
 }
 
-// --- 9. చాట్ (Direct Message) స్క్రీన్ ---
+// --- 9. INBOX (మెసేజెస్ లిస్ట్) స్క్రీన్ (NEW! 👇) ---
+class InboxScreen extends StatelessWidget {
+  const InboxScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final String currentUid = FirebaseAuth.instance.currentUser!.uid;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          "Messages",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+      ),
+      body: StreamBuilder<QuerySnapshot>(
+        // ప్రస్తుతానికి మీ యాప్‌లోని అందరి యూజర్లని ఇక్కడ చూపిస్తున్నాం (వాళ్ళతో చాట్ చేయడానికి)
+        stream: FirebaseFirestore.instance.collection('users').snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return const Center(child: Text("No messages yet."));
+          }
+
+          // మన పేరు కాకుండా వేరే వాళ్ళ పేర్లని ఫిల్టర్ చేస్తున్నాం
+          var usersList = snapshot.data!.docs
+              .where((doc) => doc['uid'] != currentUid)
+              .toList();
+
+          return ListView.builder(
+            itemCount: usersList.length,
+            itemBuilder: (context, index) {
+              var user = usersList[index].data() as Map<String, dynamic>;
+              String profilePic = user['profilePic'] ?? "";
+
+              return ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: Colors.grey[300],
+                  backgroundImage: profilePic.isNotEmpty
+                      ? MemoryImage(base64Decode(profilePic))
+                      : null,
+                  child: profilePic.isEmpty
+                      ? Text(
+                          user['username'][0].toUpperCase(),
+                          style: const TextStyle(color: Colors.black),
+                        )
+                      : null,
+                ),
+                title: Text(
+                  user['username'],
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                subtitle: const Text("Tap to chat..."),
+                trailing: const Icon(
+                  Icons.chat_bubble_outline,
+                  size: 20,
+                  color: Colors.grey,
+                ),
+                onTap: () {
+                  // క్లిక్ చేయగానే నేరుగా చాట్ స్క్రీన్ కి వెళ్తుంది!
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => ChatScreen(
+                        receiverId: user['uid'],
+                        receiverName: user['username'],
+                      ),
+                    ),
+                  );
+                },
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+// --- 10. చాట్ (Direct Message) స్క్రీన్ ---
 class ChatScreen extends StatefulWidget {
   final String receiverId;
   final String receiverName;
@@ -1235,7 +1334,6 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _msgController = TextEditingController();
 
-  // ఇద్దరు వ్యక్తులకి కలిపి ఒకే చాట్ రూమ్ ఐడీ క్రియేట్ చేసే లాజిక్
   String getChatRoomId(String a, String b) {
     if (a.substring(0, 1).codeUnitAt(0) > b.substring(0, 1).codeUnitAt(0)) {
       return "${b}_$a";
@@ -1292,7 +1390,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
                 return ListView.builder(
-                  reverse: true, // కొత్త మెసేజ్ కింద రావడానికి
+                  reverse: true,
                   itemCount: snapshot.data!.docs.length,
                   itemBuilder: (context, index) {
                     var msg =
@@ -1362,7 +1460,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
-// --- 10. రీల్స్ & ఇతర విడ్జెట్లు ---
+// --- 11. రీల్స్ & ఇతర విడ్జెట్లు ---
 class ReelsScreen extends StatelessWidget {
   const ReelsScreen({super.key});
   @override
