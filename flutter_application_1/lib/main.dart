@@ -281,31 +281,34 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _usernameController = TextEditingController();
 
- // SignUpScreen లోని _signUp ఫంక్షన్ లో Firestore బదులు ఇది వాడండి:
-Future<void> _signUp() async {
-  try {
-    UserCredential userCredential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-      email: _emailController.text.trim(),
-      password: _passwordController.text.trim(),
-    );
+  // SignUpScreen లోని _signUp ఫంక్షన్ లో Firestore బదులు ఇది వాడండి:
+  Future<void> _signUp() async {
+    try {
+      UserCredential userCredential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(
+            email: _emailController.text.trim(),
+            password: _passwordController.text.trim(),
+          );
 
-    // Realtime Database లో డేటా సేవ్ చేయడం
-    DatabaseReference ref = FirebaseDatabase.instance.ref("users/${userCredential.user!.uid}");
+      // Realtime Database లో డేటా సేవ్ చేయడం
+      DatabaseReference ref = FirebaseDatabase.instance.ref(
+        "users/${userCredential.user!.uid}",
+      );
 
-    await ref.set({
-      "username": _usernameController.text.trim(),
-      "email": _emailController.text.trim(),
-      "uid": userCredential.user!.uid,
-      "bio": "Law Student | Building my app ⚖️"
-    });
+      await ref.set({
+        "username": _usernameController.text.trim(),
+        "email": _emailController.text.trim(),
+        "uid": userCredential.user!.uid,
+        "bio": "Law Student | Building my app ⚖️",
+      });
 
-    if (mounted) Navigator.pop(context);
-  } catch (e) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text("Error: ${e.toString()}")),
-    );
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
+    }
   }
-}
 
   @override
   Widget build(BuildContext context) {
