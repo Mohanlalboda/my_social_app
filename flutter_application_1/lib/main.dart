@@ -446,46 +446,90 @@ class ReelsScreen extends StatelessWidget {
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
+
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  String name = "Mohanlal";
+  // ప్రస్తుత యూజర్ ఐడిని తీసుకుంటున్నాం
+  final String uid = FirebaseAuth.instance.currentUser!.uid;
+
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Padding(
-          padding: const EdgeInsets.all(20),
-          child: Row(
-            children: [
-              CircleAvatar(
-                radius: 40,
-                child: ClipOval(
-                  child: Image.network(
-                    "https://ui-avatars.com/api/?name=$name",
+    // Realtime Database నుండి డేటా తెచ్చుకోవడానికి StreamBuilder వాడుతున్నాం
+    return StreamBuilder(
+      stream: FirebaseDatabase.instance.ref("users/$uid").onValue,
+      builder: (context, AsyncSnapshot<DatabaseEvent> snapshot) {
+        // డేటా వచ్చే వరకు లోడింగ్ చూపిస్తుంది
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        // డేటాబేస్ ఖాళీగా ఉంటే లేదా ఎర్రర్ వస్తే
+        if (!snapshot.hasData || snapshot.data!.snapshot.value == null) {
+          return const Center(child: Text("No Profile Data Found"));
+        }
+
+        // డేటాను Map రూపంలోకి మారుస్తున్నాం
+        Map userData = snapshot.data!.snapshot.value as Map;
+        String username = userData['username'] ?? "No Name";
+        String bio = userData['bio'] ?? "No Bio";
+
+        return Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 40,
+                    child: ClipOval(
+                      child: Image.network(
+                        "https://ui-avatars.com/api/?name=$username&background=random",
+                      ),
+                    ),
                   ),
+                  const SizedBox(width: 20),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        username,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 20,
+                        ),
+                      ),
+                      Text(bio, style: const TextStyle(color: Colors.grey)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const Divider(),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 10),
+              child: Text(
+                "My Posts",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ),
+            Expanded(
+              child: GridView.builder(
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                ),
+                itemCount: 12,
+                itemBuilder: (context, index) => Image.network(
+                  "https://picsum.photos/id/${index + 120}/300/300",
+                  fit: BoxFit.cover,
                 ),
               ),
-              const SizedBox(width: 20),
-              Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
-            ],
-          ),
-        ),
-        OutlinedButton(onPressed: () {}, child: const Text("Edit Profile")),
-        const Divider(),
-        Expanded(
-          child: GridView.builder(
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 3,
             ),
-            itemCount: 12,
-            itemBuilder: (context, index) =>
-                Image.network("https://picsum.photos/id/${index + 80}/300/300"),
-          ),
-        ),
-      ],
+          ],
+        );
+      },
     );
   }
 }
