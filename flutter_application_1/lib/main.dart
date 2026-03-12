@@ -168,9 +168,7 @@ class _HomeScreenState extends State<HomeScreen> {
           "commentCount": 0,
         });
 
-        if (!mounted) {
-          return;
-        }
+        if (!mounted) return;
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text("Shared! 🌎")));
@@ -348,13 +346,32 @@ class _HomeScreenState extends State<HomeScreen> {
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              ListTile(
-                                leading: CircleAvatar(
-                                  child: Text(
-                                    post['username'][0].toUpperCase(),
+                              // ఇక్కడ ఎవరైనా పోస్ట్ చేసి ఉంటే వాళ్ళ ప్రొఫైల్ కి వెళ్ళేలా కూడా చేయొచ్చు
+                              GestureDetector(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) =>
+                                          OtherUserProfileScreen(
+                                            uid: post['ownerId'],
+                                          ),
+                                    ),
+                                  );
+                                },
+                                child: ListTile(
+                                  leading: CircleAvatar(
+                                    child: Text(
+                                      post['username'][0].toUpperCase(),
+                                    ),
+                                  ),
+                                  title: Text(
+                                    post['username'] ?? "User",
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
                                 ),
-                                title: Text(post['username'] ?? "User"),
                               ),
                               Image.memory(
                                 base64Decode(post['postData']),
@@ -418,7 +435,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// --- 4. ప్రొఫైల్ స్క్రీన్ (ఫోటో అప్‌లోడ్ ఫీచర్‌తో) ---
+// --- 4. ప్రొఫైల్ స్క్రీన్ (మీ స్వంత ప్రొఫైల్) ---
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
   @override
@@ -468,9 +485,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       "username": _nameController.text.trim(),
                       "bio": _bioController.text.trim(),
                     });
-                if (!context.mounted) {
-                  return;
-                }
+                if (!context.mounted) return;
                 Navigator.pop(context);
               },
               child: const Text("Save"),
@@ -502,9 +517,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           "profilePic": base64Image,
         });
 
-        if (!mounted) {
-          return;
-        }
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Profile Photo Updated! 📸")),
         );
@@ -664,9 +677,7 @@ class _LoginScreenState extends State<LoginScreen> {
         password: _passwordController.text.trim(),
       );
     } catch (e) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
@@ -761,14 +772,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
             "createdAt": DateTime.now(),
             "profilePic": "",
           });
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       Navigator.pop(context);
     } catch (e) {
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
@@ -869,11 +876,15 @@ class _SearchScreenState extends State<SearchScreen> {
             itemCount: filteredUsers.length,
             itemBuilder: (context, index) {
               var user = filteredUsers[index].data() as Map<String, dynamic>;
+
+              // మీ పేరు కాకుండా వేరే వాళ్ళని మాత్రమే చూపించడానికి
               if (user['uid'] == FirebaseAuth.instance.currentUser!.uid) {
                 return const SizedBox.shrink();
               }
+
               return ListTile(
                 leading: CircleAvatar(
+                  backgroundColor: Colors.grey[300],
                   backgroundImage:
                       (user['profilePic'] != null &&
                           user['profilePic'].toString().isNotEmpty)
@@ -882,15 +893,24 @@ class _SearchScreenState extends State<SearchScreen> {
                   child:
                       (user['profilePic'] == null ||
                           user['profilePic'].toString().isEmpty)
-                      ? Text(user['username'][0].toUpperCase())
+                      ? Text(
+                          user['username'][0].toUpperCase(),
+                          style: const TextStyle(color: Colors.black),
+                        )
                       : null,
                 ),
-                title: Text(user['username']),
+                title: Text(
+                  user['username'],
+                  style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
                 subtitle: Text(user['bio'] ?? ""),
                 onTap: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text("Viewing ${user['username']}'s profile"),
+                  // క్లిక్ చేయగానే వాళ్ళ ప్రొఫైల్ ఓపెన్ అవుతుంది
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          OtherUserProfileScreen(uid: user['uid']),
                     ),
                   );
                 },
@@ -903,7 +923,148 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 }
 
-// --- 8. రీల్స్ & ఇతర విడ్జెట్లు ---
+// --- 8. ఇతరుల ప్రొఫైల్ చూసే స్క్రీన్ (Other User Profile) ---
+class OtherUserProfileScreen extends StatelessWidget {
+  final String uid;
+
+  const OtherUserProfileScreen({super.key, required this.uid});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          "Profile",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+      ),
+      body: StreamBuilder<DocumentSnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (!snapshot.hasData || !snapshot.data!.exists) {
+            return const Center(child: Text("User not found"));
+          }
+
+          var userData = snapshot.data!.data() as Map<String, dynamic>;
+          String name = userData['username'] ?? "User";
+          String bio = userData['bio'] ?? "";
+          String profilePic = userData['profilePic'] ?? "";
+
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 40,
+                      backgroundColor: Colors.grey[300],
+                      backgroundImage: profilePic.isNotEmpty
+                          ? MemoryImage(base64Decode(profilePic))
+                          : null,
+                      child: profilePic.isEmpty
+                          ? Text(
+                              name.isNotEmpty ? name[0].toUpperCase() : "U",
+                              style: const TextStyle(
+                                fontSize: 24,
+                                color: Colors.black,
+                              ),
+                            )
+                          : null,
+                    ),
+                    const SizedBox(width: 20),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            name,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            bio,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text("Follow feature coming soon!"),
+                        ),
+                      );
+                    },
+                    child: const Text("Follow"),
+                  ),
+                ),
+              ),
+              const Divider(),
+              Expanded(
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('posts')
+                      .where('ownerId', isEqualTo: uid)
+                      .snapshots(),
+                  builder: (context, postSnapshot) {
+                    if (!postSnapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    if (postSnapshot.data!.docs.isEmpty) {
+                      return const Center(child: Text("No posts yet 📸"));
+                    }
+
+                    return GridView.builder(
+                      padding: const EdgeInsets.all(2),
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 3,
+                            crossAxisSpacing: 2,
+                            mainAxisSpacing: 2,
+                          ),
+                      itemCount: postSnapshot.data!.docs.length,
+                      itemBuilder: (context, index) {
+                        var post =
+                            postSnapshot.data!.docs[index].data()
+                                as Map<String, dynamic>;
+                        return Image.memory(
+                          base64Decode(post['postData']),
+                          fit: BoxFit.cover,
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+// --- 9. రీల్స్ & ఇతర విడ్జెట్లు ---
 class ReelsScreen extends StatelessWidget {
   const ReelsScreen({super.key});
   @override
