@@ -168,7 +168,9 @@ class _HomeScreenState extends State<HomeScreen> {
           "commentCount": 0,
         });
 
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text("Shared! 🌎")));
@@ -346,7 +348,6 @@ class _HomeScreenState extends State<HomeScreen> {
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // ఇక్కడ ఎవరైనా పోస్ట్ చేసి ఉంటే వాళ్ళ ప్రొఫైల్ కి వెళ్ళేలా కూడా చేయొచ్చు
                               GestureDetector(
                                 onTap: () {
                                   Navigator.push(
@@ -409,9 +410,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
                                   IconButton(
                                     icon: const Icon(Icons.chat_bubble_outline),
-                                    onPressed: () {
-                                      _showComments(postId);
-                                    },
+                                    onPressed: () => _showComments(postId),
                                   ),
                                   Text(
                                     "$commentCount comments",
@@ -470,9 +469,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-              },
+              onPressed: () => Navigator.pop(context),
               child: const Text("Cancel"),
             ),
             ElevatedButton(
@@ -485,7 +482,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       "username": _nameController.text.trim(),
                       "bio": _bioController.text.trim(),
                     });
-                if (!context.mounted) return;
+                if (!context.mounted) {
+                  return;
+                }
                 Navigator.pop(context);
               },
               child: const Text("Save"),
@@ -516,8 +515,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         await FirebaseFirestore.instance.collection('users').doc(uid).update({
           "profilePic": base64Image,
         });
-
-        if (!mounted) return;
+        if (!mounted) {
+          return;
+        }
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Profile Photo Updated! 📸")),
         );
@@ -545,10 +545,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
+
         var userData = snapshot.data?.data() as Map<String, dynamic>? ?? {};
         String name = userData['username'] ?? "User";
         String bio = userData['bio'] ?? "";
         String profilePic = userData['profilePic'] ?? "";
+
+        List followers = userData['followers'] ?? [];
+        List following = userData['following'] ?? [];
 
         return Column(
           children: [
@@ -598,6 +602,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(color: Colors.grey),
                         ),
+                        const SizedBox(height: 5),
+                        Text(
+                          "${followers.length} Followers  •  ${following.length} Following",
+                          style: const TextStyle(
+                            color: Colors.blue,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -609,9 +621,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: SizedBox(
                 width: double.infinity,
                 child: OutlinedButton(
-                  onPressed: () {
-                    _showEditDialog(name, bio);
-                  },
+                  onPressed: () => _showEditDialog(name, bio),
                   child: const Text("Edit Profile"),
                 ),
               ),
@@ -677,7 +687,9 @@ class _LoginScreenState extends State<LoginScreen> {
         password: _passwordController.text.trim(),
       );
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
@@ -727,12 +739,10 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
             TextButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const SignUpScreen()),
-                );
-              },
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SignUpScreen()),
+              ),
               child: const Text("Sign Up"),
             ),
           ],
@@ -761,6 +771,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
             email: _emailController.text.trim(),
             password: _passwordController.text.trim(),
           );
+
       await FirebaseFirestore.instance
           .collection('users')
           .doc(userCredential.user!.uid)
@@ -771,11 +782,17 @@ class _SignUpScreenState extends State<SignUpScreen> {
             "bio": "Law Student | OU ⚖️",
             "createdAt": DateTime.now(),
             "profilePic": "",
+            "followers": [],
+            "following": [],
           });
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       Navigator.pop(context);
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted) {
+        return;
+      }
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
@@ -850,11 +867,7 @@ class _SearchScreenState extends State<SearchScreen> {
             prefixIcon: Icon(Icons.search),
             border: InputBorder.none,
           ),
-          onChanged: (val) {
-            setState(() {
-              _searchName = val.toLowerCase();
-            });
-          },
+          onChanged: (val) => setState(() => _searchName = val.toLowerCase()),
         ),
       ),
       body: StreamBuilder<QuerySnapshot>(
@@ -876,8 +889,6 @@ class _SearchScreenState extends State<SearchScreen> {
             itemCount: filteredUsers.length,
             itemBuilder: (context, index) {
               var user = filteredUsers[index].data() as Map<String, dynamic>;
-
-              // మీ పేరు కాకుండా వేరే వాళ్ళని మాత్రమే చూపించడానికి
               if (user['uid'] == FirebaseAuth.instance.currentUser!.uid) {
                 return const SizedBox.shrink();
               }
@@ -905,7 +916,6 @@ class _SearchScreenState extends State<SearchScreen> {
                 ),
                 subtitle: Text(user['bio'] ?? ""),
                 onTap: () {
-                  // క్లిక్ చేయగానే వాళ్ళ ప్రొఫైల్ ఓపెన్ అవుతుంది
                   Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -923,7 +933,7 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 }
 
-// --- 8. ఇతరుల ప్రొఫైల్ చూసే స్క్రీన్ (Other User Profile) ---
+// --- 8. ఇతరుల ప్రొఫైల్ చూసే స్క్రీన్ (Follow Logic తో) ---
 class OtherUserProfileScreen extends StatelessWidget {
   final String uid;
 
@@ -931,6 +941,8 @@ class OtherUserProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final String currentUid = FirebaseAuth.instance.currentUser!.uid;
+
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -955,6 +967,10 @@ class OtherUserProfileScreen extends StatelessWidget {
           String name = userData['username'] ?? "User";
           String bio = userData['bio'] ?? "";
           String profilePic = userData['profilePic'] ?? "";
+
+          List followers = userData['followers'] ?? [];
+          List following = userData['following'] ?? [];
+          bool isFollowing = followers.contains(currentUid);
 
           return Column(
             children: [
@@ -997,25 +1013,64 @@ class OtherUserProfileScreen extends StatelessWidget {
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(color: Colors.grey),
                           ),
+                          const SizedBox(height: 5),
+                          Text(
+                            "${followers.length} Followers  •  ${following.length} Following",
+                            style: const TextStyle(
+                              color: Colors.blue,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
                         ],
                       ),
                     ),
                   ],
                 ),
               ),
+
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
-                    onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text("Follow feature coming soon!"),
-                        ),
-                      );
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: isFollowing
+                          ? Colors.grey[300]
+                          : Colors.blue,
+                      foregroundColor: isFollowing
+                          ? Colors.black
+                          : Colors.white,
+                    ),
+                    onPressed: () async {
+                      if (isFollowing) {
+                        await FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(uid)
+                            .update({
+                              'followers': FieldValue.arrayRemove([currentUid]),
+                            });
+                        await FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(currentUid)
+                            .update({
+                              'following': FieldValue.arrayRemove([uid]),
+                            });
+                      } else {
+                        await FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(uid)
+                            .update({
+                              'followers': FieldValue.arrayUnion([currentUid]),
+                            });
+                        await FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(currentUid)
+                            .update({
+                              'following': FieldValue.arrayUnion([uid]),
+                            });
+                      }
                     },
-                    child: const Text("Follow"),
+                    child: Text(isFollowing ? "Unfollow" : "Follow"),
                   ),
                 ),
               ),
@@ -1033,7 +1088,6 @@ class OtherUserProfileScreen extends StatelessWidget {
                     if (postSnapshot.data!.docs.isEmpty) {
                       return const Center(child: Text("No posts yet 📸"));
                     }
-
                     return GridView.builder(
                       padding: const EdgeInsets.all(2),
                       gridDelegate:
