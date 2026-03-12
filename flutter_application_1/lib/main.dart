@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // ఇది తప్పనిసరి
+import 'package:firebase_auth/firebase_auth.dart';
 import 'firebase_options.dart';
 
 // 1. మెయిన్ ఎంట్రీ పాయింట్
@@ -37,7 +37,7 @@ class _MySocialAppState extends State<MySocialApp> {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.light,
-        primarySwatch: Colors.blue,
+        primaryColor: Colors.blue,
         scaffoldBackgroundColor: Colors.white,
         appBarTheme: const AppBarTheme(
           backgroundColor: Colors.white,
@@ -53,7 +53,6 @@ class _MySocialAppState extends State<MySocialApp> {
         ),
       ),
       themeMode: _themeMode,
-      // Firebase Auth స్థితిని బట్టి ఏ స్క్రీన్ చూపించాలో ఇది నిర్ణయిస్తుంది
       home: StreamBuilder<User?>(
         stream: FirebaseAuth.instance.authStateChanges(),
         builder: (context, snapshot) {
@@ -94,7 +93,6 @@ class _MainNavigationState extends State<MainNavigation> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // AppBar ఇక్కడ ఒకేసారి ఉంటే సరిపోతుంది
       appBar: AppBar(
         title: const Text(
           "Instagram",
@@ -159,7 +157,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // హోమ్ స్క్రీన్ కోసం ప్రత్యేకంగా యాడ్ బటన్
       floatingActionButton: FloatingActionButton(
         onPressed: _pickImage,
         child: const Icon(Icons.add_a_photo),
@@ -255,6 +252,15 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: const Text("Log In"),
               ),
             ),
+            TextButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const SignUpScreen()),
+                );
+              },
+              child: const Text("Don't have an account? Sign Up"),
+            ),
           ],
         ),
       ),
@@ -262,7 +268,82 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-// --- 5. ఇతర సహాయక విడ్జెట్లు & స్క్రీన్లు ---
+// --- 5. సైన్ అప్ స్క్రీన్ ---
+class SignUpScreen extends StatefulWidget {
+  const SignUpScreen({super.key});
+  @override
+  State<SignUpScreen> createState() => _SignUpScreenState();
+}
+
+class _SignUpScreenState extends State<SignUpScreen> {
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _usernameController = TextEditingController();
+
+  Future<void> _signUp() async {
+    try {
+      await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Registration Failed: ${e.toString()}")),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Create Account")),
+      body: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          children: [
+            const SizedBox(height: 20),
+            TextField(
+              controller: _usernameController,
+              decoration: const InputDecoration(
+                labelText: "Username",
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 15),
+            TextField(
+              controller: _emailController,
+              decoration: const InputDecoration(
+                labelText: "Email",
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 15),
+            TextField(
+              controller: _passwordController,
+              decoration: const InputDecoration(
+                labelText: "Password",
+                border: OutlineInputBorder(),
+              ),
+              obscureText: true,
+            ),
+            const SizedBox(height: 25),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: _signUp,
+                child: const Text("Sign Up"),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// --- 6. సహాయక విడ్జెట్లు (Widgets) ---
 
 class PostItem extends StatelessWidget {
   final File file;
@@ -355,27 +436,6 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   String name = "Mohanlal";
-  void _editProfile() {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => Container(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text("Edit Profile Name"),
-            TextField(
-              onSubmitted: (val) {
-                setState(() => name = val);
-                Navigator.pop(context);
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -397,10 +457,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           ),
         ),
-        OutlinedButton(
-          onPressed: _editProfile,
-          child: const Text("Edit Profile"),
-        ),
+        OutlinedButton(onPressed: () {}, child: const Text("Edit Profile")),
         const Divider(),
         Expanded(
           child: GridView.builder(
