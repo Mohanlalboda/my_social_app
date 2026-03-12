@@ -8,14 +8,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'firebase_options.dart';
 
-// 1. మెయిన్ ఎంట్రీ పాయింట్
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const MySocialApp());
 }
 
-// 2. రూట్ యాప్ విడ్జెట్
 class MySocialApp extends StatefulWidget {
   const MySocialApp({super.key});
   @override
@@ -24,40 +22,28 @@ class MySocialApp extends StatefulWidget {
 
 class _MySocialAppState extends State<MySocialApp> {
   ThemeMode _themeMode = ThemeMode.light;
-
-  void _toggleTheme() {
-    setState(() {
-      _themeMode = _themeMode == ThemeMode.light
-          ? ThemeMode.dark
-          : ThemeMode.light;
-    });
-  }
+  void _toggleTheme() => setState(
+    () => _themeMode = _themeMode == ThemeMode.light
+        ? ThemeMode.dark
+        : ThemeMode.light,
+  );
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(
-        brightness: Brightness.light,
-        primaryColor: Colors.blue,
-        appBarTheme: const AppBarTheme(
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black,
-        ),
-      ),
+      theme: ThemeData(brightness: Brightness.light, primaryColor: Colors.blue),
       darkTheme: ThemeData(brightness: Brightness.dark),
       themeMode: _themeMode,
       home: StreamBuilder<User?>(
         stream: FirebaseAuth.instance.authStateChanges(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.connectionState == ConnectionState.waiting)
             return const Scaffold(
               body: Center(child: CircularProgressIndicator()),
             );
-          }
-          if (snapshot.hasData) {
+          if (snapshot.hasData)
             return MainNavigation(toggleTheme: _toggleTheme);
-          }
           return const LoginScreen();
         },
       ),
@@ -65,7 +51,7 @@ class _MySocialAppState extends State<MySocialApp> {
   }
 }
 
-// 3. మెయిన్ నావిగేషన్ (Bottom Bar)
+// 3. మెయిన్ నావిగేషన్
 class MainNavigation extends StatefulWidget {
   final VoidCallback toggleTheme;
   const MainNavigation({super.key, required this.toggleTheme});
@@ -122,7 +108,7 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 }
 
-// 4. హోమ్ స్క్రీన్ (Global Feed)
+// 4. హోమ్ స్క్రీన్
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
   @override
@@ -157,17 +143,14 @@ class _HomeScreenState extends State<HomeScreen> {
           "likes": {},
         });
 
-        if (mounted) {
+        if (mounted)
           ScaffoldMessenger.of(
             context,
           ).showSnackBar(const SnackBar(content: Text("Shared! 🌎")));
-        }
       } catch (e) {
         debugPrint("Error: $e");
       } finally {
-        if (mounted) {
-          setState(() => _isUploading = false);
-        }
+        if (mounted) setState(() => _isUploading = false);
       }
     }
   }
@@ -199,9 +182,8 @@ class _HomeScreenState extends State<HomeScreen> {
                         .orderBy('timestamp', descending: true)
                         .snapshots(),
                     builder: (context, snapshot) {
-                      if (!snapshot.hasData) {
+                      if (!snapshot.hasData)
                         return const Center(child: CircularProgressIndicator());
-                      }
                       return ListView.builder(
                         itemCount: snapshot.data!.docs.length,
                         itemBuilder: (context, index) {
@@ -277,11 +259,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// 5. ప్రొఫైల్ స్క్రీన్ (Updated with Expanded to fix overflow)
-// 6. ప్రొఫైల్ స్క్రీన్ (Edit Profile ఆప్షన్‌తో)
+// 5. ప్రొఫైల్ స్క్రీన్ (Updated & Fixed)
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
-
   @override
   State<ProfileScreen> createState() => _ProfileScreenState();
 }
@@ -290,26 +270,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _bioController = TextEditingController();
 
-  // ప్రొఫైల్ వివరాలను సవరించడానికి డైలాగ్ బాక్స్
   void _showEditDialog(String currentName, String currentBio) {
     _nameController.text = currentName;
     _bioController.text = currentBio;
-
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text(
-          "Edit Profile",
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
+        title: const Text("Edit Profile"),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: _nameController,
-              decoration: const InputDecoration(labelText: "Display Name"),
+              decoration: const InputDecoration(labelText: "Name"),
             ),
-            const SizedBox(height: 10),
             TextField(
               controller: _bioController,
               decoration: const InputDecoration(labelText: "Bio"),
@@ -324,8 +298,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ElevatedButton(
             onPressed: () async {
               String uid = FirebaseAuth.instance.currentUser!.uid;
-
-              // Firestore లో ఉన్న డాక్యుమెంట్‌ని అప్‌డేట్ చేస్తున్నాం
               await FirebaseFirestore.instance
                   .collection('users')
                   .doc(uid)
@@ -333,14 +305,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     "username": _nameController.text.trim(),
                     "bio": _bioController.text.trim(),
                   });
-
               if (mounted) Navigator.pop(context);
-
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text("Profile Updated Successfully! ✅"),
-                ),
-              );
             },
             child: const Text("Save"),
           ),
@@ -352,21 +317,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final String uid = FirebaseAuth.instance.currentUser!.uid;
-
     return StreamBuilder<DocumentSnapshot>(
       stream: FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
           .snapshots(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+        if (snapshot.connectionState == ConnectionState.waiting)
           return const Center(child: CircularProgressIndicator());
-        }
-        if (!snapshot.hasData || !snapshot.data!.exists) {
-          return const Center(child: Text("No Profile Data Found"));
-        }
-
-        var userData = snapshot.data!.data() as Map<String, dynamic>;
+        var userData = snapshot.data?.data() as Map<String, dynamic>? ?? {};
         String name = userData['username'] ?? "User";
         String bio = userData['bio'] ?? "";
 
@@ -392,7 +351,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           name,
                           style: const TextStyle(
                             fontWeight: FontWeight.bold,
-                            fontSize: 20,
+                            fontSize: 18,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -408,37 +367,50 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ],
               ),
             ),
-            // Edit Profile బటన్
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: SizedBox(
                 width: double.infinity,
                 child: OutlinedButton(
                   onPressed: () => _showEditDialog(name, bio),
-                  style: OutlinedButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                  ),
-                  child: const Text(
-                    "Edit Profile",
-                    style: TextStyle(color: Colors.black),
-                  ),
+                  child: const Text("Edit Profile"),
                 ),
               ),
             ),
-            const SizedBox(height: 10),
             const Divider(),
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 10),
-              child: Text(
-                "My Posts",
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-            const Expanded(
-              child: Center(
-                child: Text("Your personal post grid will be shown here!"),
+            // --- Personal Post Grid ---
+            Expanded(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('posts')
+                    .where('ownerId', isEqualTo: uid)
+                    .snapshots(),
+                builder: (context, postSnapshot) {
+                  if (!postSnapshot.hasData)
+                    return const Center(child: CircularProgressIndicator());
+                  if (postSnapshot.data!.docs.isEmpty)
+                    return const Center(child: Text("No posts yet 📸"));
+
+                  return GridView.builder(
+                    padding: const EdgeInsets.all(2),
+                    gridDelegate:
+                        const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 3,
+                          crossAxisSpacing: 2,
+                          mainAxisSpacing: 2,
+                        ),
+                    itemCount: postSnapshot.data!.docs.length,
+                    itemBuilder: (context, index) {
+                      var post =
+                          postSnapshot.data!.docs[index].data()
+                              as Map<String, dynamic>;
+                      return Image.memory(
+                        base64Decode(post['postData']),
+                        fit: BoxFit.cover,
+                      );
+                    },
+                  );
+                },
               ),
             ),
           ],
@@ -458,7 +430,6 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
-
   Future<void> _login() async {
     try {
       await FirebaseAuth.instance.signInWithEmailAndPassword(
@@ -466,11 +437,10 @@ class _LoginScreenState extends State<LoginScreen> {
         password: _passwordController.text.trim(),
       );
     } catch (e) {
-      if (mounted) {
+      if (mounted)
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
-      }
     }
   }
 
@@ -521,7 +491,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 context,
                 MaterialPageRoute(builder: (context) => const SignUpScreen()),
               ),
-              child: const Text("Don't have an account? Sign Up"),
+              child: const Text("Sign Up"),
             ),
           ],
         ),
@@ -541,7 +511,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _usernameController = TextEditingController();
-
   Future<void> _signUp() async {
     try {
       UserCredential userCredential = await FirebaseAuth.instance
@@ -556,18 +525,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
             "username": _usernameController.text.trim(),
             "email": _emailController.text.trim(),
             "uid": userCredential.user!.uid,
-            "bio": "Law Student | Osmania University ⚖️",
+            "bio": "Law Student | OU ⚖️",
             "createdAt": DateTime.now(),
           });
-      if (mounted) {
-        Navigator.pop(context);
-      }
+      if (mounted) Navigator.pop(context);
     } catch (e) {
-      if (mounted) {
+      if (mounted)
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
-      }
     }
   }
 
@@ -619,12 +585,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 }
 
-// 8. ఇతర చిన్న విడ్జెట్లు
+// Placeholders
 class SearchScreen extends StatelessWidget {
   const SearchScreen({super.key});
   @override
   Widget build(BuildContext context) {
-    return const Center(child: Text("Search Page Coming Soon"));
+    return const Center(child: Text("Search Coming Soon"));
   }
 }
 
@@ -632,7 +598,7 @@ class ReelsScreen extends StatelessWidget {
   const ReelsScreen({super.key});
   @override
   Widget build(BuildContext context) {
-    return const Center(child: Text("Reels Page Coming Soon"));
+    return const Center(child: Text("Reels Coming Soon"));
   }
 }
 
