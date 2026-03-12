@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:video_player/video_player.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -13,7 +14,6 @@ void main() async {
   runApp(const MySocialApp());
 }
 
-// --- 1. రూట్ యాప్ ---
 class MySocialApp extends StatefulWidget {
   const MySocialApp({super.key});
   @override
@@ -63,7 +63,6 @@ class _MySocialAppState extends State<MySocialApp> {
   }
 }
 
-// --- 2. మెయిన్ నావిగేషన్ ---
 class MainNavigation extends StatefulWidget {
   final VoidCallback toggleTheme;
   const MainNavigation({super.key, required this.toggleTheme});
@@ -130,7 +129,6 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 }
 
-// --- 3. హోమ్ స్క్రీన్ ---
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
   @override
@@ -188,7 +186,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _showComments(String postId) {
     final TextEditingController commentController = TextEditingController();
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -275,12 +272,10 @@ class _HomeScreenState extends State<HomeScreen> {
                               "timestamp": FieldValue.serverTimestamp(),
                               "uid": FirebaseAuth.instance.currentUser!.uid,
                             });
-
                         await FirebaseFirestore.instance
                             .collection('posts')
                             .doc(postId)
                             .update({"commentCount": FieldValue.increment(1)});
-
                         commentController.clear();
                       }
                     },
@@ -290,6 +285,48 @@ class _HomeScreenState extends State<HomeScreen> {
               const SizedBox(height: 20),
             ],
           ),
+        );
+      },
+    );
+  }
+
+  void _deletePost(String postId) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Delete Post"),
+          content: const Text(
+            "Are you sure you want to delete this post? This action cannot be undone.",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () async {
+                await FirebaseFirestore.instance
+                    .collection('posts')
+                    .doc(postId)
+                    .delete();
+                if (!context.mounted) {
+                  return;
+                }
+                Navigator.pop(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Post Deleted 🗑️")),
+                );
+              },
+              child: const Text(
+                "Delete",
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
         );
       },
     );
@@ -339,7 +376,6 @@ class _HomeScreenState extends State<HomeScreen> {
                           bool isLiked =
                               post['likes'] != null &&
                               post['likes'][currentUid] == true;
-
                           int likeCount = post['likes'] != null
                               ? (post['likes'] as Map).length
                               : 0;
@@ -348,31 +384,42 @@ class _HomeScreenState extends State<HomeScreen> {
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              GestureDetector(
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) =>
-                                          OtherUserProfileScreen(
-                                            uid: post['ownerId'],
-                                          ),
-                                    ),
-                                  );
-                                },
-                                child: ListTile(
-                                  leading: CircleAvatar(
-                                    child: Text(
-                                      post['username'][0].toUpperCase(),
-                                    ),
-                                  ),
-                                  title: Text(
-                                    post['username'] ?? "User",
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                    ),
+                              ListTile(
+                                leading: CircleAvatar(
+                                  child: Text(
+                                    post['username'][0].toUpperCase(),
                                   ),
                                 ),
+                                title: Text(
+                                  post['username'] ?? "User",
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                trailing: post['ownerId'] == currentUid
+                                    ? IconButton(
+                                        icon: const Icon(
+                                          Icons.delete,
+                                          color: Colors.grey,
+                                        ),
+                                        onPressed: () {
+                                          _deletePost(postId);
+                                        },
+                                      )
+                                    : null,
+                                onTap: () {
+                                  if (post['ownerId'] != currentUid) {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) =>
+                                            OtherUserProfileScreen(
+                                              uid: post['ownerId'],
+                                            ),
+                                      ),
+                                    );
+                                  }
+                                },
                               ),
                               Image.memory(
                                 base64Decode(post['postData']),
@@ -407,10 +454,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ),
                                   ),
                                   const SizedBox(width: 15),
-
                                   IconButton(
                                     icon: const Icon(Icons.chat_bubble_outline),
-                                    onPressed: () => _showComments(postId),
+                                    onPressed: () {
+                                      _showComments(postId);
+                                    },
                                   ),
                                   Text(
                                     "$commentCount comments",
@@ -434,7 +482,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// --- 4. ప్రొఫైల్ స్క్రీన్ (మీ స్వంత ప్రొఫైల్) ---
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
   @override
@@ -469,7 +516,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () {
+                Navigator.pop(context);
+              },
               child: const Text("Cancel"),
             ),
             ElevatedButton(
@@ -511,7 +560,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         File imageFile = File(image.path);
         String base64Image = base64Encode(await imageFile.readAsBytes());
         String uid = FirebaseAuth.instance.currentUser!.uid;
-
         await FirebaseFirestore.instance.collection('users').doc(uid).update({
           "profilePic": base64Image,
         });
@@ -550,7 +598,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         String name = userData['username'] ?? "User";
         String bio = userData['bio'] ?? "";
         String profilePic = userData['profilePic'] ?? "";
-
         List followers = userData['followers'] ?? [];
         List following = userData['following'] ?? [];
 
@@ -621,7 +668,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: SizedBox(
                 width: double.infinity,
                 child: OutlinedButton(
-                  onPressed: () => _showEditDialog(name, bio),
+                  onPressed: () {
+                    _showEditDialog(name, bio);
+                  },
                   child: const Text("Edit Profile"),
                 ),
               ),
@@ -653,9 +702,33 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       var post =
                           postSnapshot.data!.docs[index].data()
                               as Map<String, dynamic>;
-                      return Image.memory(
-                        base64Decode(post['postData']),
-                        fit: BoxFit.cover,
+                      return Stack(
+                        fit: StackFit.expand,
+                        children: [
+                          Image.memory(
+                            base64Decode(post['postData']),
+                            fit: BoxFit.cover,
+                          ),
+                          Positioned(
+                            right: 0,
+                            top: 0,
+                            child: IconButton(
+                              icon: const Icon(
+                                Icons.delete,
+                                color: Colors.white,
+                                shadows: [
+                                  Shadow(color: Colors.black, blurRadius: 10),
+                                ],
+                              ),
+                              onPressed: () async {
+                                await FirebaseFirestore.instance
+                                    .collection('posts')
+                                    .doc(post['postId'])
+                                    .delete();
+                              },
+                            ),
+                          ),
+                        ],
                       );
                     },
                   );
@@ -669,7 +742,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
-// --- 5. లాగిన్ స్క్రీన్ ---
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
   @override
@@ -739,10 +811,12 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
             ),
             TextButton(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const SignUpScreen()),
-              ),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const SignUpScreen()),
+                );
+              },
               child: const Text("Sign Up"),
             ),
           ],
@@ -752,7 +826,6 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 }
 
-// --- 6. సైన్ అప్ స్క్రీన్ ---
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
   @override
@@ -771,7 +844,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
             email: _emailController.text.trim(),
             password: _passwordController.text.trim(),
           );
-
       await FirebaseFirestore.instance
           .collection('users')
           .doc(userCredential.user!.uid)
@@ -847,7 +919,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 }
 
-// --- 7. సెర్చ్ స్క్రీన్ ---
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
   @override
@@ -867,7 +938,11 @@ class _SearchScreenState extends State<SearchScreen> {
             prefixIcon: Icon(Icons.search),
             border: InputBorder.none,
           ),
-          onChanged: (val) => setState(() => _searchName = val.toLowerCase()),
+          onChanged: (val) {
+            setState(() {
+              _searchName = val.toLowerCase();
+            });
+          },
         ),
       ),
       body: StreamBuilder<QuerySnapshot>(
@@ -933,10 +1008,8 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 }
 
-// --- 8. ఇతరుల ప్రొఫైల్ చూసే స్క్రీన్ (Follow Logic తో) ---
 class OtherUserProfileScreen extends StatelessWidget {
   final String uid;
-
   const OtherUserProfileScreen({super.key, required this.uid});
 
   @override
@@ -967,7 +1040,6 @@ class OtherUserProfileScreen extends StatelessWidget {
           String name = userData['username'] ?? "User";
           String bio = userData['bio'] ?? "";
           String profilePic = userData['profilePic'] ?? "";
-
           List followers = userData['followers'] ?? [];
           List following = userData['following'] ?? [];
           bool isFollowing = followers.contains(currentUid);
@@ -1027,7 +1099,6 @@ class OtherUserProfileScreen extends StatelessWidget {
                   ],
                 ),
               ),
-
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: SizedBox(
@@ -1118,12 +1189,89 @@ class OtherUserProfileScreen extends StatelessWidget {
   }
 }
 
-// --- 9. రీల్స్ & ఇతర విడ్జెట్లు ---
 class ReelsScreen extends StatelessWidget {
   const ReelsScreen({super.key});
   @override
   Widget build(BuildContext context) {
-    return const Center(child: Text("Reels Coming Soon"));
+    return PageView.builder(
+      scrollDirection: Axis.vertical,
+      itemCount: 5,
+      itemBuilder: (context, index) {
+        return const Stack(
+          children: [
+            SizedBox.expand(
+              child: VideoReelItem(
+                videoUrl:
+                    "https://flutter.github.io/assets-for-api-docs/assets/videos/bee.mp4",
+              ),
+            ),
+            Positioned(
+              right: 15,
+              bottom: 100,
+              child: Column(
+                children: [
+                  Icon(Icons.favorite, color: Colors.white, size: 35),
+                  Text(
+                    "1.2k",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  SizedBox(height: 20),
+                  Icon(Icons.comment, color: Colors.white, size: 35),
+                  Text(
+                    "340",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class VideoReelItem extends StatefulWidget {
+  final String videoUrl;
+  const VideoReelItem({super.key, required this.videoUrl});
+  @override
+  State<VideoReelItem> createState() => _VideoReelItemState();
+}
+
+class _VideoReelItemState extends State<VideoReelItem> {
+  late VideoPlayerController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl))
+      ..initialize().then((_) {
+        setState(() {});
+        _controller.play();
+        _controller.setLooping(true);
+      });
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return _controller.value.isInitialized
+        ? AspectRatio(
+            aspectRatio: _controller.value.aspectRatio,
+            child: VideoPlayer(_controller),
+          )
+        : const Center(child: CircularProgressIndicator(color: Colors.white));
   }
 }
 
