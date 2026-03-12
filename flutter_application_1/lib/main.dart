@@ -223,7 +223,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         child: Text("No comments yet. Be the first!"),
                       );
                     }
-
                     return ListView.builder(
                       itemCount: snapshot.data!.docs.length,
                       itemBuilder: (context, index) {
@@ -593,7 +592,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
-
         var userData = snapshot.data?.data() as Map<String, dynamic>? ?? {};
         String name = userData['username'] ?? "User";
         String bio = userData['bio'] ?? "";
@@ -1099,50 +1097,80 @@ class OtherUserProfileScreen extends StatelessWidget {
                   ],
                 ),
               ),
+
+              // 👇 ఇక్కడ ఫాలో బటన్ పక్కన "మెసేజ్" బటన్ యాడ్ చేశాం
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: isFollowing
-                          ? Colors.grey[300]
-                          : Colors.blue,
-                      foregroundColor: isFollowing
-                          ? Colors.black
-                          : Colors.white,
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isFollowing
+                              ? Colors.grey[300]
+                              : Colors.blue,
+                          foregroundColor: isFollowing
+                              ? Colors.black
+                              : Colors.white,
+                        ),
+                        onPressed: () async {
+                          if (isFollowing) {
+                            await FirebaseFirestore.instance
+                                .collection('users')
+                                .doc(uid)
+                                .update({
+                                  'followers': FieldValue.arrayRemove([
+                                    currentUid,
+                                  ]),
+                                });
+                            await FirebaseFirestore.instance
+                                .collection('users')
+                                .doc(currentUid)
+                                .update({
+                                  'following': FieldValue.arrayRemove([uid]),
+                                });
+                          } else {
+                            await FirebaseFirestore.instance
+                                .collection('users')
+                                .doc(uid)
+                                .update({
+                                  'followers': FieldValue.arrayUnion([
+                                    currentUid,
+                                  ]),
+                                });
+                            await FirebaseFirestore.instance
+                                .collection('users')
+                                .doc(currentUid)
+                                .update({
+                                  'following': FieldValue.arrayUnion([uid]),
+                                });
+                          }
+                        },
+                        child: Text(isFollowing ? "Unfollow" : "Follow"),
+                      ),
                     ),
-                    onPressed: () async {
-                      if (isFollowing) {
-                        await FirebaseFirestore.instance
-                            .collection('users')
-                            .doc(uid)
-                            .update({
-                              'followers': FieldValue.arrayRemove([currentUid]),
-                            });
-                        await FirebaseFirestore.instance
-                            .collection('users')
-                            .doc(currentUid)
-                            .update({
-                              'following': FieldValue.arrayRemove([uid]),
-                            });
-                      } else {
-                        await FirebaseFirestore.instance
-                            .collection('users')
-                            .doc(uid)
-                            .update({
-                              'followers': FieldValue.arrayUnion([currentUid]),
-                            });
-                        await FirebaseFirestore.instance
-                            .collection('users')
-                            .doc(currentUid)
-                            .update({
-                              'following': FieldValue.arrayUnion([uid]),
-                            });
-                      }
-                    },
-                    child: Text(isFollowing ? "Unfollow" : "Follow"),
-                  ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: () {
+                          // చాట్ స్క్రీన్ కి నావిగేట్ అవ్వడం
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => ChatScreen(
+                                receiverId: uid,
+                                receiverName: name,
+                              ),
+                            ),
+                          );
+                        },
+                        child: const Text(
+                          "Message",
+                          style: TextStyle(color: Colors.black),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
               ),
               const Divider(),
@@ -1189,6 +1217,152 @@ class OtherUserProfileScreen extends StatelessWidget {
   }
 }
 
+// --- 9. చాట్ (Direct Message) స్క్రీన్ ---
+class ChatScreen extends StatefulWidget {
+  final String receiverId;
+  final String receiverName;
+
+  const ChatScreen({
+    super.key,
+    required this.receiverId,
+    required this.receiverName,
+  });
+
+  @override
+  State<ChatScreen> createState() => _ChatScreenState();
+}
+
+class _ChatScreenState extends State<ChatScreen> {
+  final TextEditingController _msgController = TextEditingController();
+
+  // ఇద్దరు వ్యక్తులకి కలిపి ఒకే చాట్ రూమ్ ఐడీ క్రియేట్ చేసే లాజిక్
+  String getChatRoomId(String a, String b) {
+    if (a.substring(0, 1).codeUnitAt(0) > b.substring(0, 1).codeUnitAt(0)) {
+      return "${b}_$a";
+    } else {
+      return "${a}_$b";
+    }
+  }
+
+  void _sendMessage() async {
+    if (_msgController.text.isNotEmpty) {
+      String senderId = FirebaseAuth.instance.currentUser!.uid;
+      String roomId = getChatRoomId(senderId, widget.receiverId);
+
+      Map<String, dynamic> messageData = {
+        "senderId": senderId,
+        "message": _msgController.text.trim(),
+        "timestamp": FieldValue.serverTimestamp(),
+      };
+
+      _msgController.clear();
+
+      await FirebaseFirestore.instance
+          .collection('chatRooms')
+          .doc(roomId)
+          .collection('messages')
+          .add(messageData);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    String currentUid = FirebaseAuth.instance.currentUser!.uid;
+    String roomId = getChatRoomId(currentUid, widget.receiverId);
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          widget.receiverName,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('chatRooms')
+                  .doc(roomId)
+                  .collection('messages')
+                  .orderBy('timestamp', descending: true)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                return ListView.builder(
+                  reverse: true, // కొత్త మెసేజ్ కింద రావడానికి
+                  itemCount: snapshot.data!.docs.length,
+                  itemBuilder: (context, index) {
+                    var msg =
+                        snapshot.data!.docs[index].data()
+                            as Map<String, dynamic>;
+                    bool isMe = msg['senderId'] == currentUid;
+
+                    return Container(
+                      alignment: isMe
+                          ? Alignment.centerRight
+                          : Alignment.centerLeft,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: isMe ? Colors.blue : Colors.grey[300],
+                          borderRadius: BorderRadius.circular(15),
+                        ),
+                        child: Text(
+                          msg['message'],
+                          style: TextStyle(
+                            color: isMe ? Colors.white : Colors.black,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _msgController,
+                    decoration: InputDecoration(
+                      hintText: "Message...",
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                CircleAvatar(
+                  backgroundColor: Colors.blue,
+                  child: IconButton(
+                    icon: const Icon(Icons.send, color: Colors.white),
+                    onPressed: _sendMessage,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// --- 10. రీల్స్ & ఇతర విడ్జెట్లు ---
 class ReelsScreen extends StatelessWidget {
   const ReelsScreen({super.key});
   @override
