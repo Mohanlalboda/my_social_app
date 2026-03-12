@@ -586,11 +586,81 @@ class _SignUpScreenState extends State<SignUpScreen> {
 }
 
 // Placeholders
-class SearchScreen extends StatelessWidget {
+class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
+
+  @override
+  State<SearchScreen> createState() => _SearchScreenState();
+}
+
+class _SearchScreenState extends State<SearchScreen> {
+  String _searchName = ""; // యూజర్ టైప్ చేసే పేరు
+
   @override
   Widget build(BuildContext context) {
-    return const Center(child: Text("Search Coming Soon"));
+    return Scaffold(
+      appBar: AppBar(
+        title: TextField(
+          decoration: const InputDecoration(
+            hintText: "Search users...",
+            prefixIcon: Icon(Icons.search),
+            border: InputBorder.none,
+          ),
+          onChanged: (val) {
+            setState(() {
+              _searchName = val.toLowerCase();
+            });
+          },
+        ),
+      ),
+      body: StreamBuilder<QuerySnapshot>(
+        // Firestore నుండి అందరి యూజర్లని తెచ్చుకుంటున్నాం
+        stream: FirebaseFirestore.instance.collection('users').snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return const Center(child: Text("No users found"));
+          }
+
+          // సర్చ్ పేరు ఆధారంగా యూజర్లని ఫిల్టర్ చేస్తున్నాం
+          var filteredUsers = snapshot.data!.docs.where((doc) {
+            String username = doc['username'].toString().toLowerCase();
+            return username.contains(_searchName);
+          }).toList();
+
+          return ListView.builder(
+            itemCount: filteredUsers.length,
+            itemBuilder: (context, index) {
+              var user = filteredUsers[index].data() as Map<String, dynamic>;
+
+              // మీ పేరు కాకుండా వేరే వాళ్ళని మాత్రమే చూపించడానికి (Optional)
+              if (user['uid'] == FirebaseAuth.instance.currentUser!.uid) {
+                return const SizedBox.shrink();
+              }
+
+              return ListTile(
+                leading: CircleAvatar(
+                  child: Text(user['username'][0].toUpperCase()),
+                ),
+                title: Text(user['username']),
+                subtitle: Text(user['bio'] ?? ""),
+                onTap: () {
+                  // భవిష్యత్తులో వేరే వాళ్ళ ప్రొఫైల్ ఓపెన్ చేయడానికి ఇక్కడ కోడ్ రాస్తాం
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text("Viewing ${user['username']}'s profile"),
+                    ),
+                  );
+                },
+              );
+            },
+          );
+        },
+      ),
+    );
   }
 }
 
