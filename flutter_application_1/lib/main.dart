@@ -82,7 +82,7 @@ class _MainNavigationState extends State<MainNavigation> {
       const HomeScreen(),
       const SearchScreen(),
       const ReelsScreen(),
-      const ProfileScreen(),
+      const ProfileScreen(), // 👈 ప్రొఫైల్ స్క్రీన్ లో మార్పులు చేశాం
     ];
   }
 
@@ -223,6 +223,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           "timestamp": FieldValue.serverTimestamp(),
                           "likes": {},
                           "commentCount": 0,
+                          "savedBy":
+                              [], // 👈 కొత్త పోస్ట్‌లలో బుక్‌మార్క్ డేటా స్టోర్ చేయడానికి
                         });
 
                     if (!context.mounted) {
@@ -336,12 +338,10 @@ class _HomeScreenState extends State<HomeScreen> {
                             ],
                           ),
                           subtitle: Text(comment['text']),
-                          // 👇 ఎడిట్ & డిలీట్ ఐకాన్స్ ఇక్కడే ఉన్నాయి
                           trailing: isMyComment
                               ? Row(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    // 1. Edit Button (సవరించే హక్కు)
                                     IconButton(
                                       icon: const Icon(
                                         Icons.edit,
@@ -396,9 +396,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                                       if (!context.mounted) {
                                                         return;
                                                       }
-                                                      Navigator.pop(
-                                                        context,
-                                                      ); // Close the dialog
+                                                      Navigator.pop(context);
                                                     }
                                                   },
                                                   child: const Text("Save"),
@@ -409,7 +407,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                         );
                                       },
                                     ),
-                                    // 2. Delete Button (తొలగించే హక్కు)
                                     IconButton(
                                       icon: const Icon(
                                         Icons.delete_outline,
@@ -621,6 +618,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           int commentCount = post['commentCount'] ?? 0;
                           String caption = post['caption'] ?? "";
 
+                          // సెవ్ (Bookmark) లాజిక్
+                          List savedBy = post['savedBy'] ?? [];
+                          bool isSaved = savedBy.contains(currentUid);
+
                           String timeAgo = "Just now";
                           if (post['timestamp'] != null) {
                             timeAgo = timeago.format(
@@ -714,7 +715,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     },
                                   ),
                                   Text(
-                                    "$likeCount likes",
+                                    "$likeCount",
                                     style: const TextStyle(
                                       fontWeight: FontWeight.bold,
                                     ),
@@ -727,10 +728,44 @@ class _HomeScreenState extends State<HomeScreen> {
                                     },
                                   ),
                                   Text(
-                                    "$commentCount comments",
+                                    "$commentCount",
                                     style: const TextStyle(
                                       fontWeight: FontWeight.bold,
                                     ),
+                                  ),
+
+                                  const Spacer(), // 👈 ఇది సేవ్ బటన్‌ని కుడి వైపుకు నెడుతుంది
+                                  // 👇 ఇక్కడే మన సేవ్/బుక్‌మార్క్ బటన్ ఉంది
+                                  IconButton(
+                                    icon: Icon(
+                                      isSaved
+                                          ? Icons.bookmark
+                                          : Icons.bookmark_border,
+                                      color: isSaved
+                                          ? Colors.black
+                                          : Colors.grey,
+                                    ),
+                                    onPressed: () {
+                                      if (isSaved) {
+                                        FirebaseFirestore.instance
+                                            .collection('posts')
+                                            .doc(postId)
+                                            .update({
+                                              "savedBy": FieldValue.arrayRemove(
+                                                [currentUid],
+                                              ),
+                                            });
+                                      } else {
+                                        FirebaseFirestore.instance
+                                            .collection('posts')
+                                            .doc(postId)
+                                            .update({
+                                              "savedBy": FieldValue.arrayUnion([
+                                                currentUid,
+                                              ]),
+                                            });
+                                      }
+                                    },
                                   ),
                                 ],
                               ),
@@ -770,6 +805,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
+// --- 4. ప్రొఫైల్ స్క్రీన్ (ట్యాబ్స్ తో) ---
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
   @override
@@ -872,160 +908,227 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final String uid = FirebaseAuth.instance.currentUser!.uid;
-    return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
 
-        var userData = snapshot.data?.data() as Map<String, dynamic>? ?? {};
-        String name = userData['username'] ?? "User";
-        String bio = userData['bio'] ?? "";
-        String profilePic = userData['profilePic'] ?? "";
-        List followers = userData['followers'] ?? [];
-        List following = userData['following'] ?? [];
+    // 👇 ప్రొఫైల్ లో ట్యాబ్స్ కోసం DefaultTabController వాడాం
+    return DefaultTabController(
+      length: 2, // మనకు రెండు ట్యాబ్స్ ఉంటాయి (Posts, Saved)
+      child: StreamBuilder<DocumentSnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
 
-        return Column(
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(20),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    onTap: _uploadProfilePic,
-                    child: CircleAvatar(
-                      radius: 40,
-                      backgroundColor: Colors.grey[300],
-                      backgroundImage: profilePic.isNotEmpty
-                          ? MemoryImage(base64Decode(profilePic))
-                          : null,
-                      child: profilePic.isEmpty
-                          ? (_isUploadingPic
-                                ? const CircularProgressIndicator()
-                                : Text(
-                                    name.isNotEmpty
-                                        ? name[0].toUpperCase()
-                                        : "U",
-                                    style: const TextStyle(
-                                      fontSize: 24,
-                                      color: Colors.black,
-                                    ),
-                                  ))
-                          : null,
+          var userData = snapshot.data?.data() as Map<String, dynamic>? ?? {};
+          String name = userData['username'] ?? "User";
+          String bio = userData['bio'] ?? "";
+          String profilePic = userData['profilePic'] ?? "";
+          List followers = userData['followers'] ?? [];
+          List following = userData['following'] ?? [];
+
+          return Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Row(
+                  children: [
+                    GestureDetector(
+                      onTap: _uploadProfilePic,
+                      child: CircleAvatar(
+                        radius: 40,
+                        backgroundColor: Colors.grey[300],
+                        backgroundImage: profilePic.isNotEmpty
+                            ? MemoryImage(base64Decode(profilePic))
+                            : null,
+                        child: profilePic.isEmpty
+                            ? (_isUploadingPic
+                                  ? const CircularProgressIndicator()
+                                  : Text(
+                                      name.isNotEmpty
+                                          ? name[0].toUpperCase()
+                                          : "U",
+                                      style: const TextStyle(
+                                        fontSize: 24,
+                                        color: Colors.black,
+                                      ),
+                                    ))
+                            : null,
+                      ),
                     ),
-                  ),
-                  const SizedBox(width: 20),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          name,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 18,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        Text(
-                          bio,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.grey),
-                        ),
-                        const SizedBox(height: 5),
-                        Text(
-                          "${followers.length} Followers  •  ${following.length} Following",
-                          style: const TextStyle(
-                            color: Colors.blue,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: SizedBox(
-                width: double.infinity,
-                child: OutlinedButton(
-                  onPressed: () {
-                    _showEditDialog(name, bio);
-                  },
-                  child: const Text("Edit Profile"),
-                ),
-              ),
-            ),
-            const Divider(),
-            Expanded(
-              child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('posts')
-                    .where('ownerId', isEqualTo: uid)
-                    .snapshots(),
-                builder: (context, postSnapshot) {
-                  if (!postSnapshot.hasData) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  if (postSnapshot.data!.docs.isEmpty) {
-                    return const Center(child: Text("No posts yet 📸"));
-                  }
-                  return GridView.builder(
-                    padding: const EdgeInsets.all(2),
-                    gridDelegate:
-                        const SliverGridDelegateWithFixedCrossAxisCount(
-                          crossAxisCount: 3,
-                          crossAxisSpacing: 2,
-                          mainAxisSpacing: 2,
-                        ),
-                    itemCount: postSnapshot.data!.docs.length,
-                    itemBuilder: (context, index) {
-                      var post =
-                          postSnapshot.data!.docs[index].data()
-                              as Map<String, dynamic>;
-                      return Stack(
-                        fit: StackFit.expand,
+                    const SizedBox(width: 20),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Image.memory(
-                            base64Decode(post['postData']),
-                            fit: BoxFit.cover,
+                          Text(
+                            name,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 18,
+                            ),
+                            overflow: TextOverflow.ellipsis,
                           ),
-                          Positioned(
-                            right: 0,
-                            top: 0,
-                            child: IconButton(
-                              icon: const Icon(
-                                Icons.delete,
-                                color: Colors.white,
-                                shadows: [
-                                  Shadow(color: Colors.black, blurRadius: 10),
-                                ],
-                              ),
-                              onPressed: () async {
-                                await FirebaseFirestore.instance
-                                    .collection('posts')
-                                    .doc(post['postId'])
-                                    .delete();
-                              },
+                          Text(
+                            bio,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(color: Colors.grey),
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            "${followers.length} Followers  •  ${following.length} Following",
+                            style: const TextStyle(
+                              color: Colors.blue,
+                              fontWeight: FontWeight.bold,
                             ),
                           ),
                         ],
-                      );
-                    },
-                  );
-                },
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
-        );
-      },
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton(
+                    onPressed: () {
+                      _showEditDialog(name, bio);
+                    },
+                    child: const Text("Edit Profile"),
+                  ),
+                ),
+              ),
+              const Divider(),
+
+              // 👇 ఇక్కడ ట్యాబ్ బార్ (Posts & Saved)
+              const TabBar(
+                indicatorColor: Colors.blue,
+                labelColor: Colors.blue,
+                unselectedLabelColor: Colors.grey,
+                tabs: [
+                  Tab(icon: Icon(Icons.grid_on)), // My Posts Tab
+                  Tab(icon: Icon(Icons.bookmark_border)), // Saved Posts Tab
+                ],
+              ),
+
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    // --- TAB 1: నా సొంత పోస్ట్‌లు ---
+                    StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection('posts')
+                          .where('ownerId', isEqualTo: uid)
+                          .snapshots(),
+                      builder: (context, postSnapshot) {
+                        if (!postSnapshot.hasData) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        }
+                        if (postSnapshot.data!.docs.isEmpty) {
+                          return const Center(child: Text("No posts yet 📸"));
+                        }
+                        return GridView.builder(
+                          padding: const EdgeInsets.all(2),
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 3,
+                                crossAxisSpacing: 2,
+                                mainAxisSpacing: 2,
+                              ),
+                          itemCount: postSnapshot.data!.docs.length,
+                          itemBuilder: (context, index) {
+                            var post =
+                                postSnapshot.data!.docs[index].data()
+                                    as Map<String, dynamic>;
+                            return Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                Image.memory(
+                                  base64Decode(post['postData']),
+                                  fit: BoxFit.cover,
+                                ),
+                                Positioned(
+                                  right: 0,
+                                  top: 0,
+                                  child: IconButton(
+                                    icon: const Icon(
+                                      Icons.delete,
+                                      color: Colors.white,
+                                      shadows: [
+                                        Shadow(
+                                          color: Colors.black,
+                                          blurRadius: 10,
+                                        ),
+                                      ],
+                                    ),
+                                    onPressed: () async {
+                                      await FirebaseFirestore.instance
+                                          .collection('posts')
+                                          .doc(post['postId'])
+                                          .delete();
+                                    },
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        );
+                      },
+                    ),
+
+                    // --- TAB 2: నేను సేవ్ చేసుకున్న పోస్ట్‌లు ---
+                    StreamBuilder<QuerySnapshot>(
+                      // లాజిక్: ఏ పోస్ట్‌లకైతే savedBy లిస్ట్‌లో నా ఐడీ ఉంటుందో అవి తీసుకురా
+                      stream: FirebaseFirestore.instance
+                          .collection('posts')
+                          .where('savedBy', arrayContains: uid)
+                          .snapshots(),
+                      builder: (context, savedSnapshot) {
+                        if (!savedSnapshot.hasData) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        }
+                        if (savedSnapshot.data!.docs.isEmpty) {
+                          return const Center(
+                            child: Text("No saved posts yet 🔖"),
+                          );
+                        }
+                        return GridView.builder(
+                          padding: const EdgeInsets.all(2),
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 3,
+                                crossAxisSpacing: 2,
+                                mainAxisSpacing: 2,
+                              ),
+                          itemCount: savedSnapshot.data!.docs.length,
+                          itemBuilder: (context, index) {
+                            var post =
+                                savedSnapshot.data!.docs[index].data()
+                                    as Map<String, dynamic>;
+                            return Image.memory(
+                              base64Decode(post['postData']),
+                              fit: BoxFit.cover,
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 }
