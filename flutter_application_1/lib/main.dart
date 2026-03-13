@@ -15,6 +15,7 @@ void main() async {
   runApp(const MySocialApp());
 }
 
+// --- 1. రూట్ యాప్ ---
 class MySocialApp extends StatefulWidget {
   const MySocialApp({super.key});
   @override
@@ -64,6 +65,7 @@ class _MySocialAppState extends State<MySocialApp> {
   }
 }
 
+// --- 2. మెయిన్ నావిగేషన్ ---
 class MainNavigation extends StatefulWidget {
   final VoidCallback toggleTheme;
   const MainNavigation({super.key, required this.toggleTheme});
@@ -142,10 +144,19 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 }
 
-class PostWidget extends StatelessWidget {
+// ============================================================================
+// 🌟 THE POST WIDGET (ANIMATION జోడించబడింది 👇) 🌟
+// ============================================================================
+class PostWidget extends StatefulWidget {
   final Map<String, dynamic> post;
-
   const PostWidget({super.key, required this.post});
+
+  @override
+  State<PostWidget> createState() => _PostWidgetState();
+}
+
+class _PostWidgetState extends State<PostWidget> {
+  bool isLikeAnimating = false; // 👈 ఈ వేరియబుల్ యానిమేషన్ కంట్రోల్ చేస్తుంది
 
   void _showComments(BuildContext context, String postId) {
     final TextEditingController commentController = TextEditingController();
@@ -417,35 +428,43 @@ class PostWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    String postId = post['postId'];
+    String postId = widget.post['postId'];
     String currentUid = FirebaseAuth.instance.currentUser!.uid;
-    bool isLiked = post['likes'] != null && post['likes'][currentUid] == true;
-    int likeCount = post['likes'] != null ? (post['likes'] as Map).length : 0;
-    int commentCount = post['commentCount'] ?? 0;
-    String caption = post['caption'] ?? "";
+    bool isLiked =
+        widget.post['likes'] != null &&
+        widget.post['likes'][currentUid] == true;
+    int likeCount = widget.post['likes'] != null
+        ? (widget.post['likes'] as Map).length
+        : 0;
+    int commentCount = widget.post['commentCount'] ?? 0;
+    String caption = widget.post['caption'] ?? "";
 
-    List savedBy = post['savedBy'] ?? [];
+    List savedBy = widget.post['savedBy'] ?? [];
     bool isSaved = savedBy.contains(currentUid);
 
     String timeAgo = "Just now";
-    if (post['timestamp'] != null) {
-      timeAgo = timeago.format((post['timestamp'] as Timestamp).toDate());
+    if (widget.post['timestamp'] != null) {
+      timeAgo = timeago.format(
+        (widget.post['timestamp'] as Timestamp).toDate(),
+      );
     }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         ListTile(
-          leading: CircleAvatar(child: Text(post['username'][0].toUpperCase())),
+          leading: CircleAvatar(
+            child: Text(widget.post['username'][0].toUpperCase()),
+          ),
           title: Text(
-            post['username'] ?? "User",
+            widget.post['username'] ?? "User",
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
           subtitle: Text(
             timeAgo,
             style: const TextStyle(fontSize: 12, color: Colors.grey),
           ),
-          trailing: post['ownerId'] == currentUid
+          trailing: widget.post['ownerId'] == currentUid
               ? IconButton(
                   icon: const Icon(Icons.delete, color: Colors.grey),
                   onPressed: () {
@@ -454,30 +473,67 @@ class PostWidget extends StatelessWidget {
                 )
               : null,
           onTap: () {
-            if (post['ownerId'] != currentUid) {
+            if (widget.post['ownerId'] != currentUid) {
               Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (context) =>
-                      OtherUserProfileScreen(uid: post['ownerId']),
+                      OtherUserProfileScreen(uid: widget.post['ownerId']),
                 ),
               );
             }
           },
         ),
+
+        // 👇 యానిమేషన్ లాజిక్ ఇక్కడే ఉంది!
         GestureDetector(
-          onDoubleTap: () {
+          onDoubleTap: () async {
             FirebaseFirestore.instance.collection('posts').doc(postId).update({
-              "likes.$currentUid": isLiked ? FieldValue.delete() : true,
+              "likes.$currentUid": true,
+            }); // లైక్
+            setState(() {
+              isLikeAnimating = true; // హార్ట్ కనపడాలి
             });
+            await Future.delayed(
+              const Duration(milliseconds: 800),
+            ); // 0.8 సెకండ్లు ఆగి...
+            if (mounted) {
+              setState(() {
+                isLikeAnimating = false; // హార్ట్ మాయం అవ్వాలి
+              });
+            }
           },
-          child: Image.memory(
-            base64Decode(post['postData']),
-            height: 400,
-            width: double.infinity,
-            fit: BoxFit.cover,
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Image.memory(
+                base64Decode(widget.post['postData']),
+                height: 400,
+                width: double.infinity,
+                fit: BoxFit.cover,
+              ),
+
+              // దానంతట అదే కనపడి, మాయమయ్యే యానిమేషన్
+              AnimatedOpacity(
+                opacity: isLikeAnimating ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 200),
+                child: AnimatedScale(
+                  scale: isLikeAnimating ? 1.2 : 0.5,
+                  duration: const Duration(milliseconds: 200),
+                  child: const Icon(
+                    Icons.favorite,
+                    color: Colors.white,
+                    size: 120,
+                    shadows: [
+                      Shadow(color: Colors.black45, blurRadius: 20),
+                    ], // రియల్ ఎఫెక్ట్ కోసం షాడో
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
+
         Row(
           children: [
             IconButton(
@@ -544,7 +600,7 @@ class PostWidget extends StatelessWidget {
                 style: DefaultTextStyle.of(context).style,
                 children: [
                   TextSpan(
-                    text: "${post['username']} ",
+                    text: "${widget.post['username']} ",
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   TextSpan(text: caption),
@@ -558,6 +614,7 @@ class PostWidget extends StatelessWidget {
     );
   }
 }
+// ============================================================================
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -1961,7 +2018,6 @@ class InboxScreen extends StatelessWidget {
   }
 }
 
-// 👇 ఇక్కడ మనం "Unsend Message" & "Time" ఫీచర్స్ యాడ్ చేశాం!
 class ChatScreen extends StatefulWidget {
   final String receiverId;
   final String receiverName;
@@ -2038,10 +2094,9 @@ class _ChatScreenState extends State<ChatScreen> {
                   itemBuilder: (context, index) {
                     var msgDoc = snapshot.data!.docs[index];
                     var msg = msgDoc.data() as Map<String, dynamic>;
-                    String msgId = msgDoc.id; // మెసేజ్ యొక్క డాక్యుమెంట్ ఐడీ
+                    String msgId = msgDoc.id;
                     bool isMe = msg['senderId'] == currentUid;
 
-                    // టైమ్ కాలిక్యులేషన్
                     String msgTime = "";
                     if (msg['timestamp'] != null) {
                       msgTime = timeago.format(
@@ -2052,7 +2107,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
                     return GestureDetector(
                       onLongPress: () {
-                        // నా మెసేజ్ అయితేనే లాంగ్ ప్రెస్ చేస్తే డిలీట్ ఆప్షన్ వస్తుంది!
                         if (isMe) {
                           showDialog(
                             context: context,
@@ -2129,7 +2183,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                 fontSize: 10,
                                 color: Colors.grey,
                               ),
-                            ), // టైమ్ ఇక్కడ కనిపిస్తుంది
+                            ),
                           ],
                         ),
                       ),
