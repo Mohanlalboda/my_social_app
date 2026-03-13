@@ -252,8 +252,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _showComments(String postId) {
     final TextEditingController commentController = TextEditingController();
-    final String currentUid =
-        FirebaseAuth.instance.currentUser!.uid; // కరెంట్ యూజర్ ఐడీ
+    final String currentUid = FirebaseAuth.instance.currentUser!.uid;
 
     showModalBottomSheet(
       context: context,
@@ -298,11 +297,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       itemBuilder: (context, index) {
                         var commentDoc = snapshot.data!.docs[index];
                         var comment = commentDoc.data() as Map<String, dynamic>;
-                        String commentId =
-                            commentDoc.id; // కామెంట్ యొక్క డాక్యుమెంట్ ఐడీ
-                        bool isMyComment =
-                            comment['uid'] ==
-                            currentUid; // ఇది నా కామెంట్ అవునా కాదా?
+                        String commentId = commentDoc.id;
+                        bool isMyComment = comment['uid'] == currentUid;
 
                         String commentTime = "";
                         if (comment['timestamp'] != null) {
@@ -340,32 +336,103 @@ class _HomeScreenState extends State<HomeScreen> {
                             ],
                           ),
                           subtitle: Text(comment['text']),
-                          // 👇 ఇక్కడే మ్యాజిక్! నా కామెంట్ అయితే డిలీట్ ఐకాన్ చూపిస్తాం
+                          // 👇 ఎడిట్ & డిలీట్ ఐకాన్స్ ఇక్కడే ఉన్నాయి
                           trailing: isMyComment
-                              ? IconButton(
-                                  icon: const Icon(
-                                    Icons.delete_outline,
-                                    size: 20,
-                                    color: Colors.red,
-                                  ),
-                                  onPressed: () async {
-                                    // 1. కామెంట్ ని డేటాబేస్ నుండి తీసేయడం
-                                    await FirebaseFirestore.instance
-                                        .collection('posts')
-                                        .doc(postId)
-                                        .collection('comments')
-                                        .doc(commentId)
-                                        .delete();
-                                    // 2. పోస్ట్ యొక్క కామెంట్ కౌంట్ ని 1 తగ్గించడం
-                                    await FirebaseFirestore.instance
-                                        .collection('posts')
-                                        .doc(postId)
-                                        .update({
-                                          "commentCount": FieldValue.increment(
-                                            -1,
-                                          ),
-                                        });
-                                  },
+                              ? Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    // 1. Edit Button (సవరించే హక్కు)
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.edit,
+                                        size: 20,
+                                        color: Colors.blue,
+                                      ),
+                                      onPressed: () {
+                                        TextEditingController editController =
+                                            TextEditingController(
+                                              text: comment['text'],
+                                            );
+                                        showDialog(
+                                          context: context,
+                                          builder: (context) {
+                                            return AlertDialog(
+                                              title: const Text("Edit Comment"),
+                                              content: TextField(
+                                                controller: editController,
+                                                decoration:
+                                                    const InputDecoration(
+                                                      border:
+                                                          OutlineInputBorder(),
+                                                    ),
+                                                maxLines: 2,
+                                              ),
+                                              actions: [
+                                                TextButton(
+                                                  onPressed: () {
+                                                    Navigator.pop(context);
+                                                  },
+                                                  child: const Text("Cancel"),
+                                                ),
+                                                ElevatedButton(
+                                                  onPressed: () async {
+                                                    if (editController
+                                                        .text
+                                                        .isNotEmpty) {
+                                                      await FirebaseFirestore
+                                                          .instance
+                                                          .collection('posts')
+                                                          .doc(postId)
+                                                          .collection(
+                                                            'comments',
+                                                          )
+                                                          .doc(commentId)
+                                                          .update({
+                                                            "text":
+                                                                editController
+                                                                    .text
+                                                                    .trim(),
+                                                          });
+                                                      if (!context.mounted) {
+                                                        return;
+                                                      }
+                                                      Navigator.pop(
+                                                        context,
+                                                      ); // Close the dialog
+                                                    }
+                                                  },
+                                                  child: const Text("Save"),
+                                                ),
+                                              ],
+                                            );
+                                          },
+                                        );
+                                      },
+                                    ),
+                                    // 2. Delete Button (తొలగించే హక్కు)
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.delete_outline,
+                                        size: 20,
+                                        color: Colors.red,
+                                      ),
+                                      onPressed: () async {
+                                        await FirebaseFirestore.instance
+                                            .collection('posts')
+                                            .doc(postId)
+                                            .collection('comments')
+                                            .doc(commentId)
+                                            .delete();
+                                        await FirebaseFirestore.instance
+                                            .collection('posts')
+                                            .doc(postId)
+                                            .update({
+                                              "commentCount":
+                                                  FieldValue.increment(-1),
+                                            });
+                                      },
+                                    ),
+                                  ],
                                 )
                               : null,
                         );
