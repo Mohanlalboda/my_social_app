@@ -91,7 +91,7 @@ class _MainNavigationState extends State<MainNavigation> {
     return Scaffold(
       appBar: AppBar(
         title: const Text(
-          "Instagram",
+          "MyBanjara",
           style: TextStyle(
             fontWeight: FontWeight.bold,
             fontStyle: FontStyle.italic,
@@ -184,12 +184,14 @@ class _PostWidgetState extends State<PostWidget> {
                       .orderBy('timestamp', descending: true)
                       .snapshots(),
                   builder: (context, snapshot) {
-                    if (!snapshot.hasData)
+                    if (!snapshot.hasData) {
                       return const Center(child: CircularProgressIndicator());
-                    if (snapshot.data!.docs.isEmpty)
+                    }
+                    if (snapshot.data!.docs.isEmpty) {
                       return const Center(
                         child: Text("No comments yet. Be the first!"),
                       );
+                    }
 
                     return ListView.builder(
                       itemCount: snapshot.data!.docs.length,
@@ -289,8 +291,9 @@ class _PostWidgetState extends State<PostWidget> {
                                                                     .text
                                                                     .trim(),
                                                           });
-                                                      if (!context.mounted)
+                                                      if (!context.mounted) {
                                                         return;
+                                                      }
                                                       Navigator.pop(context);
                                                     }
                                                   },
@@ -642,8 +645,9 @@ class ActivityScreen extends StatelessWidget {
             .where('receiverId', isEqualTo: currentUid)
             .snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting)
+          if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
+          }
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
             return const Center(
               child: Text(
@@ -890,7 +894,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           style: TextStyle(fontSize: 14),
                         ),
                         value: isPrivatePost,
-                        activeColor: Colors.blue,
+                        activeThumbColor: Colors.blue,
                         onChanged: (val) {
                           setStateDialog(() {
                             isPrivatePost = val;
@@ -975,8 +979,9 @@ class _HomeScreenState extends State<HomeScreen> {
             .doc(currentUid)
             .snapshots(),
         builder: (context, userSnapshot) {
-          if (!userSnapshot.hasData)
+          if (!userSnapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
+          }
 
           var userData =
               userSnapshot.data!.data() as Map<String, dynamic>? ?? {};
@@ -1063,10 +1068,11 @@ class _HomeScreenState extends State<HomeScreen> {
                             .orderBy('timestamp', descending: true)
                             .snapshots(),
                         builder: (context, snapshot) {
-                          if (!snapshot.hasData)
+                          if (!snapshot.hasData) {
                             return const Center(
                               child: CircularProgressIndicator(),
                             );
+                          }
 
                           var feedPosts = snapshot.data!.docs.where((doc) {
                             return feedUserIds.contains(doc['ownerId']);
@@ -1130,14 +1136,16 @@ class UsersListScreen extends StatelessWidget {
                   .collection('users')
                   .snapshots(),
               builder: (context, snapshot) {
-                if (!snapshot.hasData)
+                if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
+                }
 
                 var users = snapshot.data!.docs
                     .where((doc) => userIds.contains(doc['uid']))
                     .toList();
-                if (users.isEmpty)
+                if (users.isEmpty) {
                   return const Center(child: Text("No users found."));
+                }
 
                 return ListView.builder(
                   itemCount: users.length,
@@ -1277,8 +1285,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             .doc(uid)
             .snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting)
+          if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
+          }
 
           var userData = snapshot.data?.data() as Map<String, dynamic>? ?? {};
           String name = userData['username'] ?? "User";
@@ -1484,14 +1493,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               .where('savedBy', arrayContains: uid)
                               .snapshots(),
                           builder: (context, savedSnapshot) {
-                            if (!savedSnapshot.hasData)
+                            if (!savedSnapshot.hasData) {
                               return const Center(
                                 child: CircularProgressIndicator(),
                               );
-                            if (savedSnapshot.data!.docs.isEmpty)
+                            }
+                            if (savedSnapshot.data!.docs.isEmpty) {
                               return const Center(
                                 child: Text("No saved posts yet 🔖"),
                               );
+                            }
                             return GridView.builder(
                               padding: const EdgeInsets.all(2),
                               gridDelegate:
@@ -1558,10 +1569,12 @@ class OtherUserProfileScreen extends StatelessWidget {
             .doc(uid)
             .snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting)
+          if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
-          if (!snapshot.hasData || !snapshot.data!.exists)
+          }
+          if (!snapshot.hasData || !snapshot.data!.exists) {
             return const Center(child: Text("User not found"));
+          }
 
           var userData = snapshot.data!.data() as Map<String, dynamic>;
           String name = userData['username'] ?? "User";
@@ -1581,8 +1594,9 @@ class OtherUserProfileScreen extends StatelessWidget {
               var visiblePosts = postSnapshot.hasData
                   ? postSnapshot.data!.docs.where((doc) {
                       var data = doc.data() as Map<String, dynamic>;
-                      if (isFollowing)
+                      if (isFollowing) {
                         return true; // ఫాలో అయితే అన్నీ చూపిస్తుంది
+                      }
                       return data['isPrivate'] !=
                           true; // లేదంటే పబ్లిక్ పోస్టులు మాత్రమే చూపిస్తుంది
                     }).toList()
@@ -1849,10 +1863,12 @@ class PostDetailsScreen extends StatelessWidget {
             .doc(postId)
             .snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting)
+          if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
-          if (!snapshot.hasData || !snapshot.data!.exists)
+          }
+          if (!snapshot.hasData || !snapshot.data!.exists) {
             return const Center(child: Text("Post not found"));
+          }
 
           var post = snapshot.data!.data() as Map<String, dynamic>;
           return SingleChildScrollView(child: PostWidget(post: post));
@@ -1891,8 +1907,9 @@ class _SearchScreenState extends State<SearchScreen> {
                   .orderBy('timestamp', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
-                if (!snapshot.hasData)
+                if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
+                }
 
                 // 👇 NEW: పబ్లిక్ పోస్టులు మాత్రమే ఎక్స్‌ప్లోర్ పేజీలో కనిపిస్తాయి!
                 var publicPosts = snapshot.data!.docs.where((doc) {
@@ -1900,10 +1917,11 @@ class _SearchScreenState extends State<SearchScreen> {
                   return data['isPrivate'] != true;
                 }).toList();
 
-                if (publicPosts.isEmpty)
+                if (publicPosts.isEmpty) {
                   return const Center(
                     child: Text("No posts to explore yet! 🌎"),
                   );
+                }
 
                 return GridView.builder(
                   padding: const EdgeInsets.all(2),
@@ -1938,10 +1956,12 @@ class _SearchScreenState extends State<SearchScreen> {
                   .collection('users')
                   .snapshots(),
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting)
+                if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(child: CircularProgressIndicator());
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty)
+                }
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
                   return const Center(child: Text("No users found"));
+                }
 
                 var filteredUsers = snapshot.data!.docs.where((doc) {
                   String username = doc['username'].toString().toLowerCase();
@@ -1953,8 +1973,9 @@ class _SearchScreenState extends State<SearchScreen> {
                   itemBuilder: (context, index) {
                     var user =
                         filteredUsers[index].data() as Map<String, dynamic>;
-                    if (user['uid'] == FirebaseAuth.instance.currentUser!.uid)
+                    if (user['uid'] == FirebaseAuth.instance.currentUser!.uid) {
                       return const SizedBox.shrink();
+                    }
 
                     return ListTile(
                       leading: CircleAvatar(
@@ -2011,10 +2032,12 @@ class InboxScreen extends StatelessWidget {
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance.collection('users').snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting)
+          if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty)
+          }
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
             return const Center(child: Text("No messages yet."));
+          }
 
           var usersList = snapshot.data!.docs
               .where((doc) => doc['uid'] != currentUid)
@@ -2084,8 +2107,9 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _msgController = TextEditingController();
 
   String getChatRoomId(String a, String b) {
-    if (a.substring(0, 1).codeUnitAt(0) > b.substring(0, 1).codeUnitAt(0))
+    if (a.substring(0, 1).codeUnitAt(0) > b.substring(0, 1).codeUnitAt(0)) {
       return "${b}_$a";
+    }
     return "${a}_$b";
   }
 
@@ -2132,8 +2156,9 @@ class _ChatScreenState extends State<ChatScreen> {
                   .orderBy('timestamp', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
-                if (!snapshot.hasData)
+                if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
+                }
                 return ListView.builder(
                   reverse: true,
                   itemCount: snapshot.data!.docs.length,
@@ -2365,8 +2390,10 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
+  bool _isLoading = false;
 
   Future<void> _login() async {
+    setState(() => _isLoading = true);
     try {
       await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: _emailController.text.trim(),
@@ -2374,62 +2401,156 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Error: ${e.toString()}"),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text(
-              "Instagram Clone",
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                fontStyle: FontStyle.italic,
-              ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF833AB4), Color(0xFFFD1D1D), Color(0xFFF56040)],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 30.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text(
+                  "MyBanjara",
+                  style: TextStyle(
+                    fontSize: 45,
+                    fontWeight: FontWeight.bold,
+                    fontStyle: FontStyle.italic,
+                    color: Colors.white,
+                    shadows: [
+                      Shadow(
+                        color: Colors.black26,
+                        blurRadius: 10,
+                        offset: Offset(2, 2),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  "Connect with your people",
+                  style: TextStyle(color: Colors.white70, fontSize: 16),
+                ),
+                const SizedBox(height: 50),
+
+                TextField(
+                  controller: _emailController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: "Email",
+                    hintStyle: const TextStyle(color: Colors.white70),
+                    filled: true,
+                    // 👇 NEW: Flutter Latest Update (withValues instead of withOpacity)
+                    fillColor: Colors.white.withValues(alpha: 0.2),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15),
+                      borderSide: BorderSide.none,
+                    ),
+                    prefixIcon: const Icon(
+                      Icons.email_outlined,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 15),
+
+                TextField(
+                  controller: _passwordController,
+                  obscureText: true,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: "Password",
+                    hintStyle: const TextStyle(color: Colors.white70),
+                    filled: true,
+                    // 👇 NEW: Flutter Latest Update
+                    fillColor: Colors.white.withValues(alpha: 0.2),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15),
+                      borderSide: BorderSide.none,
+                    ),
+                    prefixIcon: const Icon(
+                      Icons.lock_outline,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 30),
+
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: const Color(0xFFFD1D1D),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      elevation: 5,
+                    ),
+                    onPressed: _isLoading ? null : _login,
+                    child: _isLoading
+                        ? const CircularProgressIndicator(
+                            color: Color(0xFFFD1D1D),
+                          )
+                        : const Text(
+                            "Log In",
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text(
+                      "Don't have an account?",
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                    TextButton(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const SignUpScreen(),
+                        ),
+                      ),
+                      child: const Text(
+                        "Sign Up",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            const SizedBox(height: 40),
-            TextField(
-              controller: _emailController,
-              decoration: const InputDecoration(
-                labelText: "Email",
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 15),
-            TextField(
-              controller: _passwordController,
-              decoration: const InputDecoration(
-                labelText: "Password",
-                border: OutlineInputBorder(),
-              ),
-              obscureText: true,
-            ),
-            const SizedBox(height: 25),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: _login,
-                child: const Text("Log In"),
-              ),
-            ),
-            TextButton(
-              onPressed: () => Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const SignUpScreen()),
-              ),
-              child: const Text("Sign Up"),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -2446,8 +2567,10 @@ class _SignUpScreenState extends State<SignUpScreen> {
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _usernameController = TextEditingController();
+  bool _isLoading = false;
 
   Future<void> _signUp() async {
+    setState(() => _isLoading = true);
     try {
       UserCredential userCredential = await FirebaseAuth.instance
           .createUserWithEmailAndPassword(
@@ -2461,7 +2584,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
             "username": _usernameController.text.trim(),
             "email": _emailController.text.trim(),
             "uid": userCredential.user!.uid,
-            "bio": "Law Student | OU ⚖️",
+            "bio": "Welcome to MyBanjara ✨",
             "createdAt": DateTime.now(),
             "profilePic": "",
             "followers": [],
@@ -2471,54 +2594,149 @@ class _SignUpScreenState extends State<SignUpScreen> {
       Navigator.pop(context);
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("Error: ${e.toString()}"),
+          backgroundColor: Colors.redAccent,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text("Create Account")),
-      body: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          children: [
-            TextField(
-              controller: _usernameController,
-              decoration: const InputDecoration(
-                labelText: "Username",
-                border: OutlineInputBorder(),
-              ),
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.white),
+      ),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFFF56040), Color(0xFFFD1D1D), Color(0xFF833AB4)],
+            begin: Alignment.topRight,
+            end: Alignment.bottomLeft,
+          ),
+        ),
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 30.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Text(
+                  "Create Account",
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  "Join MyBanjara today!",
+                  style: TextStyle(color: Colors.white70, fontSize: 16),
+                ),
+                const SizedBox(height: 40),
+
+                TextField(
+                  controller: _usernameController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: "Username",
+                    hintStyle: const TextStyle(color: Colors.white70),
+                    filled: true,
+                    // 👇 NEW: Flutter Latest Update
+                    fillColor: Colors.white.withValues(alpha: 0.2),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15),
+                      borderSide: BorderSide.none,
+                    ),
+                    prefixIcon: const Icon(
+                      Icons.person_outline,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 15),
+
+                TextField(
+                  controller: _emailController,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: "Email",
+                    hintStyle: const TextStyle(color: Colors.white70),
+                    filled: true,
+                    // 👇 NEW: Flutter Latest Update
+                    fillColor: Colors.white.withValues(alpha: 0.2),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15),
+                      borderSide: BorderSide.none,
+                    ),
+                    prefixIcon: const Icon(
+                      Icons.email_outlined,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 15),
+
+                TextField(
+                  controller: _passwordController,
+                  obscureText: true,
+                  style: const TextStyle(color: Colors.white),
+                  decoration: InputDecoration(
+                    hintText: "Password",
+                    hintStyle: const TextStyle(color: Colors.white70),
+                    filled: true,
+                    // 👇 NEW: Flutter Latest Update
+                    fillColor: Colors.white.withValues(alpha: 0.2),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(15),
+                      borderSide: BorderSide.none,
+                    ),
+                    prefixIcon: const Icon(
+                      Icons.lock_outline,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 30),
+
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: const Color(0xFF833AB4),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      elevation: 5,
+                    ),
+                    onPressed: _isLoading ? null : _signUp,
+                    child: _isLoading
+                        ? const CircularProgressIndicator(
+                            color: Color(0xFF833AB4),
+                          )
+                        : const Text(
+                            "Sign Up",
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 15),
-            TextField(
-              controller: _emailController,
-              decoration: const InputDecoration(
-                labelText: "Email",
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 15),
-            TextField(
-              controller: _passwordController,
-              decoration: const InputDecoration(
-                labelText: "Password",
-                border: OutlineInputBorder(),
-              ),
-              obscureText: true,
-            ),
-            const SizedBox(height: 25),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: _signUp,
-                child: const Text("Sign Up"),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
