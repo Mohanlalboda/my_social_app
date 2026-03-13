@@ -7,7 +7,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:google_fonts/google_fonts.dart';
-import 'package:share_plus/share_plus.dart';
 import 'firebase_options.dart';
 
 void main() async {
@@ -164,6 +163,9 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 }
 
+// ============================================================================
+// POST WIDGET (Handles Visual Post Sharing Logic & Likes)
+// ============================================================================
 class PostWidget extends StatefulWidget {
   final Map<String, dynamic> post;
   const PostWidget({super.key, required this.post});
@@ -173,167 +175,76 @@ class PostWidget extends StatefulWidget {
 }
 
 class _PostWidgetState extends State<PostWidget> {
-  bool isLikeAnimating = false;
-
-  void _showComments(BuildContext context, String postId) {
-    final TextEditingController commentController = TextEditingController();
+  void _showShareSheet(BuildContext context, Map<String, dynamic> post) {
     final String currentUid = FirebaseAuth.instance.currentUser!.uid;
-    final String currentEmail = FirebaseAuth.instance.currentUser!.email!;
-
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
-        return Padding(
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(context).viewInsets.bottom,
-            top: 20,
-            left: 15,
-            right: 15,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-              const SizedBox(height: 10),
-              const Text(
-                "Comments",
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-              ),
-              const Divider(),
-              SizedBox(
-                height: 350,
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('posts')
-                      .doc(postId)
-                      .collection('comments')
-                      .orderBy('timestamp', descending: true)
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    if (!snapshot.hasData) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    if (snapshot.data!.docs.isEmpty) {
-                      return const Center(
-                        child: Text("Be the first to comment! ✨"),
-                      );
-                    }
-                    return ListView.builder(
-                      itemCount: snapshot.data!.docs.length,
-                      itemBuilder: (context, index) {
-                        var commentDoc = snapshot.data!.docs[index];
-                        var comment = commentDoc.data() as Map<String, dynamic>;
-                        String commentId = commentDoc.id;
-                        bool isMyComment = comment['uid'] == currentUid;
-                        String commentTime = comment['timestamp'] != null
-                            ? timeago.format(
-                                (comment['timestamp'] as Timestamp).toDate(),
-                                locale: 'en_short',
-                              )
-                            : "";
-
-                        return ListTile(
-                          leading: CircleAvatar(
-                            radius: 18,
-                            child: Text(comment['username'][0].toUpperCase()),
-                          ),
-                          title: Row(
-                            children: [
-                              Text(
-                                comment['username'],
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 14,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                commentTime,
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  color: Colors.grey,
-                                ),
-                              ),
-                            ],
-                          ),
-                          subtitle: Text(comment['text']),
-                          trailing: isMyComment
-                              ? IconButton(
-                                  icon: const Icon(
-                                    Icons.delete_outline,
-                                    size: 18,
-                                    color: Colors.red,
-                                  ),
-                                  onPressed: () async {
-                                    await FirebaseFirestore.instance
-                                        .collection('posts')
-                                        .doc(postId)
-                                        .collection('comments')
-                                        .doc(commentId)
-                                        .delete();
-                                    await FirebaseFirestore.instance
-                                        .collection('posts')
-                                        .doc(postId)
-                                        .update({
-                                          "commentCount": FieldValue.increment(
-                                            -1,
-                                          ),
-                                        });
-                                  },
-                                )
-                              : null,
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-              TextField(
-                controller: commentController,
-                decoration: InputDecoration(
-                  hintText: "Add a comment...",
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(30),
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance.collection('users').snapshots(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            var users = snapshot.data!.docs
+                .where((doc) => doc['uid'] != currentUid)
+                .toList();
+            return Column(
+              children: [
+                const Padding(
+                  padding: EdgeInsets.all(15.0),
+                  child: Text(
+                    "Share to Followers",
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
                   ),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 20),
-                  suffixIcon: IconButton(
-                    icon: const Icon(Icons.send, color: Colors.blue),
-                    onPressed: () async {
-                      if (commentController.text.isNotEmpty) {
-                        await FirebaseFirestore.instance
-                            .collection('posts')
-                            .doc(postId)
-                            .collection('comments')
-                            .add({
-                              "text": commentController.text.trim(),
-                              "username": currentEmail.split('@')[0],
-                              "timestamp": FieldValue.serverTimestamp(),
-                              "uid": currentUid,
-                            });
-                        await FirebaseFirestore.instance
-                            .collection('posts')
-                            .doc(postId)
-                            .update({"commentCount": FieldValue.increment(1)});
-                        commentController.clear();
-                      }
+                ),
+                Expanded(
+                  child: ListView.builder(
+                    itemCount: users.length,
+                    itemBuilder: (context, index) {
+                      var user = users[index];
+                      return ListTile(
+                        leading: CircleAvatar(
+                          child: Text(user['username'][0].toUpperCase()),
+                        ),
+                        title: Text(user['username']),
+                        trailing: const Icon(Icons.send, color: Colors.blue),
+                        // 👇 SOLVED: Changed onPressed to onTap
+                        onTap: () async {
+                          String roomId =
+                              (currentUid.hashCode <= user['uid'].hashCode)
+                              ? "${currentUid}_${user['uid']}"
+                              : "${user['uid']}_$currentUid";
+
+                          await FirebaseFirestore.instance
+                              .collection('chatRooms')
+                              .doc(roomId)
+                              .collection('messages')
+                              .add({
+                                "senderId": currentUid,
+                                "message": "Check out this post!",
+                                "postId": post['postId'],
+                                "postImage": post['postData'],
+                                "timestamp": FieldValue.serverTimestamp(),
+                              });
+
+                          if (context.mounted) {
+                            Navigator.pop(context);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(content: Text("Post Sent! ✈️")),
+                            );
+                          }
+                        },
+                      );
                     },
                   ),
                 ),
-              ),
-              const SizedBox(height: 20),
-            ],
-          ),
+              ],
+            );
+          },
         );
       },
     );
@@ -342,24 +253,13 @@ class _PostWidgetState extends State<PostWidget> {
   void _handleLike() async {
     String postId = widget.post['postId'];
     String currentUid = FirebaseAuth.instance.currentUser!.uid;
-    String currentEmail = FirebaseAuth.instance.currentUser!.email!;
     bool isLiked =
         (widget.post['likes'] != null &&
         widget.post['likes'][currentUid] == true);
-
     if (!isLiked) {
       await FirebaseFirestore.instance.collection('posts').doc(postId).update({
         "likes.$currentUid": true,
       });
-      if (widget.post['ownerId'] != currentUid) {
-        await FirebaseFirestore.instance.collection('notifications').add({
-          "receiverId": widget.post['ownerId'],
-          "senderId": currentUid,
-          "senderName": currentEmail.split('@')[0],
-          "type": "like",
-          "timestamp": FieldValue.serverTimestamp(),
-        });
-      }
     } else {
       await FirebaseFirestore.instance.collection('posts').doc(postId).update({
         "likes.$currentUid": FieldValue.delete(),
@@ -367,169 +267,11 @@ class _PostWidgetState extends State<PostWidget> {
     }
   }
 
-  String getChatRoomId(String a, String b) {
-    return a.hashCode <= b.hashCode ? "${a}_$b" : "${b}_$a";
-  }
-
-  void _sharePostMenu() {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return Container(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                "Share Post",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const Divider(),
-              ListTile(
-                leading: const Icon(Icons.send_outlined, color: Colors.blue),
-                title: const Text("Send to Followers"),
-                onTap: () {
-                  Navigator.pop(context);
-                  _showFollowersToShare();
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.share_outlined, color: Colors.red),
-                title: const Text("Share to External Apps"),
-                onTap: () {
-                  Navigator.pop(context);
-                  String caption = widget.post['caption'] ?? "";
-                  String username = widget.post['username'] ?? "User";
-                  // FIX: share static method call to avoid warning
-                  Share.share(
-                    "Check out this post by $username on MyBanjara! ✨\n\n$caption",
-                  );
-                },
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _showFollowersToShare() {
-    final String currentUid = FirebaseAuth.instance.currentUser!.uid;
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return Container(
-          height: 400,
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            children: [
-              const Text(
-                "Select Follower",
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 10),
-              Expanded(
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('users')
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    if (!snapshot.hasData) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    var usersList = snapshot.data!.docs
-                        .where((doc) => doc['uid'] != currentUid)
-                        .toList();
-                    return ListView.builder(
-                      itemCount: usersList.length,
-                      itemBuilder: (context, index) {
-                        var user =
-                            usersList[index].data() as Map<String, dynamic>;
-                        return ListTile(
-                          leading: CircleAvatar(
-                            child: Text(user['username'][0]),
-                          ),
-                          title: Text(user['username']),
-                          trailing: ElevatedButton(
-                            onPressed: () async {
-                              String roomId = getChatRoomId(
-                                currentUid,
-                                user['uid'],
-                              );
-
-                              // 👇 🌟 ఇప్పుడు పోస్ట్ డేటా మొత్తాన్ని పంపుతున్నాం
-                              await FirebaseFirestore.instance
-                                  .collection('chatRooms')
-                                  .doc(roomId)
-                                  .collection('messages')
-                                  .add({
-                                    "senderId": currentUid,
-                                    "message":
-                                        widget.post['caption'] ??
-                                        "Shared a post",
-                                    "type": "post", // మెసేజ్ టైప్ 'post'
-                                    "sharedPostId": widget.post['postId'],
-                                    "sharedPostData": widget.post['postData'],
-                                    "timestamp": FieldValue.serverTimestamp(),
-                                  });
-
-                              await FirebaseFirestore.instance
-                                  .collection('chatRooms')
-                                  .doc(roomId)
-                                  .set({
-                                    "lastMessage": "Sent a post 📸",
-                                    "lastTime": FieldValue.serverTimestamp(),
-                                    "users": [currentUid, user['uid']],
-                                  }, SetOptions(merge: true));
-
-                              if (context.mounted) {
-                                Navigator.pop(context);
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: Text(
-                                      "Sent to ${user['username']}!",
-                                    ),
-                                  ),
-                                );
-                              }
-                            },
-                            child: const Text("Send"),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
-    String currentUid = FirebaseAuth.instance.currentUser!.uid;
     bool isLiked =
         (widget.post['likes'] != null &&
-        widget.post['likes'][currentUid] == true);
-    int likeCount = (widget.post['likes'] != null)
-        ? (widget.post['likes'] as Map).length
-        : 0;
-    int commentCount = widget.post['commentCount'] ?? 0;
-    bool isPrivate = widget.post['isPrivate'] ?? false;
-    String timeAgo = (widget.post['timestamp'] != null)
-        ? timeago.format((widget.post['timestamp'] as Timestamp).toDate())
-        : "Just now";
-
+        widget.post['likes'][FirebaseAuth.instance.currentUser!.uid] == true);
     return Container(
       margin: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
       decoration: BoxDecoration(
@@ -548,120 +290,389 @@ class _PostWidgetState extends State<PostWidget> {
         children: [
           ListTile(
             leading: CircleAvatar(
-              child: Text(
-                widget.post['username'] != null &&
-                        widget.post['username'].isNotEmpty
-                    ? widget.post['username'][0].toUpperCase()
-                    : "U",
-              ),
+              child: Text(widget.post['username'][0].toUpperCase()),
             ),
-            title: Row(
-              children: [
-                Text(
-                  widget.post['username'] ?? "User",
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                if (isPrivate) ...[
-                  const SizedBox(width: 5),
-                  const Icon(Icons.lock, size: 14, color: Colors.grey),
-                ],
-              ],
+            title: Text(
+              widget.post['username'] ?? "User",
+              style: const TextStyle(fontWeight: FontWeight.bold),
             ),
-            subtitle: Text(timeAgo, style: const TextStyle(fontSize: 12)),
+            subtitle: Text(
+              widget.post['timestamp'] != null
+                  ? timeago.format(
+                      (widget.post['timestamp'] as Timestamp).toDate(),
+                    )
+                  : "Just now",
+            ),
           ),
           GestureDetector(
-            onDoubleTap: () async {
-              if (!isLiked) {
-                _handleLike();
-              }
-              setState(() {
-                isLikeAnimating = true;
-              });
-              await Future.delayed(const Duration(milliseconds: 800));
-              if (mounted) {
-                setState(() {
-                  isLikeAnimating = false;
-                });
-              }
-            },
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(15),
-                child: Image.memory(
-                  base64Decode(widget.post['postData']),
-                  height: 400,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                ),
+            onDoubleTap: _handleLike,
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(15),
+              child: Image.memory(
+                base64Decode(widget.post['postData']),
+                height: 400,
+                width: double.infinity,
+                fit: BoxFit.cover,
               ),
             ),
           ),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                IconButton(
-                  icon: Icon(
-                    isLiked ? Icons.favorite : Icons.favorite_border,
-                    color: isLiked ? Colors.red : Colors.black87,
-                  ),
-                  onPressed: _handleLike,
+          Row(
+            children: [
+              IconButton(
+                icon: Icon(
+                  isLiked ? Icons.favorite : Icons.favorite_border,
+                  color: isLiked ? Colors.red : Colors.black,
                 ),
-                Text(
-                  "$likeCount",
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(width: 10),
-                IconButton(
-                  icon: const Icon(Icons.mode_comment_outlined),
-                  onPressed: () =>
-                      _showComments(context, widget.post['postId']),
-                ),
-                Text(
-                  "$commentCount",
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(width: 10),
-                IconButton(
-                  icon: const Icon(Icons.share_outlined),
-                  onPressed: _sharePostMenu,
-                ),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.bookmark_border),
-                  onPressed: () {},
-                ),
-              ],
-            ),
+                onPressed: _handleLike,
+              ),
+              IconButton(
+                icon: const Icon(Icons.mode_comment_outlined),
+                onPressed: () {},
+              ),
+              const Spacer(),
+              IconButton(
+                icon: const Icon(Icons.send_rounded),
+                onPressed: () => _showShareSheet(context, widget.post),
+              ),
+            ],
           ),
-          if (widget.post['caption'] != null &&
-              widget.post['caption'].isNotEmpty) ...[
+          if (widget.post['caption'] != null)
             Padding(
-              padding: const EdgeInsets.only(left: 15, right: 15, bottom: 15),
-              child: RichText(
-                text: TextSpan(
-                  style: const TextStyle(
-                    color: Colors.black,
-                    fontFamily: 'Poppins',
-                  ),
-                  children: [
-                    TextSpan(
-                      text: "${widget.post['username']} ",
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    TextSpan(text: widget.post['caption']),
-                  ],
-                ),
-              ),
+              padding: const EdgeInsets.all(12),
+              child: Text(widget.post['caption']),
             ),
-          ],
         ],
       ),
     );
   }
 }
 
+// ============================================================================
+// CHAT SCREEN (Includes Indigo Bubbles & Click to View Post)
+// ============================================================================
+class ChatScreen extends StatefulWidget {
+  final String receiverId;
+  final String receiverName;
+  const ChatScreen({
+    super.key,
+    required this.receiverId,
+    required this.receiverName,
+  });
+  @override
+  State<ChatScreen> createState() => _ChatScreenState();
+}
+
+class _ChatScreenState extends State<ChatScreen> {
+  final TextEditingController _msgController = TextEditingController();
+
+  void _sendMessage() async {
+    if (_msgController.text.trim().isNotEmpty) {
+      String senderId = FirebaseAuth.instance.currentUser!.uid;
+      String roomId = senderId.hashCode <= widget.receiverId.hashCode
+          ? "${senderId}_${widget.receiverId}"
+          : "${widget.receiverId}_$senderId";
+      String msg = _msgController.text.trim();
+      _msgController.clear();
+      await FirebaseFirestore.instance
+          .collection('chatRooms')
+          .doc(roomId)
+          .collection('messages')
+          .add({
+            "senderId": senderId,
+            "message": msg,
+            "timestamp": FieldValue.serverTimestamp(),
+          });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    String currentUid = FirebaseAuth.instance.currentUser!.uid;
+    String roomId = currentUid.hashCode <= widget.receiverId.hashCode
+        ? "${currentUid}_${widget.receiverId}"
+        : "${widget.receiverId}_$currentUid";
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          widget.receiverName,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('chatRooms')
+                  .doc(roomId)
+                  .collection('messages')
+                  .orderBy('timestamp', descending: true)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                var docs = snapshot.data!.docs;
+                return ListView.builder(
+                  reverse: true,
+                  itemCount: docs.length,
+                  itemBuilder: (context, index) {
+                    var data = docs[index].data() as Map<String, dynamic>;
+                    bool isMe = data['senderId'] == currentUid;
+                    return Align(
+                      alignment: isMe
+                          ? Alignment.centerRight
+                          : Alignment.centerLeft,
+                      child: Column(
+                        crossAxisAlignment: isMe
+                            ? CrossAxisAlignment.end
+                            : CrossAxisAlignment.start,
+                        children: [
+                          GestureDetector(
+                            onTap: () {
+                              if (data.containsKey('postId')) {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => PostDetailsScreen(
+                                      postId: data['postId'],
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
+                            child: Container(
+                              margin: const EdgeInsets.symmetric(
+                                vertical: 4,
+                                horizontal: 10,
+                              ),
+                              padding: const EdgeInsets.all(10),
+                              constraints: BoxConstraints(
+                                maxWidth:
+                                    MediaQuery.of(context).size.width * 0.7,
+                              ),
+                              decoration: BoxDecoration(
+                                color: isMe
+                                    ? Colors.indigoAccent
+                                    : Colors.grey[300],
+                                borderRadius: BorderRadius.circular(15),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  if (data.containsKey('postImage')) ...[
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(10),
+                                      child: Image.memory(
+                                        base64Decode(data['postImage']),
+                                        height: 180,
+                                        width: double.infinity,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 5),
+                                  ],
+                                  Text(
+                                    data['message'],
+                                    style: TextStyle(
+                                      color: isMe ? Colors.white : Colors.black,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(10),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _msgController,
+                    decoration: InputDecoration(
+                      hintText: "Message...",
+                      filled: true,
+                      fillColor: Colors.grey[200],
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(30),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.send, color: Colors.indigoAccent),
+                  onPressed: _sendMessage,
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ============================================================================
+// PROFILE SCREEN
+// ============================================================================
+class ProfileScreen extends StatefulWidget {
+  const ProfileScreen({super.key});
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  @override
+  Widget build(BuildContext context) {
+    final String uid = FirebaseAuth.instance.currentUser!.uid;
+    return DefaultTabController(
+      length: 2,
+      child: StreamBuilder<DocumentSnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          var userData = snapshot.data!.data() as Map<String, dynamic>? ?? {};
+          String name = userData['username'] ?? "User";
+          String profilePic = userData['profilePic'] ?? "";
+          List followers = userData['followers'] ?? [];
+          List following = userData['following'] ?? [];
+
+          return Scaffold(
+            appBar: AppBar(
+              title: Text(
+                name,
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              actions: [
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.menu),
+                  onSelected: (val) {
+                    if (val == 'logout') {
+                      FirebaseAuth.instance.signOut();
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(
+                      value: 'logout',
+                      child: Text(
+                        "Logout",
+                        style: TextStyle(color: Colors.red),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            body: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 40,
+                        backgroundImage: profilePic.isNotEmpty
+                            ? MemoryImage(base64Decode(profilePic))
+                            : null,
+                        child: profilePic.isEmpty
+                            ? Text(
+                                name[0].toUpperCase(),
+                                style: const TextStyle(fontSize: 24),
+                              )
+                            : null,
+                      ),
+                      Expanded(
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            _buildStatColumn(0, "Posts"),
+                            _buildStatColumn(followers.length, "Followers"),
+                            _buildStatColumn(following.length, "Following"),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const TabBar(
+                  indicatorColor: Colors.black,
+                  labelColor: Colors.black,
+                  tabs: [
+                    Tab(icon: Icon(Icons.grid_on)),
+                    Tab(icon: Icon(Icons.bookmark_border)),
+                  ],
+                ),
+                Expanded(
+                  child: TabBarView(
+                    children: [
+                      StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance
+                            .collection('posts')
+                            .where('ownerId', isEqualTo: uid)
+                            .snapshots(),
+                        builder: (context, postSnap) {
+                          if (!postSnap.hasData) {
+                            return const SizedBox();
+                          }
+                          var posts = postSnap.data!.docs;
+                          return GridView.builder(
+                            gridDelegate:
+                                const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 3,
+                                  crossAxisSpacing: 2,
+                                  mainAxisSpacing: 2,
+                                ),
+                            itemCount: posts.length,
+                            itemBuilder: (context, index) => Image.memory(
+                              base64Decode(posts[index]['postData']),
+                              fit: BoxFit.cover,
+                            ),
+                          );
+                        },
+                      ),
+                      const Center(child: Text("Saved items here")),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Column _buildStatColumn(int num, String label) {
+    return Column(
+      children: [
+        Text(
+          num.toString(),
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
+        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
+      ],
+    );
+  }
+}
+
+// ============================================================================
+// HOME SCREEN (With Upload Post Functionality Restored)
+// ============================================================================
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
   @override
@@ -682,9 +693,7 @@ class _HomeScreenState extends State<HomeScreen> {
     if (image != null) {
       TextEditingController captionController = TextEditingController();
       bool isPrivatePost = false;
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
 
       showDialog(
         context: context,
@@ -727,9 +736,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   ElevatedButton(
                     onPressed: () async {
-                      if (!mounted) {
-                        return;
-                      }
+                      if (!mounted) return;
                       final localContext = context;
                       Navigator.pop(localContext);
                       setState(() {
@@ -789,886 +796,72 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final String currentUid = FirebaseAuth.instance.currentUser!.uid;
     return Scaffold(
       floatingActionButton: FloatingActionButton(
         backgroundColor: const Color(0xFFFD1D1D),
         onPressed: _uploadPost,
         child: const Icon(Icons.add_a_photo, color: Colors.white),
       ),
-      body: StreamBuilder<DocumentSnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('users')
-            .doc(currentUid)
-            .snapshots(),
-        builder: (context, userSnapshot) {
-          if (!userSnapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          var userData =
-              userSnapshot.data!.data() as Map<String, dynamic>? ?? {};
-          List following = userData['following'] ?? [];
-          List feedUserIds = List.from(following)..add(currentUid);
-
-          return Column(
-            children: [
-              SizedBox(
-                height: 110,
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('users')
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    if (!snapshot.hasData) {
-                      return const SizedBox();
-                    }
-                    var storyUsers = snapshot.data!.docs
-                        .where((doc) => feedUserIds.contains(doc['uid']))
-                        .toList();
-                    return ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: storyUsers.length,
-                      itemBuilder: (context, index) {
-                        var user =
-                            storyUsers[index].data() as Map<String, dynamic>;
-                        return GestureDetector(
-                          onTap: () {
-                            if (context.mounted) {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => StoryScreen(user: user),
-                                ),
-                              );
-                            }
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: Column(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(3),
-                                  decoration: const BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        Color(0xFF833AB4),
-                                        Color(0xFFFD1D1D),
-                                        Color(0xFFF56040),
-                                      ],
-                                    ),
-                                  ),
-                                  child: CircleAvatar(
-                                    radius: 32,
-                                    backgroundColor: Colors.white,
-                                    child: CircleAvatar(
-                                      radius: 30,
-                                      backgroundImage:
-                                          (user['profilePic'] != null &&
-                                              user['profilePic']
-                                                  .toString()
-                                                  .isNotEmpty)
-                                          ? MemoryImage(
-                                              base64Decode(user['profilePic']),
-                                            )
-                                          : null,
-                                      child:
-                                          (user['profilePic'] == null ||
-                                              user['profilePic']
-                                                  .toString()
-                                                  .isEmpty)
-                                          ? Text(
-                                              user['username'][0].toUpperCase(),
-                                            )
-                                          : null,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 5),
-                                Text(
-                                  user['username'],
-                                  style: const TextStyle(fontSize: 10),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-              const Divider(height: 1),
-              Expanded(
-                child: _isUploading
-                    ? const Center(child: CircularProgressIndicator())
-                    : StreamBuilder<QuerySnapshot>(
-                        stream: FirebaseFirestore.instance
-                            .collection('posts')
-                            .orderBy('timestamp', descending: true)
-                            .snapshots(),
-                        builder: (context, snapshot) {
-                          if (!snapshot.hasData) {
-                            return const Center(
-                              child: CircularProgressIndicator(),
-                            );
-                          }
-                          var feedPosts = snapshot.data!.docs
-                              .where(
-                                (doc) => feedUserIds.contains(doc['ownerId']),
-                              )
-                              .toList();
-                          if (feedPosts.isEmpty) {
-                            return const Center(
-                              child: Text("Follow people to see posts! 🌎"),
-                            );
-                          }
-                          return ListView.builder(
-                            itemCount: feedPosts.length,
-                            itemBuilder: (context, index) => PostWidget(
-                              post:
-                                  feedPosts[index].data()
-                                      as Map<String, dynamic>,
-                            ),
-                          );
-                        },
-                      ),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-}
-
-class ActivityScreen extends StatelessWidget {
-  const ActivityScreen({super.key});
-  @override
-  Widget build(BuildContext context) {
-    String currentUid = FirebaseAuth.instance.currentUser!.uid;
-    return Scaffold(
-      appBar: AppBar(title: const Text("Activity")),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('notifications')
-            .where('receiverId', isEqualTo: currentUid)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.data!.docs.isEmpty) {
-            return const Center(child: Text("No notifications yet."));
-          }
-          var docs = snapshot.data!.docs;
-          return ListView.builder(
-            itemCount: docs.length,
-            itemBuilder: (context, index) {
-              var notif = docs[index].data() as Map<String, dynamic>;
-              String timeStr = notif['timestamp'] != null
-                  ? timeago.format(
-                      (notif['timestamp'] as Timestamp).toDate(),
-                      locale: 'en_short',
-                    )
-                  : "";
-              return ListTile(
-                leading: const CircleAvatar(child: Icon(Icons.notifications)),
-                title: Text(
-                  "${notif['senderName'] ?? 'Someone'} ${notif['type']}d your post.",
-                ),
-                trailing: Text(timeStr),
-              );
-            },
-          );
-        },
-      ),
-    );
-  }
-}
-
-class SearchScreen extends StatefulWidget {
-  const SearchScreen({super.key});
-  @override
-  State<SearchScreen> createState() => _SearchScreenState();
-}
-
-class _SearchScreenState extends State<SearchScreen> {
-  String _searchName = "";
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: TextField(
-          decoration: const InputDecoration(
-            hintText: "Search users...",
-            border: InputBorder.none,
-          ),
-          onChanged: (val) => setState(() => _searchName = val.toLowerCase()),
-        ),
-      ),
-      body: _searchName.isEmpty
-          ? StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('posts')
-                  .orderBy('timestamp', descending: true)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                var publicPosts = snapshot.data!.docs
-                    .where((doc) => (doc.data() as Map)['isPrivate'] != true)
-                    .toList();
-                return GridView.builder(
-                  padding: const EdgeInsets.all(2),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 3,
-                    crossAxisSpacing: 2,
-                    mainAxisSpacing: 2,
-                  ),
-                  itemCount: publicPosts.length,
-                  itemBuilder: (context, index) => GestureDetector(
-                    onTap: () {
-                      if (context.mounted) {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => PostDetailsScreen(
-                              postId: publicPosts[index].id,
-                            ),
-                          ),
-                        );
-                      }
-                    },
-                    child: Image.memory(
-                      base64Decode(publicPosts[index]['postData']),
-                      fit: BoxFit.cover,
-                    ),
-                  ),
-                );
-              },
-            )
+      body: _isUploading
+          ? const Center(child: CircularProgressIndicator())
           : StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
-                  .collection('users')
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                var filtered = snapshot.data!.docs
-                    .where(
-                      (doc) => doc['username']
-                          .toString()
-                          .toLowerCase()
-                          .contains(_searchName),
-                    )
-                    .toList();
-                return ListView.builder(
-                  itemCount: filtered.length,
-                  itemBuilder: (context, index) => ListTile(
-                    leading: const CircleAvatar(child: Icon(Icons.person)),
-                    title: Text(filtered[index]['username']),
-                    onTap: () {
-                      if (context.mounted) {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => OtherUserProfileScreen(
-                              uid: filtered[index]['uid'],
-                            ),
-                          ),
-                        );
-                      }
-                    },
-                  ),
-                );
-              },
-            ),
-    );
-  }
-}
-
-class InboxScreen extends StatelessWidget {
-  const InboxScreen({super.key});
-  String getChatRoomId(String a, String b) {
-    return a.hashCode <= b.hashCode ? "${a}_$b" : "${b}_$a";
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final String currentUid = FirebaseAuth.instance.currentUser!.uid;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          "Messages",
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-      ),
-      body: StreamBuilder<QuerySnapshot>(
-        stream: FirebaseFirestore.instance.collection('users').snapshots(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          var usersList = snapshot.data!.docs
-              .where((doc) => doc['uid'] != currentUid)
-              .toList();
-          return ListView.builder(
-            itemCount: usersList.length,
-            itemBuilder: (context, index) {
-              var user = usersList[index].data() as Map<String, dynamic>;
-              String roomId = getChatRoomId(currentUid, user['uid']);
-              return StreamBuilder<DocumentSnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('chatRooms')
-                    .doc(roomId)
-                    .snapshots(),
-                builder: (context, roomSnapshot) {
-                  String lastMsg = "Tap to chat";
-                  String lastTime = "";
-                  if (roomSnapshot.hasData && roomSnapshot.data!.exists) {
-                    var roomData =
-                        roomSnapshot.data!.data() as Map<String, dynamic>;
-                    lastMsg = roomData['lastMessage'] ?? "Tap to chat";
-                    if (roomData['lastTime'] != null) {
-                      lastTime = timeago.format(
-                        (roomData['lastTime'] as Timestamp).toDate(),
-                        locale: 'en_short',
-                      );
-                    }
-                  }
-                  return ListTile(
-                    leading: CircleAvatar(
-                      backgroundImage:
-                          (user['profilePic'] != null &&
-                              user['profilePic'].toString().isNotEmpty)
-                          ? MemoryImage(base64Decode(user['profilePic']))
-                          : null,
-                      child:
-                          (user['profilePic'] == null ||
-                              user['profilePic'].toString().isEmpty)
-                          ? Text(user['username'][0].toUpperCase())
-                          : null,
-                    ),
-                    title: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          user['username'],
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        ),
-                        Text(
-                          lastTime,
-                          style: const TextStyle(
-                            fontSize: 10,
-                            color: Colors.grey,
-                          ),
-                        ),
-                      ],
-                    ),
-                    subtitle: Text(
-                      lastMsg,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    onTap: () {
-                      if (context.mounted) {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => ChatScreen(
-                              receiverId: user['uid'],
-                              receiverName: user['username'],
-                            ),
-                          ),
-                        );
-                      }
-                    },
-                  );
-                },
-              );
-            },
-          );
-        },
-      ),
-    );
-  }
-}
-
-// ============================================================================
-// 🌟 UPDATED: CHAT SCREEN WITH POST PREVIEW 👇 🌟
-// ============================================================================
-class ChatScreen extends StatefulWidget {
-  final String receiverId;
-  final String receiverName;
-  const ChatScreen({
-    super.key,
-    required this.receiverId,
-    required this.receiverName,
-  });
-  @override
-  State<ChatScreen> createState() => _ChatScreenState();
-}
-
-class _ChatScreenState extends State<ChatScreen> {
-  final TextEditingController _msgController = TextEditingController();
-  String getChatRoomId(String a, String b) {
-    return a.hashCode <= b.hashCode ? "${a}_$b" : "${b}_$a";
-  }
-
-  void _sendMessage() async {
-    if (_msgController.text.trim().isNotEmpty) {
-      String senderId = FirebaseAuth.instance.currentUser!.uid;
-      String roomId = getChatRoomId(senderId, widget.receiverId);
-      String msg = _msgController.text.trim();
-      _msgController.clear();
-      await FirebaseFirestore.instance
-          .collection('chatRooms')
-          .doc(roomId)
-          .collection('messages')
-          .add({
-            "senderId": senderId,
-            "message": msg,
-            "type": "text",
-            "timestamp": FieldValue.serverTimestamp(),
-          });
-      await FirebaseFirestore.instance.collection('chatRooms').doc(roomId).set({
-        "lastMessage": msg,
-        "lastTime": FieldValue.serverTimestamp(),
-        "users": [senderId, widget.receiverId],
-      }, SetOptions(merge: true));
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    String currentUid = FirebaseAuth.instance.currentUser!.uid;
-    String roomId = getChatRoomId(currentUid, widget.receiverId);
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          widget.receiverName,
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-      ),
-      body: Column(
-        children: [
-          Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('chatRooms')
-                  .doc(roomId)
-                  .collection('messages')
+                  .collection('posts')
                   .orderBy('timestamp', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
                 if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                var docs = snapshot.data!.docs;
                 return ListView.builder(
-                  reverse: true,
-                  itemCount: docs.length,
-                  itemBuilder: (context, index) {
-                    var data = docs[index].data() as Map<String, dynamic>;
-                    bool isMe = data['senderId'] == currentUid;
-                    bool isPost =
-                        data['type'] == 'post'; // పోస్ట్ అవునో కాదో చెక్
-                    String timeStr = data['timestamp'] != null
-                        ? timeago.format(
-                            (data['timestamp'] as Timestamp).toDate(),
-                            locale: 'en_short',
-                          )
-                        : "";
-
-                    return Align(
-                      alignment: isMe
-                          ? Alignment.centerRight
-                          : Alignment.centerLeft,
-                      child: Column(
-                        crossAxisAlignment: isMe
-                            ? CrossAxisAlignment.end
-                            : CrossAxisAlignment.start,
-                        children: [
-                          GestureDetector(
-                            onTap: isPost
-                                ? () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => PostDetailsScreen(
-                                          postId: data['sharedPostId'],
-                                        ),
-                                      ),
-                                    );
-                                  }
-                                : null,
-                            child: Container(
-                              margin: const EdgeInsets.symmetric(
-                                vertical: 2,
-                                horizontal: 10,
-                              ),
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: isMe
-                                    ? Colors.indigoAccent
-                                    : Colors.grey[200],
-                                borderRadius: BorderRadius.circular(15),
-                              ),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  // 👇 పోస్ట్ అయితే ఇమేజ్ చూపిస్తుంది
-                                  if (isPost &&
-                                      data['sharedPostData'] != null) ...[
-                                    ClipRRect(
-                                      borderRadius: BorderRadius.circular(10),
-                                      child: Image.memory(
-                                        base64Decode(data['sharedPostData']),
-                                        height: 200,
-                                        width: 200,
-                                        fit: BoxFit.cover,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 5),
-                                  ],
-                                  Text(
-                                    data['message'],
-                                    style: TextStyle(
-                                      color: isMe ? Colors.white : Colors.black,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 12,
-                              vertical: 2,
-                            ),
-                            child: Text(
-                              timeStr,
-                              style: const TextStyle(
-                                fontSize: 9,
-                                color: Colors.grey,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
+                  itemCount: snapshot.data!.docs.length,
+                  itemBuilder: (context, index) => PostWidget(
+                    post:
+                        snapshot.data!.docs[index].data()
+                            as Map<String, dynamic>,
+                  ),
                 );
               },
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _msgController,
-                    decoration: InputDecoration(
-                      hintText: "Message...",
-                      filled: true,
-                      fillColor: Colors.grey[100],
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(30),
-                        borderSide: BorderSide.none,
-                      ),
-                    ),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.send, color: Colors.indigoAccent),
-                  onPressed: _sendMessage,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
     );
   }
 }
 
-class ProfileScreen extends StatefulWidget {
-  const ProfileScreen({super.key});
-  @override
-  State<ProfileScreen> createState() => _ProfileScreenState();
-}
-
-class _ProfileScreenState extends State<ProfileScreen> {
-  void _showEditDialog(String currentName, String currentBio) {
-    final nameCtrl = TextEditingController(text: currentName);
-    final bioCtrl = TextEditingController(text: currentBio);
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Edit Profile"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameCtrl,
-              decoration: const InputDecoration(labelText: "Name"),
-            ),
-            TextField(
-              controller: bioCtrl,
-              decoration: const InputDecoration(labelText: "Bio"),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text("Cancel"),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              String uid = FirebaseAuth.instance.currentUser!.uid;
-              await FirebaseFirestore.instance
-                  .collection('users')
-                  .doc(uid)
-                  .update({
-                    "username": nameCtrl.text.trim(),
-                    "bio": bioCtrl.text.trim(),
-                  });
-              if (context.mounted) {
-                Navigator.pop(context);
-              }
-            },
-            child: const Text("Save"),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _updateProfilePic() async {
-    final ImagePicker picker = ImagePicker();
-    final XFile? image = await picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 10,
-      maxWidth: 300,
-    );
-    if (image != null) {
-      String base64Image = base64Encode(await File(image.path).readAsBytes());
-      String uid = FirebaseAuth.instance.currentUser!.uid;
-      await FirebaseFirestore.instance.collection('users').doc(uid).update({
-        "profilePic": base64Image,
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Profile updated! 📸")));
-      }
-    }
-  }
-
+class SearchScreen extends StatelessWidget {
+  const SearchScreen({super.key});
   @override
   Widget build(BuildContext context) {
-    final String uid = FirebaseAuth.instance.currentUser!.uid;
-    return DefaultTabController(
-      length: 2,
-      child: StreamBuilder<DocumentSnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          var userData = snapshot.data!.data() as Map<String, dynamic>? ?? {};
-          String profilePic = userData['profilePic'] ?? "";
-          String name = userData['username'] ?? "User";
-          String bio = userData['bio'] ?? "No bio yet.";
-
-          return Scaffold(
-            appBar: AppBar(
-              title: Text(
-                name,
-                style: const TextStyle(fontWeight: FontWeight.bold),
-              ),
-              actions: [
-                PopupMenuButton<String>(
-                  icon: const Icon(Icons.menu),
-                  onSelected: (value) {
-                    if (value == 'pic') {
-                      _updateProfilePic();
-                    } else if (value == 'logout') {
-                      FirebaseAuth.instance.signOut();
-                    }
-                  },
-                  itemBuilder: (context) => [
-                    const PopupMenuItem(
-                      value: 'pic',
-                      child: Row(
-                        children: [
-                          Icon(Icons.camera_alt_outlined),
-                          SizedBox(width: 10),
-                          Text("Change Profile Pic"),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuItem(
-                      value: 'logout',
-                      child: Row(
-                        children: [
-                          Icon(Icons.logout, color: Colors.red),
-                          SizedBox(width: 10),
-                          Text("Logout", style: TextStyle(color: Colors.red)),
-                        ],
-                      ),
-                    ),
-                  ],
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('posts').snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        return GridView.builder(
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            crossAxisSpacing: 2,
+            mainAxisSpacing: 2,
+          ),
+          itemCount: snapshot.data!.docs.length,
+          itemBuilder: (context, index) => GestureDetector(
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => PostDetailsScreen(
+                    postId: snapshot.data!.docs[index]['postId'],
+                  ),
                 ),
-              ],
+              );
+            },
+            child: Image.memory(
+              base64Decode(snapshot.data!.docs[index]['postData']),
+              fit: BoxFit.cover,
             ),
-            body: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('posts')
-                  .where('ownerId', isEqualTo: uid)
-                  .snapshots(),
-              builder: (context, postSnapshot) {
-                int postCount = postSnapshot.hasData
-                    ? postSnapshot.data!.docs.length
-                    : 0;
-                List followers = userData['followers'] ?? [];
-                List following = userData['following'] ?? [];
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 15,
-                      ),
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 40,
-                            backgroundImage: profilePic.isNotEmpty
-                                ? MemoryImage(base64Decode(profilePic))
-                                : null,
-                            child: profilePic.isEmpty
-                                ? Text(
-                                    name[0].toUpperCase(),
-                                    style: const TextStyle(fontSize: 24),
-                                  )
-                                : null,
-                          ),
-                          Expanded(
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                              children: [
-                                _buildStatColumn(postCount, "Posts"),
-                                _buildStatColumn(followers.length, "Followers"),
-                                _buildStatColumn(following.length, "Following"),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 20),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            name,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
-                          Text(bio),
-                        ],
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: SizedBox(
-                        width: double.infinity,
-                        child: OutlinedButton(
-                          onPressed: () => _showEditDialog(name, bio),
-                          child: const Text("Edit Profile"),
-                        ),
-                      ),
-                    ),
-                    const TabBar(
-                      indicatorColor: Colors.black,
-                      labelColor: Colors.black,
-                      tabs: [
-                        Tab(icon: Icon(Icons.grid_on)),
-                        Tab(icon: Icon(Icons.bookmark_border)),
-                      ],
-                    ),
-                    Expanded(
-                      child: TabBarView(
-                        children: [
-                          postCount == 0
-                              ? const Center(child: Text("No posts yet!"))
-                              : GridView.builder(
-                                  gridDelegate:
-                                      const SliverGridDelegateWithFixedCrossAxisCount(
-                                        crossAxisCount: 3,
-                                      ),
-                                  itemCount: postCount,
-                                  itemBuilder: (context, index) {
-                                    var post =
-                                        postSnapshot.data!.docs[index].data()
-                                            as Map<String, dynamic>;
-                                    return GestureDetector(
-                                      onTap: () {
-                                        if (context.mounted) {
-                                          Navigator.push(
-                                            context,
-                                            MaterialPageRoute(
-                                              builder: (context) =>
-                                                  PostDetailsScreen(
-                                                    postId: post['postId'],
-                                                  ),
-                                            ),
-                                          );
-                                        }
-                                      },
-                                      child: Image.memory(
-                                        base64Decode(post['postData']),
-                                        fit: BoxFit.cover,
-                                      ),
-                                    );
-                                  },
-                                ),
-                          const Center(child: Text("Saved posts coming soon!")),
-                        ],
-                      ),
-                    ),
-                  ],
-                );
-              },
-            ),
-          );
-        },
-      ),
-    );
-  }
-
-  Column _buildStatColumn(int num, String label) {
-    return Column(
-      children: [
-        Text(
-          num.toString(),
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-      ],
+          ),
+        );
+      },
     );
   }
 }
@@ -1680,11 +873,11 @@ class PostDetailsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text("Post")),
-      body: StreamBuilder<DocumentSnapshot>(
-        stream: FirebaseFirestore.instance
+      body: FutureBuilder<DocumentSnapshot>(
+        future: FirebaseFirestore.instance
             .collection('posts')
             .doc(postId)
-            .snapshots(),
+            .get(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
@@ -1700,81 +893,63 @@ class PostDetailsScreen extends StatelessWidget {
   }
 }
 
-class StoryScreen extends StatefulWidget {
-  final Map<String, dynamic> user;
-  const StoryScreen({super.key, required this.user});
-  @override
-  State<StoryScreen> createState() => _StoryScreenState();
-}
-
-class _StoryScreenState extends State<StoryScreen>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _controller;
-  @override
-  void initState() {
-    super.initState();
-    _controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 5),
-    );
-    _controller.addListener(() => setState(() {}));
-    _controller.addStatusListener((status) {
-      if (status == AnimationStatus.completed && mounted) {
-        Navigator.pop(context);
-      }
-    });
-    _controller.forward();
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
+class ActivityScreen extends StatelessWidget {
+  const ActivityScreen({super.key});
   @override
   Widget build(BuildContext context) {
-    String profilePic = widget.user['profilePic'] ?? "";
+    return Scaffold(appBar: AppBar(title: const Text("Activity")));
+  }
+}
+
+class InboxScreen extends StatelessWidget {
+  const InboxScreen({super.key});
+  @override
+  Widget build(BuildContext context) {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
     return Scaffold(
-      backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            Center(
-              child: profilePic.isNotEmpty
-                  ? Image.memory(base64Decode(profilePic))
-                  : const Icon(Icons.person, size: 200, color: Colors.white),
+      appBar: AppBar(title: const Text("Messages")),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('users').snapshots(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const SizedBox();
+          }
+          var users = snapshot.data!.docs
+              .where((d) => d['uid'] != uid)
+              .toList();
+          return ListView.builder(
+            itemCount: users.length,
+            itemBuilder: (context, index) => ListTile(
+              leading: const CircleAvatar(child: Icon(Icons.person)),
+              title: Text(users[index]['username']),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ChatScreen(
+                      receiverId: users[index]['uid'],
+                      receiverName: users[index]['username'],
+                    ),
+                  ),
+                );
+              },
             ),
-            Positioned(
-              top: 10,
-              left: 10,
-              right: 10,
-              child: LinearProgressIndicator(
-                value: _controller.value,
-                backgroundColor: Colors.grey,
-                valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-              ),
-            ),
-            Positioned(
-              top: 30,
-              left: 10,
-              child: Text(
-                widget.user['username'] ?? "User",
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ),
-            Positioned(
-              top: 30,
-              right: 10,
-              child: IconButton(
-                icon: const Icon(Icons.close, color: Colors.white),
-                onPressed: () => Navigator.pop(context),
-              ),
-            ),
-          ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class LoginScreen extends StatelessWidget {
+  const LoginScreen({super.key});
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: ElevatedButton(
+          onPressed: () => FirebaseAuth.instance.signInAnonymously(),
+          child: const Text("Guest Login"),
         ),
       ),
     );
@@ -1786,484 +961,15 @@ class OtherUserProfileScreen extends StatelessWidget {
   const OtherUserProfileScreen({super.key, required this.uid});
   @override
   Widget build(BuildContext context) {
-    final String currentUid = FirebaseAuth.instance.currentUser!.uid;
-    final String currentEmail = FirebaseAuth.instance.currentUser!.email!;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          "Profile",
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-      ),
-      body: StreamBuilder<DocumentSnapshot>(
-        stream: FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .snapshots(),
-        builder: (context, snapshot) {
-          if (!snapshot.hasData || !snapshot.data!.exists) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          var userData = snapshot.data!.data() as Map<String, dynamic>;
-          String name = userData['username'] ?? "User";
-          String bio = userData['bio'] ?? "";
-          String profilePic = userData['profilePic'] ?? "";
-          List followers = userData['followers'] ?? [];
-          bool isFollowing = followers.contains(currentUid);
-
-          return StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('posts')
-                .where('ownerId', isEqualTo: uid)
-                .snapshots(),
-            builder: (context, postSnapshot) {
-              int postCount = postSnapshot.hasData
-                  ? postSnapshot.data!.docs.length
-                  : 0;
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Row(
-                      children: [
-                        CircleAvatar(
-                          radius: 40,
-                          backgroundImage: profilePic.isNotEmpty
-                              ? MemoryImage(base64Decode(profilePic))
-                              : null,
-                          child: profilePic.isEmpty
-                              ? Text(
-                                  name[0].toUpperCase(),
-                                  style: const TextStyle(fontSize: 24),
-                                )
-                              : null,
-                        ),
-                        Expanded(
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                            children: [
-                              _buildStatColumn(postCount, "Posts"),
-                              _buildStatColumn(followers.length, "Followers"),
-                              _buildStatColumn(
-                                userData['following']?.length ?? 0,
-                                "Following",
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          name,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 16,
-                          ),
-                        ),
-                        Text(bio),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(20),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: ElevatedButton(
-                            onPressed: () async {
-                              if (isFollowing) {
-                                await FirebaseFirestore.instance
-                                    .collection('users')
-                                    .doc(uid)
-                                    .update({
-                                      'followers': FieldValue.arrayRemove([
-                                        currentUid,
-                                      ]),
-                                    });
-                                await FirebaseFirestore.instance
-                                    .collection('users')
-                                    .doc(currentUid)
-                                    .update({
-                                      'following': FieldValue.arrayRemove([
-                                        uid,
-                                      ]),
-                                    });
-                              } else {
-                                await FirebaseFirestore.instance
-                                    .collection('users')
-                                    .doc(uid)
-                                    .update({
-                                      'followers': FieldValue.arrayUnion([
-                                        currentUid,
-                                      ]),
-                                    });
-                                await FirebaseFirestore.instance
-                                    .collection('users')
-                                    .doc(currentUid)
-                                    .update({
-                                      'following': FieldValue.arrayUnion([uid]),
-                                    });
-                                await FirebaseFirestore.instance
-                                    .collection('notifications')
-                                    .add({
-                                      "receiverId": uid,
-                                      "senderId": currentUid,
-                                      "senderName": currentEmail.split('@')[0],
-                                      "type": "follow",
-                                      "timestamp": FieldValue.serverTimestamp(),
-                                    });
-                              }
-                            },
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: isFollowing
-                                  ? Colors.grey[300]
-                                  : Colors.blue,
-                              foregroundColor: isFollowing
-                                  ? Colors.black
-                                  : Colors.white,
-                            ),
-                            child: Text(isFollowing ? "Unfollow" : "Follow"),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: OutlinedButton(
-                            onPressed: () {
-                              if (context.mounted) {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) => ChatScreen(
-                                      receiverId: uid,
-                                      receiverName: name,
-                                    ),
-                                  ),
-                                );
-                              }
-                            },
-                            child: const Text(
-                              "Message",
-                              style: TextStyle(color: Colors.black),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const Divider(height: 30),
-                  Expanded(
-                    child: isFollowing || uid == currentUid
-                        ? GridView.builder(
-                            gridDelegate:
-                                const SliverGridDelegateWithFixedCrossAxisCount(
-                                  crossAxisCount: 3,
-                                ),
-                            itemCount: postCount,
-                            itemBuilder: (context, index) {
-                              var post =
-                                  postSnapshot.data!.docs[index].data()
-                                      as Map<String, dynamic>;
-                              return GestureDetector(
-                                onTap: () {
-                                  if (context.mounted) {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => PostDetailsScreen(
-                                          postId: post['postId'],
-                                        ),
-                                      ),
-                                    );
-                                  }
-                                },
-                                child: Image.memory(
-                                  base64Decode(post['postData']),
-                                  fit: BoxFit.cover,
-                                ),
-                              );
-                            },
-                          )
-                        : const Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.lock_outline,
-                                  size: 50,
-                                  color: Colors.grey,
-                                ),
-                                Text(
-                                  "This account is private",
-                                  style: TextStyle(color: Colors.grey),
-                                ),
-                              ],
-                            ),
-                          ),
-                  ),
-                ],
-              );
-            },
-          );
-        },
-      ),
-    );
-  }
-
-  Column _buildStatColumn(int num, String label) {
-    return Column(
-      children: [
-        Text(
-          num.toString(),
-          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-        ),
-        Text(label, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-      ],
-    );
+    return Scaffold(appBar: AppBar(title: const Text("Profile")));
   }
 }
 
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
-  @override
-  State<LoginScreen> createState() => _LoginScreenState();
-}
-
-class _LoginScreenState extends State<LoginScreen> {
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
-  bool _isLoading = false;
-  Future<void> _login() async {
-    setState(() => _isLoading = true);
-    try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(e.toString())));
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
+class StoryScreen extends StatelessWidget {
+  final Map<String, dynamic> user;
+  const StoryScreen({super.key, required this.user});
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF833AB4), Color(0xFFFD1D1D), Color(0xFFF56040)],
-          ),
-        ),
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(30),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  "MyBanjara",
-                  style: GoogleFonts.lobster(fontSize: 45, color: Colors.white),
-                ),
-                const SizedBox(height: 50),
-                TextField(
-                  controller: _emailController,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    hintText: "Email",
-                    hintStyle: const TextStyle(color: Colors.white70),
-                    filled: true,
-                    fillColor: Colors.white.withValues(alpha: 0.2),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(15),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 15),
-                TextField(
-                  controller: _passwordController,
-                  obscureText: true,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    hintText: "Password",
-                    hintStyle: const TextStyle(color: Colors.white70),
-                    filled: true,
-                    fillColor: Colors.white.withValues(alpha: 0.2),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(15),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 30),
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : _login,
-                    child: _isLoading
-                        ? const CircularProgressIndicator()
-                        : const Text("Log In"),
-                  ),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const SignUpScreen(),
-                    ),
-                  ),
-                  child: const Text(
-                    "Don't have an account? Sign Up",
-                    style: TextStyle(color: Colors.white),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class SignUpScreen extends StatefulWidget {
-  const SignUpScreen({super.key});
-  @override
-  State<SignUpScreen> createState() => _SignUpScreenState();
-}
-
-class _SignUpScreenState extends State<SignUpScreen> {
-  final TextEditingController _usernameController = TextEditingController();
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
-  bool _isLoading = false;
-  Future<void> _signUp() async {
-    setState(() => _isLoading = true);
-    try {
-      UserCredential userCredential = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(
-            email: _emailController.text.trim(),
-            password: _passwordController.text.trim(),
-          );
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userCredential.user!.uid)
-          .set({
-            "username": _usernameController.text.trim(),
-            "email": _emailController.text.trim(),
-            "uid": userCredential.user!.uid,
-            "bio": "New to MyBanjara ✨",
-            "profilePic": "",
-            "followers": [],
-            "following": [],
-          });
-      if (mounted) {
-        Navigator.pop(context);
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(e.toString())));
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFFF56040), Color(0xFFFD1D1D), Color(0xFF833AB4)],
-          ),
-        ),
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(30),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text(
-                  "Sign Up",
-                  style: TextStyle(
-                    fontSize: 32,
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 40),
-                TextField(
-                  controller: _usernameController,
-                  decoration: InputDecoration(
-                    hintText: "Username",
-                    filled: true,
-                    fillColor: Colors.white.withValues(alpha: 0.2),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 15),
-                TextField(
-                  controller: _emailController,
-                  decoration: InputDecoration(
-                    hintText: "Email",
-                    filled: true,
-                    fillColor: Colors.white.withValues(alpha: 0.2),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 15),
-                TextField(
-                  controller: _passwordController,
-                  obscureText: true,
-                  decoration: InputDecoration(
-                    hintText: "Password",
-                    filled: true,
-                    fillColor: Colors.white.withValues(alpha: 0.2),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(15),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 30),
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: ElevatedButton(
-                    onPressed: _isLoading ? null : _signUp,
-                    child: _isLoading
-                        ? const CircularProgressIndicator()
-                        : const Text("Create Account"),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
+    return Scaffold(appBar: AppBar(title: const Text("Story")));
   }
 }
