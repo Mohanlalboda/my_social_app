@@ -99,7 +99,6 @@ class _MainNavigationState extends State<MainNavigation> {
           ),
         ),
         actions: [
-          // 👇 కొత్తగా యాడ్ చేసిన INBOX బటన్ (ఇది నొక్కితే InboxScreen కి వెళ్తాం)
           IconButton(
             icon: const Icon(Icons.send_rounded),
             onPressed: () {
@@ -163,40 +162,93 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     if (image != null) {
-      setState(() {
-        _isUploading = true;
-      });
-      try {
-        File imageFile = File(image.path);
-        String base64Image = base64Encode(await imageFile.readAsBytes());
-        String uid = FirebaseAuth.instance.currentUser!.uid;
-        String postId = DateTime.now().millisecondsSinceEpoch.toString();
-
-        await FirebaseFirestore.instance.collection('posts').doc(postId).set({
-          "postId": postId,
-          "ownerId": uid,
-          "postData": base64Image,
-          "username": FirebaseAuth.instance.currentUser!.email!.split('@')[0],
-          "timestamp": FieldValue.serverTimestamp(),
-          "likes": {},
-          "commentCount": 0,
-        });
-
-        if (!mounted) {
-          return;
-        }
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Shared! 🌎")));
-      } catch (e) {
-        debugPrint("Error: $e");
-      } finally {
-        if (mounted) {
-          setState(() {
-            _isUploading = false;
-          });
-        }
+      TextEditingController captionController = TextEditingController();
+      if (!mounted) {
+        return;
       }
+
+      showDialog(
+        context: context,
+        builder: (context) {
+          return AlertDialog(
+            title: const Text("New Post"),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.file(File(image.path), height: 150, fit: BoxFit.cover),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: captionController,
+                    decoration: const InputDecoration(
+                      hintText: "Write a caption...",
+                      border: OutlineInputBorder(),
+                    ),
+                    maxLines: 3,
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+                child: const Text("Cancel"),
+              ),
+              ElevatedButton(
+                onPressed: () async {
+                  Navigator.pop(context);
+                  setState(() {
+                    _isUploading = true;
+                  });
+
+                  try {
+                    File imageFile = File(image.path);
+                    String base64Image = base64Encode(
+                      await imageFile.readAsBytes(),
+                    );
+                    String uid = FirebaseAuth.instance.currentUser!.uid;
+                    String postId = DateTime.now().millisecondsSinceEpoch
+                        .toString();
+
+                    await FirebaseFirestore.instance
+                        .collection('posts')
+                        .doc(postId)
+                        .set({
+                          "postId": postId,
+                          "ownerId": uid,
+                          "postData": base64Image,
+                          "caption": captionController.text.trim(),
+                          "username": FirebaseAuth.instance.currentUser!.email!
+                              .split('@')[0],
+                          "timestamp": FieldValue.serverTimestamp(),
+                          "likes": {},
+                          "commentCount": 0,
+                        });
+
+                    if (!context.mounted) {
+                      return;
+                    }
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(const SnackBar(content: Text("Shared! 🌎")));
+                  } catch (e) {
+                    debugPrint("Error: $e");
+                  } finally {
+                    if (mounted) {
+                      setState(() {
+                        _isUploading = false;
+                      });
+                    }
+                  }
+                },
+                child: const Text("Share"),
+              ),
+            ],
+          );
+        },
+      );
     }
   }
 
@@ -396,6 +448,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               ? (post['likes'] as Map).length
                               : 0;
                           int commentCount = post['commentCount'] ?? 0;
+                          String caption = post['caption'] ?? "";
 
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -484,6 +537,30 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                 ],
                               ),
+
+                              if (caption.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 15,
+                                    vertical: 5,
+                                  ),
+                                  child: RichText(
+                                    text: TextSpan(
+                                      style: DefaultTextStyle.of(context).style,
+                                      children: [
+                                        TextSpan(
+                                          text: "${post['username']} ",
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                        TextSpan(text: caption),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+
+                              const SizedBox(height: 10),
                               const Divider(),
                             ],
                           );
@@ -610,6 +687,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
+
         var userData = snapshot.data?.data() as Map<String, dynamic>? ?? {};
         String name = userData['username'] ?? "User";
         String bio = userData['bio'] ?? "";
@@ -936,8 +1014,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 }
 
-// --- 7. సెర్చ్ స్క్రీన్ ---
-// --- 7. సెర్చ్ & ఎక్స్‌ప్లోర్ స్క్రీన్ ---
+// --- 6. సెర్చ్ & ఎక్స్‌ప్లోర్ స్క్రీన్ ---
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
   @override
@@ -964,10 +1041,8 @@ class _SearchScreenState extends State<SearchScreen> {
           },
         ),
       ),
-      // ఇక్కడే మన మ్యాజిక్ లాజిక్ రాశాం! 👇
       body: _searchName.isEmpty
           ? StreamBuilder<QuerySnapshot>(
-              // 1. సెర్చ్ బాక్స్ ఖాళీగా ఉంటే అందరి పోస్ట్స్ (Explore Grid) చూపిస్తాం
               stream: FirebaseFirestore.instance
                   .collection('posts')
                   .orderBy('timestamp', descending: true)
@@ -1002,7 +1077,6 @@ class _SearchScreenState extends State<SearchScreen> {
               },
             )
           : StreamBuilder<QuerySnapshot>(
-              // 2. సెర్చ్ బాక్స్ లో ఏదైనా టైప్ చేస్తే యూజర్ల లిస్ట్ చూపిస్తాం
               stream: FirebaseFirestore.instance
                   .collection('users')
                   .snapshots(),
@@ -1068,7 +1142,7 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 }
 
-// --- 8. ఇతరుల ప్రొఫైల్ చూసే స్క్రీన్ ---
+// --- 7. ఇతరుల ప్రొఫైల్ చూసే స్క్రీన్ ---
 class OtherUserProfileScreen extends StatelessWidget {
   final String uid;
   const OtherUserProfileScreen({super.key, required this.uid});
@@ -1277,7 +1351,7 @@ class OtherUserProfileScreen extends StatelessWidget {
   }
 }
 
-// --- 9. INBOX (మెసేజెస్ లిస్ట్) స్క్రీన్ (NEW! 👇) ---
+// --- 8. INBOX స్క్రీన్ ---
 class InboxScreen extends StatelessWidget {
   const InboxScreen({super.key});
 
@@ -1293,7 +1367,6 @@ class InboxScreen extends StatelessWidget {
         ),
       ),
       body: StreamBuilder<QuerySnapshot>(
-        // ప్రస్తుతానికి మీ యాప్‌లోని అందరి యూజర్లని ఇక్కడ చూపిస్తున్నాం (వాళ్ళతో చాట్ చేయడానికి)
         stream: FirebaseFirestore.instance.collection('users').snapshots(),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
@@ -1303,7 +1376,6 @@ class InboxScreen extends StatelessWidget {
             return const Center(child: Text("No messages yet."));
           }
 
-          // మన పేరు కాకుండా వేరే వాళ్ళ పేర్లని ఫిల్టర్ చేస్తున్నాం
           var usersList = snapshot.data!.docs
               .where((doc) => doc['uid'] != currentUid)
               .toList();
@@ -1338,7 +1410,6 @@ class InboxScreen extends StatelessWidget {
                   color: Colors.grey,
                 ),
                 onTap: () {
-                  // క్లిక్ చేయగానే నేరుగా చాట్ స్క్రీన్ కి వెళ్తుంది!
                   Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -1358,11 +1429,10 @@ class InboxScreen extends StatelessWidget {
   }
 }
 
-// --- 10. చాట్ (Direct Message) స్క్రీన్ ---
+// --- 9. చాట్ (DM) స్క్రీన్ ---
 class ChatScreen extends StatefulWidget {
   final String receiverId;
   final String receiverName;
-
   const ChatScreen({
     super.key,
     required this.receiverId,
@@ -1396,7 +1466,6 @@ class _ChatScreenState extends State<ChatScreen> {
       };
 
       _msgController.clear();
-
       await FirebaseFirestore.instance
           .collection('chatRooms')
           .doc(roomId)
@@ -1502,7 +1571,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
-// --- 11. రీల్స్ & ఇతర విడ్జెట్లు ---
+// --- 10. రీల్స్ & ఇతర విడ్జెట్లు ---
 class ReelsScreen extends StatelessWidget {
   const ReelsScreen({super.key});
   @override
@@ -1560,7 +1629,6 @@ class VideoReelItem extends StatefulWidget {
 
 class _VideoReelItemState extends State<VideoReelItem> {
   late VideoPlayerController _controller;
-
   @override
   void initState() {
     super.initState();
