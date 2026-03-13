@@ -100,21 +100,17 @@ class _MainNavigationState extends State<MainNavigation> {
         actions: [
           IconButton(
             icon: const Icon(Icons.favorite_border),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const ActivityScreen()),
-              );
-            },
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const ActivityScreen()),
+            ),
           ),
           IconButton(
             icon: const Icon(Icons.send_rounded),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const InboxScreen()),
-              );
-            },
+            onPressed: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const InboxScreen()),
+            ),
           ),
           IconButton(
             icon: const Icon(Icons.logout),
@@ -125,11 +121,7 @@ class _MainNavigationState extends State<MainNavigation> {
       body: _screens[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
-        onTap: (index) {
-          setState(() {
-            _selectedIndex = index;
-          });
-        },
+        onTap: (index) => setState(() => _selectedIndex = index),
         selectedItemColor: Colors.blue,
         unselectedItemColor: Colors.grey,
         type: BottomNavigationBarType.fixed,
@@ -192,14 +184,12 @@ class _PostWidgetState extends State<PostWidget> {
                       .orderBy('timestamp', descending: true)
                       .snapshots(),
                   builder: (context, snapshot) {
-                    if (!snapshot.hasData) {
+                    if (!snapshot.hasData)
                       return const Center(child: CircularProgressIndicator());
-                    }
-                    if (snapshot.data!.docs.isEmpty) {
+                    if (snapshot.data!.docs.isEmpty)
                       return const Center(
                         child: Text("No comments yet. Be the first!"),
                       );
-                    }
 
                     return ListView.builder(
                       itemCount: snapshot.data!.docs.length,
@@ -276,9 +266,8 @@ class _PostWidgetState extends State<PostWidget> {
                                               ),
                                               actions: [
                                                 TextButton(
-                                                  onPressed: () {
-                                                    Navigator.pop(context);
-                                                  },
+                                                  onPressed: () =>
+                                                      Navigator.pop(context),
                                                   child: const Text("Cancel"),
                                                 ),
                                                 ElevatedButton(
@@ -300,9 +289,8 @@ class _PostWidgetState extends State<PostWidget> {
                                                                     .text
                                                                     .trim(),
                                                           });
-                                                      if (!context.mounted) {
+                                                      if (!context.mounted)
                                                         return;
-                                                      }
                                                       Navigator.pop(context);
                                                     }
                                                   },
@@ -379,7 +367,6 @@ class _PostWidgetState extends State<PostWidget> {
                                 "timestamp": FieldValue.serverTimestamp(),
                               });
                         }
-
                         commentController.clear();
                       }
                     },
@@ -403,9 +390,7 @@ class _PostWidgetState extends State<PostWidget> {
           content: const Text("Are you sure you want to delete this post?"),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-              },
+              onPressed: () => Navigator.pop(context),
               child: const Text("Cancel"),
             ),
             ElevatedButton(
@@ -415,9 +400,7 @@ class _PostWidgetState extends State<PostWidget> {
                     .collection('posts')
                     .doc(postId)
                     .delete();
-                if (!context.mounted) {
-                  return;
-                }
+                if (!context.mounted) return;
                 Navigator.pop(context);
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(content: Text("Post Deleted 🗑️")),
@@ -475,6 +458,9 @@ class _PostWidgetState extends State<PostWidget> {
     int commentCount = widget.post['commentCount'] ?? 0;
     String caption = widget.post['caption'] ?? "";
 
+    // 👇 ప్రైవేట్ పోస్ట్ అయితే లాక్ సింబల్ చూపిస్తాం
+    bool isPrivate = widget.post['isPrivate'] ?? false;
+
     List savedBy = widget.post['savedBy'] ?? [];
     bool isSaved = savedBy.contains(currentUid);
 
@@ -492,9 +478,21 @@ class _PostWidgetState extends State<PostWidget> {
           leading: CircleAvatar(
             child: Text(widget.post['username'][0].toUpperCase()),
           ),
-          title: Text(
-            widget.post['username'] ?? "User",
-            style: const TextStyle(fontWeight: FontWeight.bold),
+          title: Row(
+            children: [
+              Text(
+                widget.post['username'] ?? "User",
+                style: const TextStyle(fontWeight: FontWeight.bold),
+              ),
+              if (isPrivate) ...[
+                const SizedBox(width: 5),
+                const Icon(
+                  Icons.lock,
+                  size: 14,
+                  color: Colors.grey,
+                ), // లాక్ ఐకాన్
+              ],
+            ],
           ),
           subtitle: Text(
             timeAgo,
@@ -503,9 +501,7 @@ class _PostWidgetState extends State<PostWidget> {
           trailing: widget.post['ownerId'] == currentUid
               ? IconButton(
                   icon: const Icon(Icons.delete, color: Colors.grey),
-                  onPressed: () {
-                    _deletePost(context, postId);
-                  },
+                  onPressed: () => _deletePost(context, postId),
                 )
               : null,
           onTap: () {
@@ -523,18 +519,10 @@ class _PostWidgetState extends State<PostWidget> {
 
         GestureDetector(
           onDoubleTap: () async {
-            if (!isLiked) {
-              _handleLike();
-            }
-            setState(() {
-              isLikeAnimating = true;
-            });
+            if (!isLiked) _handleLike();
+            setState(() => isLikeAnimating = true);
             await Future.delayed(const Duration(milliseconds: 800));
-            if (mounted) {
-              setState(() {
-                isLikeAnimating = false;
-              });
-            }
+            if (mounted) setState(() => isLikeAnimating = false);
           },
           child: Stack(
             alignment: Alignment.center,
@@ -579,9 +567,7 @@ class _PostWidgetState extends State<PostWidget> {
             const SizedBox(width: 15),
             IconButton(
               icon: const Icon(Icons.chat_bubble_outline),
-              onPressed: () {
-                _showComments(context, postId);
-              },
+              onPressed: () => _showComments(context, postId),
             ),
             Text(
               "$commentCount",
@@ -656,9 +642,8 @@ class ActivityScreen extends StatelessWidget {
             .where('receiverId', isEqualTo: currentUid)
             .snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.connectionState == ConnectionState.waiting)
             return const Center(child: CircularProgressIndicator());
-          }
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
             return const Center(
               child: Text(
@@ -760,13 +745,9 @@ class _StoryScreenState extends State<StoryScreen>
       vsync: this,
       duration: const Duration(seconds: 5),
     );
-    _controller.addListener(() {
-      setState(() {});
-    });
+    _controller.addListener(() => setState(() {}));
     _controller.addStatusListener((status) {
-      if (status == AnimationStatus.completed) {
-        Navigator.pop(context);
-      }
+      if (status == AnimationStatus.completed) Navigator.pop(context);
     });
     _controller.forward();
   }
@@ -842,9 +823,7 @@ class _StoryScreenState extends State<StoryScreen>
               right: 10,
               child: IconButton(
                 icon: const Icon(Icons.close, color: Colors.white),
-                onPressed: () {
-                  Navigator.pop(context);
-                },
+                onPressed: () => Navigator.pop(context),
               ),
             ),
           ],
@@ -873,89 +852,108 @@ class _HomeScreenState extends State<HomeScreen> {
 
     if (image != null) {
       TextEditingController captionController = TextEditingController();
-      if (!mounted) {
-        return;
-      }
+      bool isPrivatePost = false; // 👇 పబ్లిక్/ప్రైవేట్ కి లాజిక్
+
+      if (!mounted) return;
 
       showDialog(
         context: context,
         builder: (context) {
-          return AlertDialog(
-            title: const Text("New Post"),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Image.file(File(image.path), height: 150, fit: BoxFit.cover),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: captionController,
-                    decoration: const InputDecoration(
-                      hintText: "Write a caption...",
-                      border: OutlineInputBorder(),
-                    ),
-                    maxLines: 3,
+          // State అప్‌డేట్ అవ్వడానికి StatefulBuilder వాడాం
+          return StatefulBuilder(
+            builder: (context, setStateDialog) {
+              return AlertDialog(
+                title: const Text("New Post"),
+                content: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Image.file(
+                        File(image.path),
+                        height: 150,
+                        fit: BoxFit.cover,
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: captionController,
+                        decoration: const InputDecoration(
+                          hintText: "Write a caption...",
+                          border: OutlineInputBorder(),
+                        ),
+                        maxLines: 3,
+                      ),
+                      const SizedBox(height: 10),
+                      // 👇 NEW: ప్రైవేట్ పోస్ట్ స్విచ్
+                      SwitchListTile(
+                        title: const Text(
+                          "Share only with Followers",
+                          style: TextStyle(fontSize: 14),
+                        ),
+                        value: isPrivatePost,
+                        activeColor: Colors.blue,
+                        onChanged: (val) {
+                          setStateDialog(() {
+                            isPrivatePost = val;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(context),
+                    child: const Text("Cancel"),
+                  ),
+                  ElevatedButton(
+                    onPressed: () async {
+                      Navigator.pop(context);
+                      setState(() => _isUploading = true);
+                      try {
+                        File imageFile = File(image.path);
+                        String base64Image = base64Encode(
+                          await imageFile.readAsBytes(),
+                        );
+                        String uid = FirebaseAuth.instance.currentUser!.uid;
+                        String postId = DateTime.now().millisecondsSinceEpoch
+                            .toString();
+
+                        await FirebaseFirestore.instance
+                            .collection('posts')
+                            .doc(postId)
+                            .set({
+                              "postId": postId,
+                              "ownerId": uid,
+                              "postData": base64Image,
+                              "caption": captionController.text.trim(),
+                              "username": FirebaseAuth
+                                  .instance
+                                  .currentUser!
+                                  .email!
+                                  .split('@')[0],
+                              "timestamp": FieldValue.serverTimestamp(),
+                              "likes": {},
+                              "commentCount": 0,
+                              "savedBy": [],
+                              "isPrivate":
+                                  isPrivatePost, // 👈 డేటాబేస్ లోకి వెళ్లిపోతుంది
+                            });
+
+                        if (!context.mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text("Shared! 🌎")),
+                        );
+                      } catch (e) {
+                        debugPrint("Error: $e");
+                      } finally {
+                        if (mounted) setState(() => _isUploading = false);
+                      }
+                    },
+                    child: const Text("Share"),
                   ),
                 ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () {
-                  Navigator.pop(context);
-                },
-                child: const Text("Cancel"),
-              ),
-              ElevatedButton(
-                onPressed: () async {
-                  Navigator.pop(context);
-                  setState(() {
-                    _isUploading = true;
-                  });
-                  try {
-                    File imageFile = File(image.path);
-                    String base64Image = base64Encode(
-                      await imageFile.readAsBytes(),
-                    );
-                    String uid = FirebaseAuth.instance.currentUser!.uid;
-                    String postId = DateTime.now().millisecondsSinceEpoch
-                        .toString();
-
-                    await FirebaseFirestore.instance
-                        .collection('posts')
-                        .doc(postId)
-                        .set({
-                          "postId": postId,
-                          "ownerId": uid,
-                          "postData": base64Image,
-                          "caption": captionController.text.trim(),
-                          "username": FirebaseAuth.instance.currentUser!.email!
-                              .split('@')[0],
-                          "timestamp": FieldValue.serverTimestamp(),
-                          "likes": {},
-                          "commentCount": 0,
-                          "savedBy": [],
-                        });
-
-                    if (!context.mounted) {
-                      return;
-                    }
-                    ScaffoldMessenger.of(
-                      context,
-                    ).showSnackBar(const SnackBar(content: Text("Shared! 🌎")));
-                  } catch (e) {
-                    debugPrint("Error: $e");
-                  } finally {
-                    if (mounted) {
-                      setState(() {
-                        _isUploading = false;
-                      });
-                    }
-                  }
-                },
-                child: const Text("Share"),
-              ),
-            ],
+              );
+            },
           );
         },
       );
@@ -964,107 +962,143 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final String currentUid = FirebaseAuth.instance.currentUser!.uid;
+
     return Scaffold(
       floatingActionButton: FloatingActionButton(
         onPressed: _uploadPost,
         child: const Icon(Icons.add_a_photo),
       ),
-      body: Column(
-        children: [
-          SizedBox(
-            height: 110,
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('users')
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (!snapshot.hasData) {
-                  return const SizedBox();
-                }
-                return ListView.builder(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: snapshot.data!.docs.length,
-                  itemBuilder: (context, index) {
-                    var user =
-                        snapshot.data!.docs[index].data()
-                            as Map<String, dynamic>;
-                    String profilePic = user['profilePic'] ?? "";
-                    String username = user['username'] ?? "User";
+      body: StreamBuilder<DocumentSnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUid)
+            .snapshots(),
+        builder: (context, userSnapshot) {
+          if (!userSnapshot.hasData)
+            return const Center(child: CircularProgressIndicator());
 
-                    return GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => StoryScreen(user: user),
+          var userData =
+              userSnapshot.data!.data() as Map<String, dynamic>? ?? {};
+          List following = userData['following'] ?? [];
+          List feedUserIds = List.from(following)..add(currentUid);
+
+          return Column(
+            children: [
+              SizedBox(
+                height: 110,
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('users')
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) return const SizedBox();
+
+                    var storyUsers = snapshot.data!.docs
+                        .where((doc) => feedUserIds.contains(doc['uid']))
+                        .toList();
+
+                    return ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: storyUsers.length,
+                      itemBuilder: (context, index) {
+                        var user =
+                            storyUsers[index].data() as Map<String, dynamic>;
+                        String profilePic = user['profilePic'] ?? "";
+                        String username = user['username'] ?? "User";
+
+                        return GestureDetector(
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => StoryScreen(user: user),
+                            ),
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Column(
+                              children: [
+                                CircleAvatar(
+                                  radius: 35,
+                                  backgroundColor: Colors.pink,
+                                  child: CircleAvatar(
+                                    radius: 32,
+                                    backgroundColor: Colors.grey[300],
+                                    backgroundImage: profilePic.isNotEmpty
+                                        ? MemoryImage(base64Decode(profilePic))
+                                        : null,
+                                    child: profilePic.isEmpty
+                                        ? Text(
+                                            username[0].toUpperCase(),
+                                            style: const TextStyle(
+                                              color: Colors.black,
+                                            ),
+                                          )
+                                        : null,
+                                  ),
+                                ),
+                                const SizedBox(height: 5),
+                                Text(
+                                  username.length > 10
+                                      ? "${username.substring(0, 8)}..."
+                                      : username,
+                                  style: const TextStyle(fontSize: 12),
+                                ),
+                              ],
+                            ),
                           ),
                         );
                       },
-                      child: Padding(
-                        padding: const EdgeInsets.all(8.0),
-                        child: Column(
-                          children: [
-                            CircleAvatar(
-                              radius: 35,
-                              backgroundColor: Colors.pink,
-                              child: CircleAvatar(
-                                radius: 32,
-                                backgroundColor: Colors.grey[300],
-                                backgroundImage: profilePic.isNotEmpty
-                                    ? MemoryImage(base64Decode(profilePic))
-                                    : null,
-                                child: profilePic.isEmpty
-                                    ? Text(
-                                        username[0].toUpperCase(),
-                                        style: const TextStyle(
-                                          color: Colors.black,
-                                        ),
-                                      )
-                                    : null,
-                              ),
-                            ),
-                            const SizedBox(height: 5),
-                            Text(
-                              username.length > 10
-                                  ? "${username.substring(0, 8)}..."
-                                  : username,
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                          ],
-                        ),
-                      ),
                     );
                   },
-                );
-              },
-            ),
-          ),
-          const Divider(height: 1),
-          Expanded(
-            child: _isUploading
-                ? const Center(child: CircularProgressIndicator())
-                : StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance
-                        .collection('posts')
-                        .orderBy('timestamp', descending: true)
-                        .snapshots(),
-                    builder: (context, snapshot) {
-                      if (!snapshot.hasData) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-                      return ListView.builder(
-                        itemCount: snapshot.data!.docs.length,
-                        itemBuilder: (context, index) {
-                          var post =
-                              snapshot.data!.docs[index].data()
-                                  as Map<String, dynamic>;
-                          return PostWidget(post: post);
+                ),
+              ),
+              const Divider(height: 1),
+              Expanded(
+                child: _isUploading
+                    ? const Center(child: CircularProgressIndicator())
+                    : StreamBuilder<QuerySnapshot>(
+                        stream: FirebaseFirestore.instance
+                            .collection('posts')
+                            .orderBy('timestamp', descending: true)
+                            .snapshots(),
+                        builder: (context, snapshot) {
+                          if (!snapshot.hasData)
+                            return const Center(
+                              child: CircularProgressIndicator(),
+                            );
+
+                          var feedPosts = snapshot.data!.docs.where((doc) {
+                            return feedUserIds.contains(doc['ownerId']);
+                          }).toList();
+
+                          if (feedPosts.isEmpty) {
+                            return const Center(
+                              child: Text(
+                                "Follow people to see their posts here! 🌎",
+                                style: TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 16,
+                                ),
+                              ),
+                            );
+                          }
+
+                          return ListView.builder(
+                            itemCount: feedPosts.length,
+                            itemBuilder: (context, index) {
+                              var post =
+                                  feedPosts[index].data()
+                                      as Map<String, dynamic>;
+                              return PostWidget(post: post);
+                            },
+                          );
                         },
-                      );
-                    },
-                  ),
-          ),
-        ],
+                      ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -1096,17 +1130,14 @@ class UsersListScreen extends StatelessWidget {
                   .collection('users')
                   .snapshots(),
               builder: (context, snapshot) {
-                if (!snapshot.hasData) {
+                if (!snapshot.hasData)
                   return const Center(child: CircularProgressIndicator());
-                }
 
                 var users = snapshot.data!.docs
                     .where((doc) => userIds.contains(doc['uid']))
                     .toList();
-
-                if (users.isEmpty) {
+                if (users.isEmpty)
                   return const Center(child: Text("No users found."));
-                }
 
                 return ListView.builder(
                   itemCount: users.length,
@@ -1132,15 +1163,13 @@ class UsersListScreen extends StatelessWidget {
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                       subtitle: Text(user['bio'] ?? ""),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                OtherUserProfileScreen(uid: user['uid']),
-                          ),
-                        );
-                      },
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              OtherUserProfileScreen(uid: user['uid']),
+                        ),
+                      ),
                     );
                   },
                 );
@@ -1184,9 +1213,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-              },
+              onPressed: () => Navigator.pop(context),
               child: const Text("Cancel"),
             ),
             ElevatedButton(
@@ -1199,9 +1226,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       "username": _nameController.text.trim(),
                       "bio": _bioController.text.trim(),
                     });
-                if (!context.mounted) {
-                  return;
-                }
+                if (!context.mounted) return;
                 Navigator.pop(context);
               },
               child: const Text("Save"),
@@ -1221,9 +1246,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
 
     if (image != null) {
-      setState(() {
-        _isUploadingPic = true;
-      });
+      setState(() => _isUploadingPic = true);
       try {
         File imageFile = File(image.path);
         String base64Image = base64Encode(await imageFile.readAsBytes());
@@ -1231,20 +1254,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
         await FirebaseFirestore.instance.collection('users').doc(uid).update({
           "profilePic": base64Image,
         });
-        if (!mounted) {
-          return;
-        }
+        if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Profile Photo Updated! 📸")),
         );
       } catch (e) {
         debugPrint("Error: $e");
       } finally {
-        if (mounted) {
-          setState(() {
-            _isUploadingPic = false;
-          });
-        }
+        if (mounted) setState(() => _isUploadingPic = false);
       }
     }
   }
@@ -1260,9 +1277,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             .doc(uid)
             .snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.connectionState == ConnectionState.waiting)
             return const Center(child: CircularProgressIndicator());
-          }
 
           var userData = snapshot.data?.data() as Map<String, dynamic>? ?? {};
           String name = userData['username'] ?? "User";
@@ -1329,17 +1345,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 ],
                               ),
                               GestureDetector(
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => UsersListScreen(
-                                        title: "Followers",
-                                        userIds: followers,
-                                      ),
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => UsersListScreen(
+                                      title: "Followers",
+                                      userIds: followers,
                                     ),
-                                  );
-                                },
+                                  ),
+                                ),
                                 child: Column(
                                   children: [
                                     Text(
@@ -1354,17 +1368,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 ),
                               ),
                               GestureDetector(
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => UsersListScreen(
-                                        title: "Following",
-                                        userIds: following,
-                                      ),
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => UsersListScreen(
+                                      title: "Following",
+                                      userIds: following,
                                     ),
-                                  );
-                                },
+                                  ),
+                                ),
                                 child: Column(
                                   children: [
                                     Text(
@@ -1411,9 +1423,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     child: SizedBox(
                       width: double.infinity,
                       child: OutlinedButton(
-                        onPressed: () {
-                          _showEditDialog(name, bio);
-                        },
+                        onPressed: () => _showEditDialog(name, bio),
                         child: const Text(
                           "Edit Profile",
                           style: TextStyle(color: Colors.black),
@@ -1452,17 +1462,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       postSnapshot.data!.docs[index].data()
                                           as Map<String, dynamic>;
                                   return GestureDetector(
-                                    onTap: () {
-                                      Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) =>
-                                              PostDetailsScreen(
-                                                postId: post['postId'],
-                                              ),
+                                    onTap: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => PostDetailsScreen(
+                                          postId: post['postId'],
                                         ),
-                                      );
-                                    },
+                                      ),
+                                    ),
                                     child: Image.memory(
                                       base64Decode(post['postData']),
                                       fit: BoxFit.cover,
@@ -1477,16 +1484,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               .where('savedBy', arrayContains: uid)
                               .snapshots(),
                           builder: (context, savedSnapshot) {
-                            if (!savedSnapshot.hasData) {
+                            if (!savedSnapshot.hasData)
                               return const Center(
                                 child: CircularProgressIndicator(),
                               );
-                            }
-                            if (savedSnapshot.data!.docs.isEmpty) {
+                            if (savedSnapshot.data!.docs.isEmpty)
                               return const Center(
                                 child: Text("No saved posts yet 🔖"),
                               );
-                            }
                             return GridView.builder(
                               padding: const EdgeInsets.all(2),
                               gridDelegate:
@@ -1501,16 +1506,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     savedSnapshot.data!.docs[index].data()
                                         as Map<String, dynamic>;
                                 return GestureDetector(
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => PostDetailsScreen(
-                                          postId: post['postId'],
-                                        ),
+                                  onTap: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => PostDetailsScreen(
+                                        postId: post['postId'],
                                       ),
-                                    );
-                                  },
+                                    ),
+                                  ),
                                   child: Image.memory(
                                     base64Decode(post['postData']),
                                     fit: BoxFit.cover,
@@ -1555,12 +1558,10 @@ class OtherUserProfileScreen extends StatelessWidget {
             .doc(uid)
             .snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.connectionState == ConnectionState.waiting)
             return const Center(child: CircularProgressIndicator());
-          }
-          if (!snapshot.hasData || !snapshot.data!.exists) {
+          if (!snapshot.hasData || !snapshot.data!.exists)
             return const Center(child: Text("User not found"));
-          }
 
           var userData = snapshot.data!.data() as Map<String, dynamic>;
           String name = userData['username'] ?? "User";
@@ -1576,9 +1577,16 @@ class OtherUserProfileScreen extends StatelessWidget {
                 .where('ownerId', isEqualTo: uid)
                 .snapshots(),
             builder: (context, postSnapshot) {
-              int postCount = postSnapshot.hasData
-                  ? postSnapshot.data!.docs.length
-                  : 0;
+              // 👇 NEW: ప్రైవేట్ పోస్టులను ఫిల్టర్ చేయడం (ఫాలో అవ్వకపోతే అవి కనపడవు)
+              var visiblePosts = postSnapshot.hasData
+                  ? postSnapshot.data!.docs.where((doc) {
+                      var data = doc.data() as Map<String, dynamic>;
+                      if (isFollowing)
+                        return true; // ఫాలో అయితే అన్నీ చూపిస్తుంది
+                      return data['isPrivate'] !=
+                          true; // లేదంటే పబ్లిక్ పోస్టులు మాత్రమే చూపిస్తుంది
+                    }).toList()
+                  : [];
 
               return Column(
                 children: [
@@ -1610,7 +1618,7 @@ class OtherUserProfileScreen extends StatelessWidget {
                               Column(
                                 children: [
                                   Text(
-                                    "$postCount",
+                                    "${visiblePosts.length}",
                                     style: const TextStyle(
                                       fontWeight: FontWeight.bold,
                                       fontSize: 18,
@@ -1620,17 +1628,15 @@ class OtherUserProfileScreen extends StatelessWidget {
                                 ],
                               ),
                               GestureDetector(
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => UsersListScreen(
-                                        title: "Followers",
-                                        userIds: followers,
-                                      ),
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => UsersListScreen(
+                                      title: "Followers",
+                                      userIds: followers,
                                     ),
-                                  );
-                                },
+                                  ),
+                                ),
                                 child: Column(
                                   children: [
                                     Text(
@@ -1645,17 +1651,15 @@ class OtherUserProfileScreen extends StatelessWidget {
                                 ),
                               ),
                               GestureDetector(
-                                onTap: () {
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (context) => UsersListScreen(
-                                        title: "Following",
-                                        userIds: following,
-                                      ),
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => UsersListScreen(
+                                      title: "Following",
+                                      userIds: following,
                                     ),
-                                  );
-                                },
+                                  ),
+                                ),
                                 child: Column(
                                   children: [
                                     Text(
@@ -1761,17 +1765,15 @@ class OtherUserProfileScreen extends StatelessWidget {
                         const SizedBox(width: 10),
                         Expanded(
                           child: OutlinedButton(
-                            onPressed: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (context) => ChatScreen(
-                                    receiverId: uid,
-                                    receiverName: name,
-                                  ),
+                            onPressed: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => ChatScreen(
+                                  receiverId: uid,
+                                  receiverName: name,
                                 ),
-                              );
-                            },
+                              ),
+                            ),
                             child: const Text(
                               "Message",
                               style: TextStyle(color: Colors.black),
@@ -1784,65 +1786,43 @@ class OtherUserProfileScreen extends StatelessWidget {
                   const Divider(),
 
                   Expanded(
-                    child: isFollowing
-                        ? (postCount == 0
-                              ? const Center(child: Text("No posts yet 📸"))
-                              : GridView.builder(
-                                  padding: const EdgeInsets.all(2),
-                                  gridDelegate:
-                                      const SliverGridDelegateWithFixedCrossAxisCount(
-                                        crossAxisCount: 3,
-                                        crossAxisSpacing: 2,
-                                        mainAxisSpacing: 2,
-                                      ),
-                                  itemCount: postSnapshot.data!.docs.length,
-                                  itemBuilder: (context, index) {
-                                    var post =
-                                        postSnapshot.data!.docs[index].data()
-                                            as Map<String, dynamic>;
-                                    return GestureDetector(
-                                      onTap: () {
-                                        Navigator.push(
-                                          context,
-                                          MaterialPageRoute(
-                                            builder: (context) =>
-                                                PostDetailsScreen(
-                                                  postId: post['postId'],
-                                                ),
-                                          ),
-                                        );
-                                      },
-                                      child: Image.memory(
-                                        base64Decode(post['postData']),
-                                        fit: BoxFit.cover,
-                                      ),
-                                    );
-                                  },
-                                ))
-                        : Center(
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: const [
-                                Icon(
-                                  Icons.lock_outline,
-                                  size: 60,
-                                  color: Colors.grey,
+                    child: visiblePosts.isEmpty
+                        ? Center(
+                            child: Text(
+                              isFollowing
+                                  ? "No posts yet 📸"
+                                  : "Private posts hidden 🔒",
+                              style: const TextStyle(color: Colors.grey),
+                            ),
+                          )
+                        : GridView.builder(
+                            padding: const EdgeInsets.all(2),
+                            gridDelegate:
+                                const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 3,
+                                  crossAxisSpacing: 2,
+                                  mainAxisSpacing: 2,
                                 ),
-                                SizedBox(height: 10),
-                                Text(
-                                  "This account is private",
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    fontWeight: FontWeight.bold,
+                            itemCount: visiblePosts.length,
+                            itemBuilder: (context, index) {
+                              var post =
+                                  visiblePosts[index].data()
+                                      as Map<String, dynamic>;
+                              return GestureDetector(
+                                onTap: () => Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => PostDetailsScreen(
+                                      postId: post['postId'],
+                                    ),
                                   ),
                                 ),
-                                SizedBox(height: 5),
-                                Text(
-                                  "Follow to see their photos and videos.",
-                                  style: TextStyle(color: Colors.grey),
+                                child: Image.memory(
+                                  base64Decode(post['postData']),
+                                  fit: BoxFit.cover,
                                 ),
-                              ],
-                            ),
+                              );
+                            },
                           ),
                   ),
                 ],
@@ -1869,194 +1849,14 @@ class PostDetailsScreen extends StatelessWidget {
             .doc(postId)
             .snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.connectionState == ConnectionState.waiting)
             return const Center(child: CircularProgressIndicator());
-          }
-          if (!snapshot.hasData || !snapshot.data!.exists) {
+          if (!snapshot.hasData || !snapshot.data!.exists)
             return const Center(child: Text("Post not found"));
-          }
 
           var post = snapshot.data!.data() as Map<String, dynamic>;
-
           return SingleChildScrollView(child: PostWidget(post: post));
         },
-      ),
-    );
-  }
-}
-
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
-  @override
-  State<LoginScreen> createState() => _LoginScreenState();
-}
-
-class _LoginScreenState extends State<LoginScreen> {
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
-
-  Future<void> _login() async {
-    try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-      );
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text(
-              "Instagram Clone",
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-            const SizedBox(height: 40),
-            TextField(
-              controller: _emailController,
-              decoration: const InputDecoration(
-                labelText: "Email",
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 15),
-            TextField(
-              controller: _passwordController,
-              decoration: const InputDecoration(
-                labelText: "Password",
-                border: OutlineInputBorder(),
-              ),
-              obscureText: true,
-            ),
-            const SizedBox(height: 25),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: _login,
-                child: const Text("Log In"),
-              ),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const SignUpScreen()),
-                );
-              },
-              child: const Text("Sign Up"),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class SignUpScreen extends StatefulWidget {
-  const SignUpScreen({super.key});
-  @override
-  State<SignUpScreen> createState() => _SignUpScreenState();
-}
-
-class _SignUpScreenState extends State<SignUpScreen> {
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _usernameController = TextEditingController();
-
-  Future<void> _signUp() async {
-    try {
-      UserCredential userCredential = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(
-            email: _emailController.text.trim(),
-            password: _passwordController.text.trim(),
-          );
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userCredential.user!.uid)
-          .set({
-            "username": _usernameController.text.trim(),
-            "email": _emailController.text.trim(),
-            "uid": userCredential.user!.uid,
-            "bio": "Law Student | OU ⚖️",
-            "createdAt": DateTime.now(),
-            "profilePic": "",
-            "followers": [],
-            "following": [],
-          });
-      if (!mounted) {
-        return;
-      }
-      Navigator.pop(context);
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("Create Account")),
-      body: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          children: [
-            TextField(
-              controller: _usernameController,
-              decoration: const InputDecoration(
-                labelText: "Username",
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 15),
-            TextField(
-              controller: _emailController,
-              decoration: const InputDecoration(
-                labelText: "Email",
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 15),
-            TextField(
-              controller: _passwordController,
-              decoration: const InputDecoration(
-                labelText: "Password",
-                border: OutlineInputBorder(),
-              ),
-              obscureText: true,
-            ),
-            const SizedBox(height: 25),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: _signUp,
-                child: const Text("Sign Up"),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -2081,11 +1881,7 @@ class _SearchScreenState extends State<SearchScreen> {
             prefixIcon: Icon(Icons.search),
             border: InputBorder.none,
           ),
-          onChanged: (val) {
-            setState(() {
-              _searchName = val.toLowerCase();
-            });
-          },
+          onChanged: (val) => setState(() => _searchName = val.toLowerCase()),
         ),
       ),
       body: _searchName.isEmpty
@@ -2095,14 +1891,20 @@ class _SearchScreenState extends State<SearchScreen> {
                   .orderBy('timestamp', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
-                if (!snapshot.hasData) {
+                if (!snapshot.hasData)
                   return const Center(child: CircularProgressIndicator());
-                }
-                if (snapshot.data!.docs.isEmpty) {
+
+                // 👇 NEW: పబ్లిక్ పోస్టులు మాత్రమే ఎక్స్‌ప్లోర్ పేజీలో కనిపిస్తాయి!
+                var publicPosts = snapshot.data!.docs.where((doc) {
+                  var data = doc.data() as Map<String, dynamic>;
+                  return data['isPrivate'] != true;
+                }).toList();
+
+                if (publicPosts.isEmpty)
                   return const Center(
                     child: Text("No posts to explore yet! 🌎"),
                   );
-                }
+
                 return GridView.builder(
                   padding: const EdgeInsets.all(2),
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -2110,21 +1912,18 @@ class _SearchScreenState extends State<SearchScreen> {
                     crossAxisSpacing: 2,
                     mainAxisSpacing: 2,
                   ),
-                  itemCount: snapshot.data!.docs.length,
+                  itemCount: publicPosts.length,
                   itemBuilder: (context, index) {
                     var post =
-                        snapshot.data!.docs[index].data()
-                            as Map<String, dynamic>;
+                        publicPosts[index].data() as Map<String, dynamic>;
                     return GestureDetector(
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                PostDetailsScreen(postId: post['postId']),
-                          ),
-                        );
-                      },
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              PostDetailsScreen(postId: post['postId']),
+                        ),
+                      ),
                       child: Image.memory(
                         base64Decode(post['postData']),
                         fit: BoxFit.cover,
@@ -2139,12 +1938,10 @@ class _SearchScreenState extends State<SearchScreen> {
                   .collection('users')
                   .snapshots(),
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
+                if (snapshot.connectionState == ConnectionState.waiting)
                   return const Center(child: CircularProgressIndicator());
-                }
-                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty)
                   return const Center(child: Text("No users found"));
-                }
 
                 var filteredUsers = snapshot.data!.docs.where((doc) {
                   String username = doc['username'].toString().toLowerCase();
@@ -2156,9 +1953,8 @@ class _SearchScreenState extends State<SearchScreen> {
                   itemBuilder: (context, index) {
                     var user =
                         filteredUsers[index].data() as Map<String, dynamic>;
-                    if (user['uid'] == FirebaseAuth.instance.currentUser!.uid) {
+                    if (user['uid'] == FirebaseAuth.instance.currentUser!.uid)
                       return const SizedBox.shrink();
-                    }
 
                     return ListTile(
                       leading: CircleAvatar(
@@ -2182,15 +1978,13 @@ class _SearchScreenState extends State<SearchScreen> {
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                       subtitle: Text(user['bio'] ?? ""),
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) =>
-                                OtherUserProfileScreen(uid: user['uid']),
-                          ),
-                        );
-                      },
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              OtherUserProfileScreen(uid: user['uid']),
+                        ),
+                      ),
                     );
                   },
                 );
@@ -2217,12 +2011,10 @@ class InboxScreen extends StatelessWidget {
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance.collection('users').snapshots(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (snapshot.connectionState == ConnectionState.waiting)
             return const Center(child: CircularProgressIndicator());
-          }
-          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty)
             return const Center(child: Text("No messages yet."));
-          }
 
           var usersList = snapshot.data!.docs
               .where((doc) => doc['uid'] != currentUid)
@@ -2257,17 +2049,15 @@ class InboxScreen extends StatelessWidget {
                   size: 20,
                   color: Colors.grey,
                 ),
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => ChatScreen(
-                        receiverId: user['uid'],
-                        receiverName: user['username'],
-                      ),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ChatScreen(
+                      receiverId: user['uid'],
+                      receiverName: user['username'],
                     ),
-                  );
-                },
+                  ),
+                ),
               );
             },
           );
@@ -2294,11 +2084,9 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _msgController = TextEditingController();
 
   String getChatRoomId(String a, String b) {
-    if (a.substring(0, 1).codeUnitAt(0) > b.substring(0, 1).codeUnitAt(0)) {
+    if (a.substring(0, 1).codeUnitAt(0) > b.substring(0, 1).codeUnitAt(0))
       return "${b}_$a";
-    } else {
-      return "${a}_$b";
-    }
+    return "${a}_$b";
   }
 
   void _sendMessage() async {
@@ -2344,9 +2132,8 @@ class _ChatScreenState extends State<ChatScreen> {
                   .orderBy('timestamp', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
-                if (!snapshot.hasData) {
+                if (!snapshot.hasData)
                   return const Center(child: CircularProgressIndicator());
-                }
                 return ListView.builder(
                   reverse: true,
                   itemCount: snapshot.data!.docs.length,
@@ -2377,9 +2164,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                 ),
                                 actions: [
                                   TextButton(
-                                    onPressed: () {
-                                      Navigator.pop(context);
-                                    },
+                                    onPressed: () => Navigator.pop(context),
                                     child: const Text("Cancel"),
                                   ),
                                   ElevatedButton(
@@ -2393,9 +2178,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                           .collection('messages')
                                           .doc(msgId)
                                           .delete();
-                                      if (!context.mounted) {
-                                        return;
-                                      }
+                                      if (!context.mounted) return;
                                       Navigator.pop(context);
                                     },
                                     child: const Text(
@@ -2573,23 +2356,170 @@ class _VideoReelItemState extends State<VideoReelItem> {
   }
 }
 
-class StoryWidget extends StatelessWidget {
-  final int index;
-  const StoryWidget({super.key, required this.index});
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+
+  Future<void> _login() async {
+    try {
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(8),
-      child: Column(
-        children: [
-          CircleAvatar(
-            radius: 30,
-            backgroundImage: NetworkImage(
-              "https://picsum.photos/id/${index + 100}/100/100",
+    return Scaffold(
+      body: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              "Instagram Clone",
+              style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                fontStyle: FontStyle.italic,
+              ),
             ),
-          ),
-          Text("User_$index"),
-        ],
+            const SizedBox(height: 40),
+            TextField(
+              controller: _emailController,
+              decoration: const InputDecoration(
+                labelText: "Email",
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 15),
+            TextField(
+              controller: _passwordController,
+              decoration: const InputDecoration(
+                labelText: "Password",
+                border: OutlineInputBorder(),
+              ),
+              obscureText: true,
+            ),
+            const SizedBox(height: 25),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: _login,
+                child: const Text("Log In"),
+              ),
+            ),
+            TextButton(
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SignUpScreen()),
+              ),
+              child: const Text("Sign Up"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class SignUpScreen extends StatefulWidget {
+  const SignUpScreen({super.key});
+  @override
+  State<SignUpScreen> createState() => _SignUpScreenState();
+}
+
+class _SignUpScreenState extends State<SignUpScreen> {
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _usernameController = TextEditingController();
+
+  Future<void> _signUp() async {
+    try {
+      UserCredential userCredential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(
+            email: _emailController.text.trim(),
+            password: _passwordController.text.trim(),
+          );
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userCredential.user!.uid)
+          .set({
+            "username": _usernameController.text.trim(),
+            "email": _emailController.text.trim(),
+            "uid": userCredential.user!.uid,
+            "bio": "Law Student | OU ⚖️",
+            "createdAt": DateTime.now(),
+            "profilePic": "",
+            "followers": [],
+            "following": [],
+          });
+      if (!mounted) return;
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Create Account")),
+      body: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          children: [
+            TextField(
+              controller: _usernameController,
+              decoration: const InputDecoration(
+                labelText: "Username",
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 15),
+            TextField(
+              controller: _emailController,
+              decoration: const InputDecoration(
+                labelText: "Email",
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 15),
+            TextField(
+              controller: _passwordController,
+              decoration: const InputDecoration(
+                labelText: "Password",
+                border: OutlineInputBorder(),
+              ),
+              obscureText: true,
+            ),
+            const SizedBox(height: 25),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: _signUp,
+                child: const Text("Sign Up"),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
