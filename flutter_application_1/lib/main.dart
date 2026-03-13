@@ -82,7 +82,7 @@ class _MainNavigationState extends State<MainNavigation> {
       const HomeScreen(),
       const SearchScreen(),
       const ReelsScreen(),
-      const ProfileScreen(), // 👈 ప్రొఫైల్ స్క్రీన్ లో మార్పులు చేశాం
+      const ProfileScreen(),
     ];
   }
 
@@ -223,8 +223,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           "timestamp": FieldValue.serverTimestamp(),
                           "likes": {},
                           "commentCount": 0,
-                          "savedBy":
-                              [], // 👈 కొత్త పోస్ట్‌లలో బుక్‌మార్క్ డేటా స్టోర్ చేయడానికి
+                          "savedBy": [],
                         });
 
                     if (!context.mounted) {
@@ -618,7 +617,6 @@ class _HomeScreenState extends State<HomeScreen> {
                           int commentCount = post['commentCount'] ?? 0;
                           String caption = post['caption'] ?? "";
 
-                          // సెవ్ (Bookmark) లాజిక్
                           List savedBy = post['savedBy'] ?? [];
                           bool isSaved = savedBy.contains(currentUid);
 
@@ -734,8 +732,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ),
                                   ),
 
-                                  const Spacer(), // 👈 ఇది సేవ్ బటన్‌ని కుడి వైపుకు నెడుతుంది
-                                  // 👇 ఇక్కడే మన సేవ్/బుక్‌మార్క్ బటన్ ఉంది
+                                  const Spacer(),
                                   IconButton(
                                     icon: Icon(
                                       isSaved
@@ -805,7 +802,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// --- 4. ప్రొఫైల్ స్క్రీన్ (ట్యాబ్స్ తో) ---
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
   @override
@@ -908,10 +904,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   Widget build(BuildContext context) {
     final String uid = FirebaseAuth.instance.currentUser!.uid;
-
-    // 👇 ప్రొఫైల్ లో ట్యాబ్స్ కోసం DefaultTabController వాడాం
     return DefaultTabController(
-      length: 2, // మనకు రెండు ట్యాబ్స్ ఉంటాయి (Posts, Saved)
+      length: 2,
       child: StreamBuilder<DocumentSnapshot>(
         stream: FirebaseFirestore.instance
             .collection('users')
@@ -1005,21 +999,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               const Divider(),
 
-              // 👇 ఇక్కడ ట్యాబ్ బార్ (Posts & Saved)
               const TabBar(
                 indicatorColor: Colors.blue,
                 labelColor: Colors.blue,
                 unselectedLabelColor: Colors.grey,
                 tabs: [
-                  Tab(icon: Icon(Icons.grid_on)), // My Posts Tab
-                  Tab(icon: Icon(Icons.bookmark_border)), // Saved Posts Tab
+                  Tab(icon: Icon(Icons.grid_on)),
+                  Tab(icon: Icon(Icons.bookmark_border)),
                 ],
               ),
 
               Expanded(
                 child: TabBarView(
                   children: [
-                    // --- TAB 1: నా సొంత పోస్ట్‌లు ---
                     StreamBuilder<QuerySnapshot>(
                       stream: FirebaseFirestore.instance
                           .collection('posts')
@@ -1047,45 +1039,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             var post =
                                 postSnapshot.data!.docs[index].data()
                                     as Map<String, dynamic>;
-                            return Stack(
-                              fit: StackFit.expand,
-                              children: [
-                                Image.memory(
-                                  base64Decode(post['postData']),
-                                  fit: BoxFit.cover,
-                                ),
-                                Positioned(
-                                  right: 0,
-                                  top: 0,
-                                  child: IconButton(
-                                    icon: const Icon(
-                                      Icons.delete,
-                                      color: Colors.white,
-                                      shadows: [
-                                        Shadow(
-                                          color: Colors.black,
-                                          blurRadius: 10,
-                                        ),
-                                      ],
+                            // 👇 ఇక్కడ మనం క్లిక్ (Tap) ఫీచర్ యాడ్ చేశాం
+                            return GestureDetector(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => PostDetailsScreen(
+                                      postId: post['postId'],
                                     ),
-                                    onPressed: () async {
-                                      await FirebaseFirestore.instance
-                                          .collection('posts')
-                                          .doc(post['postId'])
-                                          .delete();
-                                    },
                                   ),
-                                ),
-                              ],
+                                );
+                              },
+                              child: Image.memory(
+                                base64Decode(post['postData']),
+                                fit: BoxFit.cover,
+                              ),
                             );
                           },
                         );
                       },
                     ),
 
-                    // --- TAB 2: నేను సేవ్ చేసుకున్న పోస్ట్‌లు ---
                     StreamBuilder<QuerySnapshot>(
-                      // లాజిక్: ఏ పోస్ట్‌లకైతే savedBy లిస్ట్‌లో నా ఐడీ ఉంటుందో అవి తీసుకురా
                       stream: FirebaseFirestore.instance
                           .collection('posts')
                           .where('savedBy', arrayContains: uid)
@@ -1114,9 +1090,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             var post =
                                 savedSnapshot.data!.docs[index].data()
                                     as Map<String, dynamic>;
-                            return Image.memory(
-                              base64Decode(post['postData']),
-                              fit: BoxFit.cover,
+                            // 👇 ఇక్కడ కూడా క్లిక్ (Tap) ఫీచర్ యాడ్ చేశాం
+                            return GestureDetector(
+                              onTap: () {
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (context) => PostDetailsScreen(
+                                      postId: post['postId'],
+                                    ),
+                                  ),
+                                );
+                              },
+                              child: Image.memory(
+                                base64Decode(post['postData']),
+                                fit: BoxFit.cover,
+                              ),
                             );
                           },
                         );
@@ -1128,183 +1117,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ],
           );
         },
-      ),
-    );
-  }
-}
-
-class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
-  @override
-  State<LoginScreen> createState() => _LoginScreenState();
-}
-
-class _LoginScreenState extends State<LoginScreen> {
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
-
-  Future<void> _login() async {
-    try {
-      await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
-      );
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Text(
-              "Instagram Clone",
-              style: TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.bold,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-            const SizedBox(height: 40),
-            TextField(
-              controller: _emailController,
-              decoration: const InputDecoration(
-                labelText: "Email",
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 15),
-            TextField(
-              controller: _passwordController,
-              decoration: const InputDecoration(
-                labelText: "Password",
-                border: OutlineInputBorder(),
-              ),
-              obscureText: true,
-            ),
-            const SizedBox(height: 25),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: _login,
-                child: const Text("Log In"),
-              ),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => const SignUpScreen()),
-                );
-              },
-              child: const Text("Sign Up"),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class SignUpScreen extends StatefulWidget {
-  const SignUpScreen({super.key});
-  @override
-  State<SignUpScreen> createState() => _SignUpScreenState();
-}
-
-class _SignUpScreenState extends State<SignUpScreen> {
-  final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _passwordController = TextEditingController();
-  final TextEditingController _usernameController = TextEditingController();
-
-  Future<void> _signUp() async {
-    try {
-      UserCredential userCredential = await FirebaseAuth.instance
-          .createUserWithEmailAndPassword(
-            email: _emailController.text.trim(),
-            password: _passwordController.text.trim(),
-          );
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(userCredential.user!.uid)
-          .set({
-            "username": _usernameController.text.trim(),
-            "email": _emailController.text.trim(),
-            "uid": userCredential.user!.uid,
-            "bio": "Law Student | OU ⚖️",
-            "createdAt": DateTime.now(),
-            "profilePic": "",
-            "followers": [],
-            "following": [],
-          });
-      if (!mounted) {
-        return;
-      }
-      Navigator.pop(context);
-    } catch (e) {
-      if (!mounted) {
-        return;
-      }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text("Create Account")),
-      body: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          children: [
-            TextField(
-              controller: _usernameController,
-              decoration: const InputDecoration(
-                labelText: "Username",
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 15),
-            TextField(
-              controller: _emailController,
-              decoration: const InputDecoration(
-                labelText: "Email",
-                border: OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 15),
-            TextField(
-              controller: _passwordController,
-              decoration: const InputDecoration(
-                labelText: "Password",
-                border: OutlineInputBorder(),
-              ),
-              obscureText: true,
-            ),
-            const SizedBox(height: 25),
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton(
-                onPressed: _signUp,
-                child: const Text("Sign Up"),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -1363,9 +1175,21 @@ class _SearchScreenState extends State<SearchScreen> {
                     var post =
                         snapshot.data!.docs[index].data()
                             as Map<String, dynamic>;
-                    return Image.memory(
-                      base64Decode(post['postData']),
-                      fit: BoxFit.cover,
+                    // 👇 Explore గ్రిడ్ లో కూడా క్లిక్ ఫీచర్
+                    return GestureDetector(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) =>
+                                PostDetailsScreen(postId: post['postId']),
+                          ),
+                        );
+                      },
+                      child: Image.memory(
+                        base64Decode(post['postData']),
+                        fit: BoxFit.cover,
+                      ),
                     );
                   },
                 );
@@ -1632,9 +1456,22 @@ class OtherUserProfileScreen extends StatelessWidget {
                               var post =
                                   postSnapshot.data!.docs[index].data()
                                       as Map<String, dynamic>;
-                              return Image.memory(
-                                base64Decode(post['postData']),
-                                fit: BoxFit.cover,
+                              // 👇 వేరే వాళ్ళ ప్రొఫైల్ గ్రిడ్‌లో కూడా క్లిక్ ఫీచర్
+                              return GestureDetector(
+                                onTap: () {
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => PostDetailsScreen(
+                                        postId: post['postId'],
+                                      ),
+                                    ),
+                                  );
+                                },
+                                child: Image.memory(
+                                  base64Decode(post['postData']),
+                                  fit: BoxFit.cover,
+                                ),
                               );
                             },
                           );
@@ -1669,6 +1506,643 @@ class OtherUserProfileScreen extends StatelessWidget {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+// --- NEW SCREEN: POST DETAILS (ఒకే పోస్ట్ ని పెద్దగా చూడ్డానికి) ---
+class PostDetailsScreen extends StatefulWidget {
+  final String postId;
+  const PostDetailsScreen({super.key, required this.postId});
+
+  @override
+  State<PostDetailsScreen> createState() => _PostDetailsScreenState();
+}
+
+class _PostDetailsScreenState extends State<PostDetailsScreen> {
+  void _showComments(String postId) {
+    final TextEditingController commentController = TextEditingController();
+    final String currentUid = FirebaseAuth.instance.currentUser!.uid;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+            top: 20,
+            left: 15,
+            right: 15,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                "Comments",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+              const Divider(),
+              SizedBox(
+                height: 300,
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('posts')
+                      .doc(postId)
+                      .collection('comments')
+                      .orderBy('timestamp', descending: true)
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    if (snapshot.data!.docs.isEmpty) {
+                      return const Center(
+                        child: Text("No comments yet. Be the first!"),
+                      );
+                    }
+
+                    return ListView.builder(
+                      itemCount: snapshot.data!.docs.length,
+                      itemBuilder: (context, index) {
+                        var commentDoc = snapshot.data!.docs[index];
+                        var comment = commentDoc.data() as Map<String, dynamic>;
+                        String commentId = commentDoc.id;
+                        bool isMyComment = comment['uid'] == currentUid;
+
+                        String commentTime = "";
+                        if (comment['timestamp'] != null) {
+                          commentTime = timeago.format(
+                            (comment['timestamp'] as Timestamp).toDate(),
+                            locale: 'en_short',
+                          );
+                        }
+
+                        return ListTile(
+                          leading: CircleAvatar(
+                            radius: 15,
+                            child: Text(
+                              comment['username'][0].toUpperCase(),
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ),
+                          title: Row(
+                            children: [
+                              Text(
+                                comment['username'],
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                commentTime,
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            ],
+                          ),
+                          subtitle: Text(comment['text']),
+                          trailing: isMyComment
+                              ? Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.edit,
+                                        size: 20,
+                                        color: Colors.blue,
+                                      ),
+                                      onPressed: () {
+                                        TextEditingController editController =
+                                            TextEditingController(
+                                              text: comment['text'],
+                                            );
+                                        showDialog(
+                                          context: context,
+                                          builder: (context) {
+                                            return AlertDialog(
+                                              title: const Text("Edit Comment"),
+                                              content: TextField(
+                                                controller: editController,
+                                                decoration:
+                                                    const InputDecoration(
+                                                      border:
+                                                          OutlineInputBorder(),
+                                                    ),
+                                                maxLines: 2,
+                                              ),
+                                              actions: [
+                                                TextButton(
+                                                  onPressed: () {
+                                                    Navigator.pop(context);
+                                                  },
+                                                  child: const Text("Cancel"),
+                                                ),
+                                                ElevatedButton(
+                                                  onPressed: () async {
+                                                    if (editController
+                                                        .text
+                                                        .isNotEmpty) {
+                                                      await FirebaseFirestore
+                                                          .instance
+                                                          .collection('posts')
+                                                          .doc(postId)
+                                                          .collection(
+                                                            'comments',
+                                                          )
+                                                          .doc(commentId)
+                                                          .update({
+                                                            "text":
+                                                                editController
+                                                                    .text
+                                                                    .trim(),
+                                                          });
+                                                      if (!context.mounted) {
+                                                        return;
+                                                      }
+                                                      Navigator.pop(context);
+                                                    }
+                                                  },
+                                                  child: const Text("Save"),
+                                                ),
+                                              ],
+                                            );
+                                          },
+                                        );
+                                      },
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(
+                                        Icons.delete_outline,
+                                        size: 20,
+                                        color: Colors.red,
+                                      ),
+                                      onPressed: () async {
+                                        await FirebaseFirestore.instance
+                                            .collection('posts')
+                                            .doc(postId)
+                                            .collection('comments')
+                                            .doc(commentId)
+                                            .delete();
+                                        await FirebaseFirestore.instance
+                                            .collection('posts')
+                                            .doc(postId)
+                                            .update({
+                                              "commentCount":
+                                                  FieldValue.increment(-1),
+                                            });
+                                      },
+                                    ),
+                                  ],
+                                )
+                              : null,
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+              TextField(
+                controller: commentController,
+                decoration: InputDecoration(
+                  hintText: "Add a comment...",
+                  suffixIcon: IconButton(
+                    icon: const Icon(Icons.send, color: Colors.blue),
+                    onPressed: () async {
+                      if (commentController.text.isNotEmpty) {
+                        await FirebaseFirestore.instance
+                            .collection('posts')
+                            .doc(postId)
+                            .collection('comments')
+                            .add({
+                              "text": commentController.text.trim(),
+                              "username": FirebaseAuth
+                                  .instance
+                                  .currentUser!
+                                  .email!
+                                  .split('@')[0],
+                              "timestamp": FieldValue.serverTimestamp(),
+                              "uid": FirebaseAuth.instance.currentUser!.uid,
+                            });
+                        await FirebaseFirestore.instance
+                            .collection('posts')
+                            .doc(postId)
+                            .update({"commentCount": FieldValue.increment(1)});
+                        commentController.clear();
+                      }
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _deletePost(String postId) {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text("Delete Post"),
+          content: const Text(
+            "Are you sure you want to delete this post? This action cannot be undone.",
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(context);
+              },
+              child: const Text("Cancel"),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: () async {
+                await FirebaseFirestore.instance
+                    .collection('posts')
+                    .doc(postId)
+                    .delete();
+                if (!context.mounted) {
+                  return;
+                }
+                Navigator.pop(context);
+                Navigator.pop(
+                  context,
+                ); // పోస్ట్ డిలీట్ అయ్యాక వెనక్కి వెళ్ళడానికి
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Post Deleted 🗑️")),
+                );
+              },
+              child: const Text(
+                "Delete",
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Post")),
+      body: StreamBuilder<DocumentSnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('posts')
+            .doc(widget.postId)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (!snapshot.hasData || !snapshot.data!.exists) {
+            return const Center(child: Text("Post not found"));
+          }
+
+          var post = snapshot.data!.data() as Map<String, dynamic>;
+          String postId = post['postId'];
+          String currentUid = FirebaseAuth.instance.currentUser!.uid;
+          bool isLiked =
+              post['likes'] != null && post['likes'][currentUid] == true;
+          int likeCount = post['likes'] != null
+              ? (post['likes'] as Map).length
+              : 0;
+          int commentCount = post['commentCount'] ?? 0;
+          String caption = post['caption'] ?? "";
+
+          List savedBy = post['savedBy'] ?? [];
+          bool isSaved = savedBy.contains(currentUid);
+
+          String timeAgo = "Just now";
+          if (post['timestamp'] != null) {
+            timeAgo = timeago.format((post['timestamp'] as Timestamp).toDate());
+          }
+
+          return SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ListTile(
+                  leading: CircleAvatar(
+                    child: Text(post['username'][0].toUpperCase()),
+                  ),
+                  title: Text(
+                    post['username'] ?? "User",
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  subtitle: Text(
+                    timeAgo,
+                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  trailing: post['ownerId'] == currentUid
+                      ? IconButton(
+                          icon: const Icon(Icons.delete, color: Colors.grey),
+                          onPressed: () {
+                            _deletePost(postId);
+                          },
+                        )
+                      : null,
+                  onTap: () {
+                    if (post['ownerId'] != currentUid) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) =>
+                              OtherUserProfileScreen(uid: post['ownerId']),
+                        ),
+                      );
+                    }
+                  },
+                ),
+                GestureDetector(
+                  onDoubleTap: () {
+                    FirebaseFirestore.instance
+                        .collection('posts')
+                        .doc(postId)
+                        .update({
+                          "likes.$currentUid": isLiked
+                              ? FieldValue.delete()
+                              : true,
+                        });
+                  },
+                  child: Image.memory(
+                    base64Decode(post['postData']),
+                    height: 400,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                  ),
+                ),
+                Row(
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        isLiked ? Icons.favorite : Icons.favorite_border,
+                        color: isLiked ? Colors.red : null,
+                      ),
+                      onPressed: () {
+                        FirebaseFirestore.instance
+                            .collection('posts')
+                            .doc(postId)
+                            .update({
+                              "likes.$currentUid": isLiked
+                                  ? FieldValue.delete()
+                                  : true,
+                            });
+                      },
+                    ),
+                    Text(
+                      "$likeCount",
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(width: 15),
+                    IconButton(
+                      icon: const Icon(Icons.chat_bubble_outline),
+                      onPressed: () {
+                        _showComments(postId);
+                      },
+                    ),
+                    Text(
+                      "$commentCount",
+                      style: const TextStyle(fontWeight: FontWeight.bold),
+                    ),
+
+                    const Spacer(),
+                    IconButton(
+                      icon: Icon(
+                        isSaved ? Icons.bookmark : Icons.bookmark_border,
+                        color: isSaved ? Colors.black : Colors.grey,
+                      ),
+                      onPressed: () {
+                        if (isSaved) {
+                          FirebaseFirestore.instance
+                              .collection('posts')
+                              .doc(postId)
+                              .update({
+                                "savedBy": FieldValue.arrayRemove([currentUid]),
+                              });
+                        } else {
+                          FirebaseFirestore.instance
+                              .collection('posts')
+                              .doc(postId)
+                              .update({
+                                "savedBy": FieldValue.arrayUnion([currentUid]),
+                              });
+                        }
+                      },
+                    ),
+                  ],
+                ),
+                if (caption.isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 15,
+                      vertical: 5,
+                    ),
+                    child: RichText(
+                      text: TextSpan(
+                        style: DefaultTextStyle.of(context).style,
+                        children: [
+                          TextSpan(
+                            text: "${post['username']} ",
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          TextSpan(text: caption),
+                        ],
+                      ),
+                    ),
+                  ),
+                const SizedBox(height: 10),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+}
+
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+
+  Future<void> _login() async {
+    try {
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              "Instagram Clone",
+              style: TextStyle(
+                fontSize: 32,
+                fontWeight: FontWeight.bold,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+            const SizedBox(height: 40),
+            TextField(
+              controller: _emailController,
+              decoration: const InputDecoration(
+                labelText: "Email",
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 15),
+            TextField(
+              controller: _passwordController,
+              decoration: const InputDecoration(
+                labelText: "Password",
+                border: OutlineInputBorder(),
+              ),
+              obscureText: true,
+            ),
+            const SizedBox(height: 25),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: _login,
+                child: const Text("Log In"),
+              ),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const SignUpScreen()),
+                );
+              },
+              child: const Text("Sign Up"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class SignUpScreen extends StatefulWidget {
+  const SignUpScreen({super.key});
+  @override
+  State<SignUpScreen> createState() => _SignUpScreenState();
+}
+
+class _SignUpScreenState extends State<SignUpScreen> {
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final TextEditingController _usernameController = TextEditingController();
+
+  Future<void> _signUp() async {
+    try {
+      UserCredential userCredential = await FirebaseAuth.instance
+          .createUserWithEmailAndPassword(
+            email: _emailController.text.trim(),
+            password: _passwordController.text.trim(),
+          );
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userCredential.user!.uid)
+          .set({
+            "username": _usernameController.text.trim(),
+            "email": _emailController.text.trim(),
+            "uid": userCredential.user!.uid,
+            "bio": "Law Student | OU ⚖️",
+            "createdAt": DateTime.now(),
+            "profilePic": "",
+            "followers": [],
+            "following": [],
+          });
+      if (!mounted) {
+        return;
+      }
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) {
+        return;
+      }
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error: ${e.toString()}")));
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Create Account")),
+      body: Padding(
+        padding: const EdgeInsets.all(20.0),
+        child: Column(
+          children: [
+            TextField(
+              controller: _usernameController,
+              decoration: const InputDecoration(
+                labelText: "Username",
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 15),
+            TextField(
+              controller: _emailController,
+              decoration: const InputDecoration(
+                labelText: "Email",
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 15),
+            TextField(
+              controller: _passwordController,
+              decoration: const InputDecoration(
+                labelText: "Password",
+                border: OutlineInputBorder(),
+              ),
+              obscureText: true,
+            ),
+            const SizedBox(height: 25),
+            SizedBox(
+              width: double.infinity,
+              height: 50,
+              child: ElevatedButton(
+                onPressed: _signUp,
+                child: const Text("Sign Up"),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
