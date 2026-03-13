@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:google_fonts/google_fonts.dart';
+import 'package:share_plus/share_plus.dart';
 import 'firebase_options.dart';
 
 void main() async {
@@ -101,7 +102,6 @@ class _MainNavigationState extends State<MainNavigation> {
       appBar: _selectedIndex == 3
           ? null
           : AppBar(
-              // 👇 ప్రొఫైల్ పేజీకి సొంత AppBar ఉంది
               title: Text(
                 "MyBanjara",
                 style: GoogleFonts.lobster(
@@ -367,12 +367,157 @@ class _PostWidgetState extends State<PostWidget> {
     }
   }
 
+  String getChatRoomId(String a, String b) {
+    return a.hashCode <= b.hashCode ? "${a}_$b" : "${b}_$a";
+  }
+
+  // 🌟 FIX: అప్‌డేటెడ్ షేర్ మెనూ (వార్నింగ్స్ లేకుండా)
+  void _sharePostMenu() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                "Share Post",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.send_outlined, color: Colors.blue),
+                title: const Text("Send to Followers"),
+                onTap: () {
+                  Navigator.pop(context);
+                  _showFollowersToShare();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.share_outlined, color: Colors.red),
+                title: const Text("Share to External Apps"),
+                onTap: () {
+                  Navigator.pop(context);
+                  String caption = widget.post['caption'] ?? "";
+                  String username = widget.post['username'] ?? "User";
+                  // 👇 FIX: Latest static share calling
+                  Share.share(
+                    "Check out this post by $username on MyBanjara! ✨\n\n$caption",
+                  );
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showFollowersToShare() {
+    final String currentUid = FirebaseAuth.instance.currentUser!.uid;
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Container(
+          height: 400,
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            children: [
+              const Text(
+                "Select Follower",
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 10),
+              Expanded(
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('users')
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    var usersList = snapshot.data!.docs
+                        .where((doc) => doc['uid'] != currentUid)
+                        .toList();
+                    return ListView.builder(
+                      itemCount: usersList.length,
+                      itemBuilder: (context, index) {
+                        var user =
+                            usersList[index].data() as Map<String, dynamic>;
+                        return ListTile(
+                          leading: CircleAvatar(
+                            child: Text(user['username'][0]),
+                          ),
+                          title: Text(user['username']),
+                          trailing: ElevatedButton(
+                            onPressed: () async {
+                              String roomId = getChatRoomId(
+                                currentUid,
+                                user['uid'],
+                              );
+                              String shareMsg =
+                                  "Shared a post: ${widget.post['caption'] ?? ''}";
+
+                              await FirebaseFirestore.instance
+                                  .collection('chatRooms')
+                                  .doc(roomId)
+                                  .collection('messages')
+                                  .add({
+                                    "senderId": currentUid,
+                                    "message": shareMsg,
+                                    "timestamp": FieldValue.serverTimestamp(),
+                                  });
+
+                              await FirebaseFirestore.instance
+                                  .collection('chatRooms')
+                                  .doc(roomId)
+                                  .set({
+                                    "lastMessage": shareMsg,
+                                    "lastTime": FieldValue.serverTimestamp(),
+                                    "users": [currentUid, user['uid']],
+                                  }, SetOptions(merge: true));
+
+                              if (context.mounted) {
+                                Navigator.pop(context);
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      "Sent to ${user['username']}!",
+                                    ),
+                                  ),
+                                );
+                              }
+                            },
+                            child: const Text("Send"),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    String postId = widget.post['postId'];
+    String currentUid = FirebaseAuth.instance.currentUser!.uid;
     bool isLiked =
         (widget.post['likes'] != null &&
-        widget.post['likes'][FirebaseAuth.instance.currentUser!.uid] == true);
+        widget.post['likes'][currentUid] == true);
     int likeCount = (widget.post['likes'] != null)
         ? (widget.post['likes'] as Map).length
         : 0;
@@ -400,7 +545,11 @@ class _PostWidgetState extends State<PostWidget> {
         children: [
           ListTile(
             leading: CircleAvatar(
-              child: Text(widget.post['username'][0].toUpperCase()),
+              child: Text(
+                widget.post['username'] != null
+                    ? widget.post['username'][0].toUpperCase()
+                    : "U",
+              ),
             ),
             title: Row(
               children: [
@@ -431,31 +580,17 @@ class _PostWidgetState extends State<PostWidget> {
                 });
               }
             },
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(15),
-                    child: Image.memory(
-                      base64Decode(widget.post['postData']),
-                      height: 400,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                    ),
-                  ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 10),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(15),
+                child: Image.memory(
+                  base64Decode(widget.post['postData']),
+                  height: 400,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
                 ),
-                AnimatedOpacity(
-                  opacity: isLikeAnimating ? 1.0 : 0.0,
-                  duration: const Duration(milliseconds: 200),
-                  child: const Icon(
-                    Icons.favorite,
-                    color: Colors.white,
-                    size: 100,
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
           Padding(
@@ -473,14 +608,20 @@ class _PostWidgetState extends State<PostWidget> {
                   "$likeCount",
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
-                const SizedBox(width: 15),
+                const SizedBox(width: 10),
                 IconButton(
                   icon: const Icon(Icons.mode_comment_outlined),
-                  onPressed: () => _showComments(context, postId),
+                  onPressed: () =>
+                      _showComments(context, widget.post['postId']),
                 ),
                 Text(
                   "$commentCount",
                   style: const TextStyle(fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(width: 10),
+                IconButton(
+                  icon: const Icon(Icons.share_outlined),
+                  onPressed: _sharePostMenu,
                 ),
                 const Spacer(),
                 IconButton(
@@ -947,7 +1088,6 @@ class _SearchScreenState extends State<SearchScreen> {
 
 class InboxScreen extends StatelessWidget {
   const InboxScreen({super.key});
-
   String getChatRoomId(String a, String b) {
     return a.hashCode <= b.hashCode ? "${a}_$b" : "${b}_$a";
   }
@@ -955,7 +1095,6 @@ class InboxScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final String currentUid = FirebaseAuth.instance.currentUser!.uid;
-
     return Scaffold(
       appBar: AppBar(
         title: const Text(
@@ -972,13 +1111,11 @@ class InboxScreen extends StatelessWidget {
           var usersList = snapshot.data!.docs
               .where((doc) => doc['uid'] != currentUid)
               .toList();
-
           return ListView.builder(
             itemCount: usersList.length,
             itemBuilder: (context, index) {
               var user = usersList[index].data() as Map<String, dynamic>;
               String roomId = getChatRoomId(currentUid, user['uid']);
-
               return StreamBuilder<DocumentSnapshot>(
                 stream: FirebaseFirestore.instance
                     .collection('chatRooms')
@@ -987,7 +1124,6 @@ class InboxScreen extends StatelessWidget {
                 builder: (context, roomSnapshot) {
                   String lastMsg = "Tap to chat";
                   String lastTime = "";
-
                   if (roomSnapshot.hasData && roomSnapshot.data!.exists) {
                     var roomData =
                         roomSnapshot.data!.data() as Map<String, dynamic>;
@@ -999,7 +1135,6 @@ class InboxScreen extends StatelessWidget {
                       );
                     }
                   }
-
                   return ListTile(
                     leading: CircleAvatar(
                       backgroundImage:
@@ -1072,7 +1207,6 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _msgController = TextEditingController();
-
   String getChatRoomId(String a, String b) {
     return a.hashCode <= b.hashCode ? "${a}_$b" : "${b}_$a";
   }
@@ -1083,7 +1217,6 @@ class _ChatScreenState extends State<ChatScreen> {
       String roomId = getChatRoomId(senderId, widget.receiverId);
       String msg = _msgController.text.trim();
       _msgController.clear();
-
       await FirebaseFirestore.instance
           .collection('chatRooms')
           .doc(roomId)
@@ -1093,7 +1226,6 @@ class _ChatScreenState extends State<ChatScreen> {
             "message": msg,
             "timestamp": FieldValue.serverTimestamp(),
           });
-
       await FirebaseFirestore.instance.collection('chatRooms').doc(roomId).set({
         "lastMessage": msg,
         "lastTime": FieldValue.serverTimestamp(),
@@ -1106,7 +1238,6 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget build(BuildContext context) {
     String currentUid = FirebaseAuth.instance.currentUser!.uid;
     String roomId = getChatRoomId(currentUid, widget.receiverId);
-
     return Scaffold(
       appBar: AppBar(
         title: Text(
@@ -1141,7 +1272,6 @@ class _ChatScreenState extends State<ChatScreen> {
                             locale: 'en_short',
                           )
                         : "";
-
                     return Align(
                       alignment: isMe
                           ? Alignment.centerRight
@@ -1231,9 +1361,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
-// ============================================================================
-// 🌟 UPDATED: PROFILE SCREEN WITH THREE-DOT MENU 👇 🌟
-// ============================================================================
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
   @override
@@ -1328,7 +1455,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           String bio = userData['bio'] ?? "No bio yet.";
 
           return Scaffold(
-            // 👇 ADDED APPBAR WITH MENU BUTTON
             appBar: AppBar(
               title: Text(
                 name,
@@ -1336,7 +1462,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               actions: [
                 PopupMenuButton<String>(
-                  icon: const Icon(Icons.menu), // ☰ Three line button
+                  icon: const Icon(Icons.menu),
                   onSelected: (value) {
                     if (value == 'pic') {
                       _updateProfilePic();
@@ -1380,7 +1506,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     : 0;
                 List followers = userData['followers'] ?? [];
                 List following = userData['following'] ?? [];
-
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
