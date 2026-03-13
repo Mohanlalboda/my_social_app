@@ -411,11 +411,59 @@ class _HomeScreenState extends State<HomeScreen> {
         children: [
           SizedBox(
             height: 110,
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: 8,
-              itemBuilder: (context, index) {
-                return StoryWidget(index: index);
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('users')
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return const SizedBox();
+                }
+                return ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: snapshot.data!.docs.length,
+                  itemBuilder: (context, index) {
+                    var user =
+                        snapshot.data!.docs[index].data()
+                            as Map<String, dynamic>;
+                    String profilePic = user['profilePic'] ?? "";
+                    String username = user['username'] ?? "User";
+
+                    return Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: Column(
+                        children: [
+                          CircleAvatar(
+                            radius: 35,
+                            backgroundColor: Colors.pink,
+                            child: CircleAvatar(
+                              radius: 32,
+                              backgroundColor: Colors.grey[300],
+                              backgroundImage: profilePic.isNotEmpty
+                                  ? MemoryImage(base64Decode(profilePic))
+                                  : null,
+                              child: profilePic.isEmpty
+                                  ? Text(
+                                      username[0].toUpperCase(),
+                                      style: const TextStyle(
+                                        color: Colors.black,
+                                      ),
+                                    )
+                                  : null,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            username.length > 10
+                                ? "${username.substring(0, 8)}..."
+                                : username,
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                );
               },
             ),
           ),
@@ -490,12 +538,28 @@ class _HomeScreenState extends State<HomeScreen> {
                                   }
                                 },
                               ),
-                              Image.memory(
-                                base64Decode(post['postData']),
-                                height: 400,
-                                width: double.infinity,
-                                fit: BoxFit.cover,
+
+                              // 👇 ఇక్కడే మనం మార్పు చేసాం (Double Tap Like & Unlike Logic)
+                              GestureDetector(
+                                onDoubleTap: () {
+                                  FirebaseFirestore.instance
+                                      .collection('posts')
+                                      .doc(postId)
+                                      .update({
+                                        // ఇక్కడ "isLiked" చెక్ చేస్తున్నాం. ఉంటే తీసేస్తుంది (delete), లేకపోతే లైక్ చేస్తుంది (true).
+                                        "likes.$currentUid": isLiked
+                                            ? FieldValue.delete()
+                                            : true,
+                                      });
+                                },
+                                child: Image.memory(
+                                  base64Decode(post['postData']),
+                                  height: 400,
+                                  width: double.infinity,
+                                  fit: BoxFit.cover,
+                                ),
                               ),
+
                               Row(
                                 children: [
                                   IconButton(
