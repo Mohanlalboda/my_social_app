@@ -765,9 +765,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// ============================================================================
-// 🌟 NEW: THE WITNESS DIRECTORY (Followers/Following List Screen) 🌟
-// ============================================================================
 class UsersListScreen extends StatelessWidget {
   final String title;
   final List<dynamic> userIds;
@@ -798,7 +795,6 @@ class UsersListScreen extends StatelessWidget {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                // ఇక్కడ మన లిస్ట్‌లో ఉన్న ఐడీలను ఫిల్టర్ చేస్తున్నాం
                 var users = snapshot.data!.docs
                     .where((doc) => userIds.contains(doc['uid']))
                     .toList();
@@ -832,7 +828,6 @@ class UsersListScreen extends StatelessWidget {
                       ),
                       subtitle: Text(user['bio'] ?? ""),
                       onTap: () {
-                        // ఎవరి మీదైనా క్లిక్ చేస్తే వాళ్ళ ప్రొఫైల్ ఓపెన్ అవుతుంది
                         Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -849,7 +844,6 @@ class UsersListScreen extends StatelessWidget {
     );
   }
 }
-// ============================================================================
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -1013,7 +1007,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         ),
                         const SizedBox(width: 20),
 
-                        // 👇 PROFILE REDESIGN: అచ్చం ఇన్స్టాగ్రామ్ లాగా నంబర్స్ పైన, పేర్లు కింద
                         Expanded(
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -1087,7 +1080,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ),
 
-                  // బయో ని కిందకి తెచ్చాం (Instagram Style)
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 20),
                     child: Align(
@@ -1139,7 +1131,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   Expanded(
                     child: TabBarView(
                       children: [
-                        // My Posts Tab
                         postCount == 0
                             ? const Center(child: Text("No posts yet 📸"))
                             : GridView.builder(
@@ -1175,7 +1166,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 },
                               ),
 
-                        // Saved Posts Tab
                         StreamBuilder<QuerySnapshot>(
                           stream: FirebaseFirestore.instance
                               .collection('posts')
@@ -1971,6 +1961,7 @@ class InboxScreen extends StatelessWidget {
   }
 }
 
+// 👇 ఇక్కడ మనం "Unsend Message" & "Time" ఫీచర్స్ యాడ్ చేశాం!
 class ChatScreen extends StatefulWidget {
   final String receiverId;
   final String receiverName;
@@ -2045,30 +2036,101 @@ class _ChatScreenState extends State<ChatScreen> {
                   reverse: true,
                   itemCount: snapshot.data!.docs.length,
                   itemBuilder: (context, index) {
-                    var msg =
-                        snapshot.data!.docs[index].data()
-                            as Map<String, dynamic>;
+                    var msgDoc = snapshot.data!.docs[index];
+                    var msg = msgDoc.data() as Map<String, dynamic>;
+                    String msgId = msgDoc.id; // మెసేజ్ యొక్క డాక్యుమెంట్ ఐడీ
                     bool isMe = msg['senderId'] == currentUid;
 
-                    return Container(
-                      alignment: isMe
-                          ? Alignment.centerRight
-                          : Alignment.centerLeft,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ),
+                    // టైమ్ కాలిక్యులేషన్
+                    String msgTime = "";
+                    if (msg['timestamp'] != null) {
+                      msgTime = timeago.format(
+                        (msg['timestamp'] as Timestamp).toDate(),
+                        locale: 'en_short',
+                      );
+                    }
+
+                    return GestureDetector(
+                      onLongPress: () {
+                        // నా మెసేజ్ అయితేనే లాంగ్ ప్రెస్ చేస్తే డిలీట్ ఆప్షన్ వస్తుంది!
+                        if (isMe) {
+                          showDialog(
+                            context: context,
+                            builder: (context) {
+                              return AlertDialog(
+                                title: const Text("Unsend Message"),
+                                content: const Text(
+                                  "Are you sure you want to unsed this message?",
+                                ),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () {
+                                      Navigator.pop(context);
+                                    },
+                                    child: const Text("Cancel"),
+                                  ),
+                                  ElevatedButton(
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.red,
+                                    ),
+                                    onPressed: () async {
+                                      await FirebaseFirestore.instance
+                                          .collection('chatRooms')
+                                          .doc(roomId)
+                                          .collection('messages')
+                                          .doc(msgId)
+                                          .delete();
+                                      if (!context.mounted) {
+                                        return;
+                                      }
+                                      Navigator.pop(context);
+                                    },
+                                    child: const Text(
+                                      "Unsend",
+                                      style: TextStyle(color: Colors.white),
+                                    ),
+                                  ),
+                                ],
+                              );
+                            },
+                          );
+                        }
+                      },
                       child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: isMe ? Colors.blue : Colors.grey[300],
-                          borderRadius: BorderRadius.circular(15),
+                        alignment: isMe
+                            ? Alignment.centerRight
+                            : Alignment.centerLeft,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 5,
                         ),
-                        child: Text(
-                          msg['message'],
-                          style: TextStyle(
-                            color: isMe ? Colors.white : Colors.black,
-                          ),
+                        child: Column(
+                          crossAxisAlignment: isMe
+                              ? CrossAxisAlignment.end
+                              : CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: isMe ? Colors.blue : Colors.grey[300],
+                                borderRadius: BorderRadius.circular(15),
+                              ),
+                              child: Text(
+                                msg['message'],
+                                style: TextStyle(
+                                  color: isMe ? Colors.white : Colors.black,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              msgTime,
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: Colors.grey,
+                              ),
+                            ), // టైమ్ ఇక్కడ కనిపిస్తుంది
+                          ],
                         ),
                       ),
                     );
