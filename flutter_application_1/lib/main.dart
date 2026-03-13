@@ -252,6 +252,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _showComments(String postId) {
     final TextEditingController commentController = TextEditingController();
+    final String currentUid =
+        FirebaseAuth.instance.currentUser!.uid; // కరెంట్ యూజర్ ఐడీ
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -293,7 +296,14 @@ class _HomeScreenState extends State<HomeScreen> {
                     return ListView.builder(
                       itemCount: snapshot.data!.docs.length,
                       itemBuilder: (context, index) {
-                        var comment = snapshot.data!.docs[index];
+                        var commentDoc = snapshot.data!.docs[index];
+                        var comment = commentDoc.data() as Map<String, dynamic>;
+                        String commentId =
+                            commentDoc.id; // కామెంట్ యొక్క డాక్యుమెంట్ ఐడీ
+                        bool isMyComment =
+                            comment['uid'] ==
+                            currentUid; // ఇది నా కామెంట్ అవునా కాదా?
+
                         String commentTime = "";
                         if (comment['timestamp'] != null) {
                           commentTime = timeago.format(
@@ -330,6 +340,34 @@ class _HomeScreenState extends State<HomeScreen> {
                             ],
                           ),
                           subtitle: Text(comment['text']),
+                          // 👇 ఇక్కడే మ్యాజిక్! నా కామెంట్ అయితే డిలీట్ ఐకాన్ చూపిస్తాం
+                          trailing: isMyComment
+                              ? IconButton(
+                                  icon: const Icon(
+                                    Icons.delete_outline,
+                                    size: 20,
+                                    color: Colors.red,
+                                  ),
+                                  onPressed: () async {
+                                    // 1. కామెంట్ ని డేటాబేస్ నుండి తీసేయడం
+                                    await FirebaseFirestore.instance
+                                        .collection('posts')
+                                        .doc(postId)
+                                        .collection('comments')
+                                        .doc(commentId)
+                                        .delete();
+                                    // 2. పోస్ట్ యొక్క కామెంట్ కౌంట్ ని 1 తగ్గించడం
+                                    await FirebaseFirestore.instance
+                                        .collection('posts')
+                                        .doc(postId)
+                                        .update({
+                                          "commentCount": FieldValue.increment(
+                                            -1,
+                                          ),
+                                        });
+                                  },
+                                )
+                              : null,
                         );
                       },
                     );
@@ -1229,7 +1267,6 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 }
 
-// --- 7. ఇతరుల ప్రొఫైల్ చూసే స్క్రీన్ (NEW LOGIC ఇక్కడే ఉంది 👇) ---
 class OtherUserProfileScreen extends StatelessWidget {
   final String uid;
   const OtherUserProfileScreen({super.key, required this.uid});
@@ -1396,11 +1433,9 @@ class OtherUserProfileScreen extends StatelessWidget {
               ),
               const Divider(),
 
-              // 👇 ఇక్కడ మనం "ప్రైవేట్ అకౌంట్ లాజిక్" యాడ్ చేశాం
               Expanded(
                 child: isFollowing
                     ? StreamBuilder<QuerySnapshot>(
-                        // ఫాలో అయితే పోస్టులు చూపిస్తాం
                         stream: FirebaseFirestore.instance
                             .collection('posts')
                             .where('ownerId', isEqualTo: uid)
@@ -1436,7 +1471,6 @@ class OtherUserProfileScreen extends StatelessWidget {
                         },
                       )
                     : Center(
-                        // ఫాలో అవ్వకపోతే ఈ మెసేజ్ చూపిస్తాం (Private Account Feel)
                         child: Column(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: const [
@@ -1771,5 +1805,27 @@ class _VideoReelItemState extends State<VideoReelItem> {
             child: VideoPlayer(_controller),
           )
         : const Center(child: CircularProgressIndicator(color: Colors.white));
+  }
+}
+
+class StoryWidget extends StatelessWidget {
+  final int index;
+  const StoryWidget({super.key, required this.index});
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(8),
+      child: Column(
+        children: [
+          CircleAvatar(
+            radius: 30,
+            backgroundImage: NetworkImage(
+              "https://picsum.photos/id/${index + 100}/100/100",
+            ),
+          ),
+          Text("User_$index"),
+        ],
+      ),
+    );
   }
 }
