@@ -99,6 +99,15 @@ class _MainNavigationState extends State<MainNavigation> {
         ),
         actions: [
           IconButton(
+            icon: const Icon(Icons.favorite_border),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const ActivityScreen()),
+              );
+            },
+          ),
+          IconButton(
             icon: const Icon(Icons.send_rounded),
             onPressed: () {
               Navigator.push(
@@ -106,10 +115,6 @@ class _MainNavigationState extends State<MainNavigation> {
                 MaterialPageRoute(builder: (context) => const InboxScreen()),
               );
             },
-          ),
-          IconButton(
-            icon: const Icon(Icons.brightness_6),
-            onPressed: widget.toggleTheme,
           ),
           IconButton(
             icon: const Icon(Icons.logout),
@@ -156,6 +161,7 @@ class _PostWidgetState extends State<PostWidget> {
   void _showComments(BuildContext context, String postId) {
     final TextEditingController commentController = TextEditingController();
     final String currentUid = FirebaseAuth.instance.currentUser!.uid;
+    final String currentEmail = FirebaseAuth.instance.currentUser!.email!;
 
     showModalBottomSheet(
       context: context,
@@ -353,18 +359,27 @@ class _PostWidgetState extends State<PostWidget> {
                             .collection('comments')
                             .add({
                               "text": commentController.text.trim(),
-                              "username": FirebaseAuth
-                                  .instance
-                                  .currentUser!
-                                  .email!
-                                  .split('@')[0],
+                              "username": currentEmail.split('@')[0],
                               "timestamp": FieldValue.serverTimestamp(),
-                              "uid": FirebaseAuth.instance.currentUser!.uid,
+                              "uid": currentUid,
                             });
                         await FirebaseFirestore.instance
                             .collection('posts')
                             .doc(postId)
                             .update({"commentCount": FieldValue.increment(1)});
+
+                        if (widget.post['ownerId'] != currentUid) {
+                          await FirebaseFirestore.instance
+                              .collection('notifications')
+                              .add({
+                                "receiverId": widget.post['ownerId'],
+                                "senderId": currentUid,
+                                "senderName": currentEmail.split('@')[0],
+                                "type": "comment",
+                                "timestamp": FieldValue.serverTimestamp(),
+                              });
+                        }
+
                         commentController.clear();
                       }
                     },
@@ -385,9 +400,7 @@ class _PostWidgetState extends State<PostWidget> {
       builder: (context) {
         return AlertDialog(
           title: const Text("Delete Post"),
-          content: const Text(
-            "Are you sure you want to delete this post? This action cannot be undone.",
-          ),
+          content: const Text("Are you sure you want to delete this post?"),
           actions: [
             TextButton(
               onPressed: () {
@@ -419,6 +432,34 @@ class _PostWidgetState extends State<PostWidget> {
         );
       },
     );
+  }
+
+  void _handleLike() async {
+    String postId = widget.post['postId'];
+    String currentUid = FirebaseAuth.instance.currentUser!.uid;
+    String currentEmail = FirebaseAuth.instance.currentUser!.email!;
+    bool isLiked =
+        widget.post['likes'] != null &&
+        widget.post['likes'][currentUid] == true;
+
+    if (!isLiked) {
+      await FirebaseFirestore.instance.collection('posts').doc(postId).update({
+        "likes.$currentUid": true,
+      });
+      if (widget.post['ownerId'] != currentUid) {
+        await FirebaseFirestore.instance.collection('notifications').add({
+          "receiverId": widget.post['ownerId'],
+          "senderId": currentUid,
+          "senderName": currentEmail.split('@')[0],
+          "type": "like",
+          "timestamp": FieldValue.serverTimestamp(),
+        });
+      }
+    } else {
+      await FirebaseFirestore.instance.collection('posts').doc(postId).update({
+        "likes.$currentUid": FieldValue.delete(),
+      });
+    }
   }
 
   @override
@@ -479,11 +520,12 @@ class _PostWidgetState extends State<PostWidget> {
             }
           },
         ),
+
         GestureDetector(
           onDoubleTap: () async {
-            FirebaseFirestore.instance.collection('posts').doc(postId).update({
-              "likes.$currentUid": true,
-            });
+            if (!isLiked) {
+              _handleLike();
+            }
             setState(() {
               isLikeAnimating = true;
             });
@@ -520,6 +562,7 @@ class _PostWidgetState extends State<PostWidget> {
             ],
           ),
         ),
+
         Row(
           children: [
             IconButton(
@@ -527,14 +570,7 @@ class _PostWidgetState extends State<PostWidget> {
                 isLiked ? Icons.favorite : Icons.favorite_border,
                 color: isLiked ? Colors.red : null,
               ),
-              onPressed: () {
-                FirebaseFirestore.instance
-                    .collection('posts')
-                    .doc(postId)
-                    .update({
-                      "likes.$currentUid": isLiked ? FieldValue.delete() : true,
-                    });
-              },
+              onPressed: _handleLike,
             ),
             Text(
               "$likeCount",
@@ -551,7 +587,6 @@ class _PostWidgetState extends State<PostWidget> {
               "$commentCount",
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
-
             const Spacer(),
             IconButton(
               icon: Icon(
@@ -601,9 +636,111 @@ class _PostWidgetState extends State<PostWidget> {
   }
 }
 
-// ============================================================================
-// 🌟 NEW: THE STORY VIEWER SCREEN (తాత్కాలిక సాక్ష్యం 5 సెకన్లలో క్లోజ్ అవుతుంది) 🌟
-// ============================================================================
+class ActivityScreen extends StatelessWidget {
+  const ActivityScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    String currentUid = FirebaseAuth.instance.currentUser!.uid;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          "Notifications",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+      ),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('notifications')
+            .where('receiverId', isEqualTo: currentUid)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return const Center(
+              child: Text(
+                "No new notifications 🔔",
+                style: TextStyle(color: Colors.grey),
+              ),
+            );
+          }
+
+          var docs = snapshot.data!.docs;
+          docs.sort((a, b) {
+            Timestamp? tA =
+                (a.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
+            Timestamp? tB =
+                (b.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
+            if (tA == null || tB == null) return 0;
+            return tB.compareTo(tA);
+          });
+
+          return ListView.builder(
+            itemCount: docs.length,
+            itemBuilder: (context, index) {
+              var notif = docs[index].data() as Map<String, dynamic>;
+              String type = notif['type'] ?? "";
+              String senderName = notif['senderName'] ?? "Someone";
+
+              String timeAgo = "";
+              if (notif['timestamp'] != null) {
+                timeAgo = timeago.format(
+                  (notif['timestamp'] as Timestamp).toDate(),
+                  locale: 'en_short',
+                );
+              }
+
+              String message = "";
+              IconData icon = Icons.notifications;
+              Color iconColor = Colors.blue;
+
+              if (type == 'like') {
+                message = "liked your post.";
+                icon = Icons.favorite;
+                iconColor = Colors.red;
+              } else if (type == 'comment') {
+                message = "commented on your post.";
+                icon = Icons.comment;
+                iconColor = Colors.green;
+              } else if (type == 'follow') {
+                message = "started following you.";
+                icon = Icons.person_add;
+                iconColor = Colors.blue;
+              }
+
+              return ListTile(
+                leading: CircleAvatar(
+                  backgroundColor: Colors.grey[200],
+                  child: Icon(icon, color: iconColor, size: 20),
+                ),
+                title: RichText(
+                  text: TextSpan(
+                    style: DefaultTextStyle.of(context).style,
+                    children: [
+                      TextSpan(
+                        text: "$senderName ",
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      TextSpan(text: message),
+                    ],
+                  ),
+                ),
+                trailing: Text(
+                  timeAgo,
+                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
 class StoryScreen extends StatefulWidget {
   final Map<String, dynamic> user;
   const StoryScreen({super.key, required this.user});
@@ -619,7 +756,6 @@ class _StoryScreenState extends State<StoryScreen>
   @override
   void initState() {
     super.initState();
-    // 5 సెకన్ల టైమర్
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 5),
@@ -628,12 +764,11 @@ class _StoryScreenState extends State<StoryScreen>
       setState(() {});
     });
     _controller.addStatusListener((status) {
-      // యానిమేషన్ అవ్వగానే పేజీ ఆటోమేటిక్ గా క్లోజ్ అవుతుంది
       if (status == AnimationStatus.completed) {
         Navigator.pop(context);
       }
     });
-    _controller.forward(); // ప్లే స్టార్ట్
+    _controller.forward();
   }
 
   @override
@@ -645,13 +780,11 @@ class _StoryScreenState extends State<StoryScreen>
   @override
   Widget build(BuildContext context) {
     String profilePic = widget.user['profilePic'] ?? "";
-
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
         child: Stack(
           children: [
-            // 1. స్టోరీ ఇమేజ్
             Center(
               child: profilePic.isNotEmpty
                   ? Image.memory(
@@ -661,8 +794,6 @@ class _StoryScreenState extends State<StoryScreen>
                     )
                   : const Icon(Icons.person, size: 200, color: Colors.white),
             ),
-
-            // 2. ప్రోగ్రెస్ బార్ (పైన రన్ అయ్యే గీత)
             Positioned(
               top: 10,
               left: 10,
@@ -676,8 +807,6 @@ class _StoryScreenState extends State<StoryScreen>
                 ),
               ),
             ),
-
-            // 3. యూజర్ వివరాలు
             Positioned(
               top: 30,
               left: 10,
@@ -708,8 +837,6 @@ class _StoryScreenState extends State<StoryScreen>
                 ],
               ),
             ),
-
-            // క్లోజ్ బటన్ (ఒకవేళ 5 సెకన్ల కంటే ముందే క్లోజ్ చేయాలంటే)
             Positioned(
               top: 30,
               right: 10,
@@ -726,7 +853,6 @@ class _StoryScreenState extends State<StoryScreen>
     );
   }
 }
-// ============================================================================
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -866,7 +992,6 @@ class _HomeScreenState extends State<HomeScreen> {
                     String username = user['username'] ?? "User";
 
                     return GestureDetector(
-                      // 👇 ఇక్కడ మనం "StoryScreen" కి లింక్ ఇచ్చాం
                       onTap: () {
                         Navigator.push(
                           context,
@@ -1415,6 +1540,7 @@ class OtherUserProfileScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final String currentUid = FirebaseAuth.instance.currentUser!.uid;
+    final String currentEmail = FirebaseAuth.instance.currentUser!.email!;
 
     return Scaffold(
       appBar: AppBar(
@@ -1616,6 +1742,16 @@ class OtherUserProfileScreen extends StatelessWidget {
                                     .doc(currentUid)
                                     .update({
                                       'following': FieldValue.arrayUnion([uid]),
+                                    });
+
+                                await FirebaseFirestore.instance
+                                    .collection('notifications')
+                                    .add({
+                                      "receiverId": uid,
+                                      "senderId": currentUid,
+                                      "senderName": currentEmail.split('@')[0],
+                                      "type": "follow",
+                                      "timestamp": FieldValue.serverTimestamp(),
                                     });
                               }
                             },
@@ -2351,7 +2487,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
-// --- 11. రీల్స్ & విడ్జెట్స్ (ఇది కట్ అయిపోయింది) ---
 class ReelsScreen extends StatelessWidget {
   const ReelsScreen({super.key});
   @override
@@ -2435,5 +2570,27 @@ class _VideoReelItemState extends State<VideoReelItem> {
             child: VideoPlayer(_controller),
           )
         : const Center(child: CircularProgressIndicator(color: Colors.white));
+  }
+}
+
+class StoryWidget extends StatelessWidget {
+  final int index;
+  const StoryWidget({super.key, required this.index});
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.all(8),
+      child: Column(
+        children: [
+          CircleAvatar(
+            radius: 30,
+            backgroundImage: NetworkImage(
+              "https://picsum.photos/id/${index + 100}/100/100",
+            ),
+          ),
+          Text("User_$index"),
+        ],
+      ),
+    );
   }
 }
