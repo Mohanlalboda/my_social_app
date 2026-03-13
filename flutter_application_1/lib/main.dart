@@ -371,7 +371,6 @@ class _PostWidgetState extends State<PostWidget> {
     return a.hashCode <= b.hashCode ? "${a}_$b" : "${b}_$a";
   }
 
-  // 🌟 FIX: అప్‌డేటెడ్ షేర్ మెనూ (వార్నింగ్స్ లేకుండా)
   void _sharePostMenu() {
     showModalBottomSheet(
       context: context,
@@ -404,7 +403,7 @@ class _PostWidgetState extends State<PostWidget> {
                   Navigator.pop(context);
                   String caption = widget.post['caption'] ?? "";
                   String username = widget.post['username'] ?? "User";
-                  // 👇 FIX: Latest static share calling
+                  // FIX: share static method call to avoid warning
                   Share.share(
                     "Check out this post by $username on MyBanjara! ✨\n\n$caption",
                   );
@@ -464,16 +463,20 @@ class _PostWidgetState extends State<PostWidget> {
                                 currentUid,
                                 user['uid'],
                               );
-                              String shareMsg =
-                                  "Shared a post: ${widget.post['caption'] ?? ''}";
 
+                              // 👇 🌟 ఇప్పుడు పోస్ట్ డేటా మొత్తాన్ని పంపుతున్నాం
                               await FirebaseFirestore.instance
                                   .collection('chatRooms')
                                   .doc(roomId)
                                   .collection('messages')
                                   .add({
                                     "senderId": currentUid,
-                                    "message": shareMsg,
+                                    "message":
+                                        widget.post['caption'] ??
+                                        "Shared a post",
+                                    "type": "post", // మెసేజ్ టైప్ 'post'
+                                    "sharedPostId": widget.post['postId'],
+                                    "sharedPostData": widget.post['postData'],
                                     "timestamp": FieldValue.serverTimestamp(),
                                   });
 
@@ -481,7 +484,7 @@ class _PostWidgetState extends State<PostWidget> {
                                   .collection('chatRooms')
                                   .doc(roomId)
                                   .set({
-                                    "lastMessage": shareMsg,
+                                    "lastMessage": "Sent a post 📸",
                                     "lastTime": FieldValue.serverTimestamp(),
                                     "users": [currentUid, user['uid']],
                                   }, SetOptions(merge: true));
@@ -546,7 +549,8 @@ class _PostWidgetState extends State<PostWidget> {
           ListTile(
             leading: CircleAvatar(
               child: Text(
-                widget.post['username'] != null
+                widget.post['username'] != null &&
+                        widget.post['username'].isNotEmpty
                     ? widget.post['username'][0].toUpperCase()
                     : "U",
               ),
@@ -1193,6 +1197,9 @@ class InboxScreen extends StatelessWidget {
   }
 }
 
+// ============================================================================
+// 🌟 UPDATED: CHAT SCREEN WITH POST PREVIEW 👇 🌟
+// ============================================================================
 class ChatScreen extends StatefulWidget {
   final String receiverId;
   final String receiverName;
@@ -1224,6 +1231,7 @@ class _ChatScreenState extends State<ChatScreen> {
           .add({
             "senderId": senderId,
             "message": msg,
+            "type": "text",
             "timestamp": FieldValue.serverTimestamp(),
           });
       await FirebaseFirestore.instance.collection('chatRooms').doc(roomId).set({
@@ -1266,12 +1274,15 @@ class _ChatScreenState extends State<ChatScreen> {
                   itemBuilder: (context, index) {
                     var data = docs[index].data() as Map<String, dynamic>;
                     bool isMe = data['senderId'] == currentUid;
+                    bool isPost =
+                        data['type'] == 'post'; // పోస్ట్ అవునో కాదో చెక్
                     String timeStr = data['timestamp'] != null
                         ? timeago.format(
                             (data['timestamp'] as Timestamp).toDate(),
                             locale: 'en_short',
                           )
                         : "";
+
                     return Align(
                       alignment: isMe
                           ? Alignment.centerRight
@@ -1281,31 +1292,55 @@ class _ChatScreenState extends State<ChatScreen> {
                             ? CrossAxisAlignment.end
                             : CrossAxisAlignment.start,
                         children: [
-                          Container(
-                            margin: const EdgeInsets.symmetric(
-                              vertical: 2,
-                              horizontal: 10,
-                            ),
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: isMe
-                                  ? Colors.indigoAccent
-                                  : Colors.grey[200],
-                              borderRadius: BorderRadius.only(
-                                topLeft: const Radius.circular(15),
-                                topRight: const Radius.circular(15),
-                                bottomLeft: isMe
-                                    ? const Radius.circular(15)
-                                    : const Radius.circular(0),
-                                bottomRight: isMe
-                                    ? const Radius.circular(0)
-                                    : const Radius.circular(15),
+                          GestureDetector(
+                            onTap: isPost
+                                ? () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => PostDetailsScreen(
+                                          postId: data['sharedPostId'],
+                                        ),
+                                      ),
+                                    );
+                                  }
+                                : null,
+                            child: Container(
+                              margin: const EdgeInsets.symmetric(
+                                vertical: 2,
+                                horizontal: 10,
                               ),
-                            ),
-                            child: Text(
-                              data['message'],
-                              style: TextStyle(
-                                color: isMe ? Colors.white : Colors.black,
+                              padding: const EdgeInsets.all(12),
+                              decoration: BoxDecoration(
+                                color: isMe
+                                    ? Colors.indigoAccent
+                                    : Colors.grey[200],
+                                borderRadius: BorderRadius.circular(15),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // 👇 పోస్ట్ అయితే ఇమేజ్ చూపిస్తుంది
+                                  if (isPost &&
+                                      data['sharedPostData'] != null) ...[
+                                    ClipRRect(
+                                      borderRadius: BorderRadius.circular(10),
+                                      child: Image.memory(
+                                        base64Decode(data['sharedPostData']),
+                                        height: 200,
+                                        width: 200,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 5),
+                                  ],
+                                  Text(
+                                    data['message'],
+                                    style: TextStyle(
+                                      color: isMe ? Colors.white : Colors.black,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
@@ -1798,7 +1833,10 @@ class OtherUserProfileScreen extends StatelessWidget {
                               ? MemoryImage(base64Decode(profilePic))
                               : null,
                           child: profilePic.isEmpty
-                              ? Text(name[0].toUpperCase())
+                              ? Text(
+                                  name[0].toUpperCase(),
+                                  style: const TextStyle(fontSize: 24),
+                                )
                               : null,
                         ),
                         Expanded(
