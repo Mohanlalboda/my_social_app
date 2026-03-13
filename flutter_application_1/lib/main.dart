@@ -6,7 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:timeago/timeago.dart' as timeago; // 👈 టైమ్ కోసం కొత్త ప్యాకేజీ
+import 'package:timeago/timeago.dart' as timeago;
 import 'firebase_options.dart';
 
 void main() async {
@@ -294,8 +294,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       itemCount: snapshot.data!.docs.length,
                       itemBuilder: (context, index) {
                         var comment = snapshot.data!.docs[index];
-
-                        // 👇 కామెంట్స్ కి కూడా టైమ్ చూపిద్దాం
                         String commentTime = "";
                         if (comment['timestamp'] != null) {
                           commentTime = timeago.format(
@@ -518,7 +516,6 @@ class _HomeScreenState extends State<HomeScreen> {
                           int commentCount = post['commentCount'] ?? 0;
                           String caption = post['caption'] ?? "";
 
-                          // 👇 టైమ్ క్యాలిక్యులేషన్ లాజిక్ (Time Ago)
                           String timeAgo = "Just now";
                           if (post['timestamp'] != null) {
                             timeAgo = timeago.format(
@@ -547,7 +544,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     fontSize: 12,
                                     color: Colors.grey,
                                   ),
-                                ), // 👈 ఇక్కడ Time Ago వస్తుంది
+                                ),
                                 trailing: post['ownerId'] == currentUid
                                     ? IconButton(
                                         icon: const Icon(
@@ -632,7 +629,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                 ],
                               ),
-
                               if (caption.isNotEmpty)
                                 Padding(
                                   padding: const EdgeInsets.symmetric(
@@ -654,7 +650,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ),
                                   ),
                                 ),
-
                               const SizedBox(height: 10),
                               const Divider(),
                             ],
@@ -670,7 +665,6 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// --- 4. ప్రొఫైల్ స్క్రీన్ ---
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
   @override
@@ -1235,6 +1229,7 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 }
 
+// --- 7. ఇతరుల ప్రొఫైల్ చూసే స్క్రీన్ (NEW LOGIC ఇక్కడే ఉంది 👇) ---
 class OtherUserProfileScreen extends StatelessWidget {
   final String uid;
   const OtherUserProfileScreen({super.key, required this.uid});
@@ -1400,40 +1395,72 @@ class OtherUserProfileScreen extends StatelessWidget {
                 ),
               ),
               const Divider(),
+
+              // 👇 ఇక్కడ మనం "ప్రైవేట్ అకౌంట్ లాజిక్" యాడ్ చేశాం
               Expanded(
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('posts')
-                      .where('ownerId', isEqualTo: uid)
-                      .snapshots(),
-                  builder: (context, postSnapshot) {
-                    if (!postSnapshot.hasData) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-                    if (postSnapshot.data!.docs.isEmpty) {
-                      return const Center(child: Text("No posts yet 📸"));
-                    }
-                    return GridView.builder(
-                      padding: const EdgeInsets.all(2),
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 3,
-                            crossAxisSpacing: 2,
-                            mainAxisSpacing: 2,
-                          ),
-                      itemCount: postSnapshot.data!.docs.length,
-                      itemBuilder: (context, index) {
-                        var post =
-                            postSnapshot.data!.docs[index].data()
-                                as Map<String, dynamic>;
-                        return Image.memory(
-                          base64Decode(post['postData']),
-                          fit: BoxFit.cover,
-                        );
-                      },
-                    );
-                  },
-                ),
+                child: isFollowing
+                    ? StreamBuilder<QuerySnapshot>(
+                        // ఫాలో అయితే పోస్టులు చూపిస్తాం
+                        stream: FirebaseFirestore.instance
+                            .collection('posts')
+                            .where('ownerId', isEqualTo: uid)
+                            .snapshots(),
+                        builder: (context, postSnapshot) {
+                          if (!postSnapshot.hasData) {
+                            return const Center(
+                              child: CircularProgressIndicator(),
+                            );
+                          }
+                          if (postSnapshot.data!.docs.isEmpty) {
+                            return const Center(child: Text("No posts yet 📸"));
+                          }
+                          return GridView.builder(
+                            padding: const EdgeInsets.all(2),
+                            gridDelegate:
+                                const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 3,
+                                  crossAxisSpacing: 2,
+                                  mainAxisSpacing: 2,
+                                ),
+                            itemCount: postSnapshot.data!.docs.length,
+                            itemBuilder: (context, index) {
+                              var post =
+                                  postSnapshot.data!.docs[index].data()
+                                      as Map<String, dynamic>;
+                              return Image.memory(
+                                base64Decode(post['postData']),
+                                fit: BoxFit.cover,
+                              );
+                            },
+                          );
+                        },
+                      )
+                    : Center(
+                        // ఫాలో అవ్వకపోతే ఈ మెసేజ్ చూపిస్తాం (Private Account Feel)
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: const [
+                            Icon(
+                              Icons.lock_outline,
+                              size: 60,
+                              color: Colors.grey,
+                            ),
+                            SizedBox(height: 10),
+                            Text(
+                              "This account is private",
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            SizedBox(height: 5),
+                            Text(
+                              "Follow to see their photos and videos.",
+                              style: TextStyle(color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                      ),
               ),
             ],
           );
@@ -1744,27 +1771,5 @@ class _VideoReelItemState extends State<VideoReelItem> {
             child: VideoPlayer(_controller),
           )
         : const Center(child: CircularProgressIndicator(color: Colors.white));
-  }
-}
-
-class StoryWidget extends StatelessWidget {
-  final int index;
-  const StoryWidget({super.key, required this.index});
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(8),
-      child: Column(
-        children: [
-          CircleAvatar(
-            radius: 30,
-            backgroundImage: NetworkImage(
-              "https://picsum.photos/id/${index + 100}/100/100",
-            ),
-          ),
-          Text("User_$index"),
-        ],
-      ),
-    );
   }
 }
