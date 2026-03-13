@@ -15,7 +15,6 @@ void main() async {
   runApp(const MySocialApp());
 }
 
-// --- 1. రూట్ యాప్ ---
 class MySocialApp extends StatefulWidget {
   const MySocialApp({super.key});
   @override
@@ -65,7 +64,6 @@ class _MySocialAppState extends State<MySocialApp> {
   }
 }
 
-// --- 2. మెయిన్ నావిగేషన్ ---
 class MainNavigation extends StatefulWidget {
   final VoidCallback toggleTheme;
   const MainNavigation({super.key, required this.toggleTheme});
@@ -144,9 +142,6 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 }
 
-// ============================================================================
-// 🌟 THE POST WIDGET (ANIMATION జోడించబడింది 👇) 🌟
-// ============================================================================
 class PostWidget extends StatefulWidget {
   final Map<String, dynamic> post;
   const PostWidget({super.key, required this.post});
@@ -156,7 +151,7 @@ class PostWidget extends StatefulWidget {
 }
 
 class _PostWidgetState extends State<PostWidget> {
-  bool isLikeAnimating = false; // 👈 ఈ వేరియబుల్ యానిమేషన్ కంట్రోల్ చేస్తుంది
+  bool isLikeAnimating = false;
 
   void _showComments(BuildContext context, String postId) {
     final TextEditingController commentController = TextEditingController();
@@ -484,22 +479,18 @@ class _PostWidgetState extends State<PostWidget> {
             }
           },
         ),
-
-        // 👇 యానిమేషన్ లాజిక్ ఇక్కడే ఉంది!
         GestureDetector(
           onDoubleTap: () async {
             FirebaseFirestore.instance.collection('posts').doc(postId).update({
               "likes.$currentUid": true,
-            }); // లైక్
-            setState(() {
-              isLikeAnimating = true; // హార్ట్ కనపడాలి
             });
-            await Future.delayed(
-              const Duration(milliseconds: 800),
-            ); // 0.8 సెకండ్లు ఆగి...
+            setState(() {
+              isLikeAnimating = true;
+            });
+            await Future.delayed(const Duration(milliseconds: 800));
             if (mounted) {
               setState(() {
-                isLikeAnimating = false; // హార్ట్ మాయం అవ్వాలి
+                isLikeAnimating = false;
               });
             }
           },
@@ -512,8 +503,6 @@ class _PostWidgetState extends State<PostWidget> {
                 width: double.infinity,
                 fit: BoxFit.cover,
               ),
-
-              // దానంతట అదే కనపడి, మాయమయ్యే యానిమేషన్
               AnimatedOpacity(
                 opacity: isLikeAnimating ? 1.0 : 0.0,
                 duration: const Duration(milliseconds: 200),
@@ -524,16 +513,13 @@ class _PostWidgetState extends State<PostWidget> {
                     Icons.favorite,
                     color: Colors.white,
                     size: 120,
-                    shadows: [
-                      Shadow(color: Colors.black45, blurRadius: 20),
-                    ], // రియల్ ఎఫెక్ట్ కోసం షాడో
+                    shadows: [Shadow(color: Colors.black45, blurRadius: 20)],
                   ),
                 ),
               ),
             ],
           ),
         ),
-
         Row(
           children: [
             IconButton(
@@ -611,6 +597,132 @@ class _PostWidgetState extends State<PostWidget> {
         const SizedBox(height: 10),
         const Divider(),
       ],
+    );
+  }
+}
+
+// ============================================================================
+// 🌟 NEW: THE STORY VIEWER SCREEN (తాత్కాలిక సాక్ష్యం 5 సెకన్లలో క్లోజ్ అవుతుంది) 🌟
+// ============================================================================
+class StoryScreen extends StatefulWidget {
+  final Map<String, dynamic> user;
+  const StoryScreen({super.key, required this.user});
+
+  @override
+  State<StoryScreen> createState() => _StoryScreenState();
+}
+
+class _StoryScreenState extends State<StoryScreen>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    // 5 సెకన్ల టైమర్
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 5),
+    );
+    _controller.addListener(() {
+      setState(() {});
+    });
+    _controller.addStatusListener((status) {
+      // యానిమేషన్ అవ్వగానే పేజీ ఆటోమేటిక్ గా క్లోజ్ అవుతుంది
+      if (status == AnimationStatus.completed) {
+        Navigator.pop(context);
+      }
+    });
+    _controller.forward(); // ప్లే స్టార్ట్
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    String profilePic = widget.user['profilePic'] ?? "";
+
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Stack(
+          children: [
+            // 1. స్టోరీ ఇమేజ్
+            Center(
+              child: profilePic.isNotEmpty
+                  ? Image.memory(
+                      base64Decode(profilePic),
+                      fit: BoxFit.contain,
+                      width: double.infinity,
+                    )
+                  : const Icon(Icons.person, size: 200, color: Colors.white),
+            ),
+
+            // 2. ప్రోగ్రెస్ బార్ (పైన రన్ అయ్యే గీత)
+            Positioned(
+              top: 10,
+              left: 10,
+              right: 10,
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: LinearProgressIndicator(
+                  value: _controller.value,
+                  backgroundColor: Colors.grey[800],
+                  valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+                ),
+              ),
+            ),
+
+            // 3. యూజర్ వివరాలు
+            Positioned(
+              top: 30,
+              left: 10,
+              child: Row(
+                children: [
+                  CircleAvatar(
+                    radius: 20,
+                    backgroundColor: Colors.grey,
+                    backgroundImage: profilePic.isNotEmpty
+                        ? MemoryImage(base64Decode(profilePic))
+                        : null,
+                    child: profilePic.isEmpty
+                        ? Text(
+                            widget.user['username'][0].toUpperCase(),
+                            style: const TextStyle(color: Colors.black),
+                          )
+                        : null,
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    widget.user['username'],
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // క్లోజ్ బటన్ (ఒకవేళ 5 సెకన్ల కంటే ముందే క్లోజ్ చేయాలంటే)
+            Positioned(
+              top: 30,
+              right: 10,
+              child: IconButton(
+                icon: const Icon(Icons.close, color: Colors.white),
+                onPressed: () {
+                  Navigator.pop(context);
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -753,37 +865,48 @@ class _HomeScreenState extends State<HomeScreen> {
                     String profilePic = user['profilePic'] ?? "";
                     String username = user['username'] ?? "User";
 
-                    return Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: Column(
-                        children: [
-                          CircleAvatar(
-                            radius: 35,
-                            backgroundColor: Colors.pink,
-                            child: CircleAvatar(
-                              radius: 32,
-                              backgroundColor: Colors.grey[300],
-                              backgroundImage: profilePic.isNotEmpty
-                                  ? MemoryImage(base64Decode(profilePic))
-                                  : null,
-                              child: profilePic.isEmpty
-                                  ? Text(
-                                      username[0].toUpperCase(),
-                                      style: const TextStyle(
-                                        color: Colors.black,
-                                      ),
-                                    )
-                                  : null,
+                    return GestureDetector(
+                      // 👇 ఇక్కడ మనం "StoryScreen" కి లింక్ ఇచ్చాం
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => StoryScreen(user: user),
+                          ),
+                        );
+                      },
+                      child: Padding(
+                        padding: const EdgeInsets.all(8.0),
+                        child: Column(
+                          children: [
+                            CircleAvatar(
+                              radius: 35,
+                              backgroundColor: Colors.pink,
+                              child: CircleAvatar(
+                                radius: 32,
+                                backgroundColor: Colors.grey[300],
+                                backgroundImage: profilePic.isNotEmpty
+                                    ? MemoryImage(base64Decode(profilePic))
+                                    : null,
+                                child: profilePic.isEmpty
+                                    ? Text(
+                                        username[0].toUpperCase(),
+                                        style: const TextStyle(
+                                          color: Colors.black,
+                                        ),
+                                      )
+                                    : null,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 5),
-                          Text(
-                            username.length > 10
-                                ? "${username.substring(0, 8)}..."
-                                : username,
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                        ],
+                            const SizedBox(height: 5),
+                            Text(
+                              username.length > 10
+                                  ? "${username.substring(0, 8)}..."
+                                  : username,
+                              style: const TextStyle(fontSize: 12),
+                            ),
+                          ],
+                        ),
                       ),
                     );
                   },
@@ -2228,6 +2351,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
+// --- 11. రీల్స్ & విడ్జెట్స్ (ఇది కట్ అయిపోయింది) ---
 class ReelsScreen extends StatelessWidget {
   const ReelsScreen({super.key});
   @override
@@ -2311,27 +2435,5 @@ class _VideoReelItemState extends State<VideoReelItem> {
             child: VideoPlayer(_controller),
           )
         : const Center(child: CircularProgressIndicator(color: Colors.white));
-  }
-}
-
-class StoryWidget extends StatelessWidget {
-  final int index;
-  const StoryWidget({super.key, required this.index});
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(8),
-      child: Column(
-        children: [
-          CircleAvatar(
-            radius: 30,
-            backgroundImage: NetworkImage(
-              "https://picsum.photos/id/${index + 100}/100/100",
-            ),
-          ),
-          Text("User_$index"),
-        ],
-      ),
-    );
   }
 }
