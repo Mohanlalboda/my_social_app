@@ -6,6 +6,8 @@ import 'package:image_picker/image_picker.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:timeago/timeago.dart'
+    as timeago; // 👈 ఇక్కడ మనం కొత్త ప్యాకేజీని తెచ్చుకున్నాం
 import 'firebase_options.dart';
 
 void main() async {
@@ -498,6 +500,14 @@ class _HomeScreenState extends State<HomeScreen> {
                           int commentCount = post['commentCount'] ?? 0;
                           String caption = post['caption'] ?? "";
 
+                          // 👇 టైమ్ ని కాలిక్యులేట్ చేస్తున్నాం
+                          String timeAgo = "Just now";
+                          if (post['timestamp'] != null) {
+                            timeAgo = timeago.format(
+                              (post['timestamp'] as Timestamp).toDate(),
+                            );
+                          }
+
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -513,6 +523,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                     fontWeight: FontWeight.bold,
                                   ),
                                 ),
+                                subtitle: Text(
+                                  timeAgo,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey,
+                                  ),
+                                ), // 👈 ఇక్కడ Time చూపిస్తాం
                                 trailing: post['ownerId'] == currentUid
                                     ? IconButton(
                                         icon: const Icon(
@@ -538,15 +555,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                   }
                                 },
                               ),
-
-                              // 👇 ఇక్కడే మనం మార్పు చేసాం (Double Tap Like & Unlike Logic)
                               GestureDetector(
                                 onDoubleTap: () {
                                   FirebaseFirestore.instance
                                       .collection('posts')
                                       .doc(postId)
                                       .update({
-                                        // ఇక్కడ "isLiked" చెక్ చేస్తున్నాం. ఉంటే తీసేస్తుంది (delete), లేకపోతే లైక్ చేస్తుంది (true).
                                         "likes.$currentUid": isLiked
                                             ? FieldValue.delete()
                                             : true,
@@ -559,7 +573,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                   fit: BoxFit.cover,
                                 ),
                               ),
-
                               Row(
                                 children: [
                                   IconButton(
@@ -601,7 +614,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                 ],
                               ),
-
                               if (caption.isNotEmpty)
                                 Padding(
                                   padding: const EdgeInsets.symmetric(
@@ -623,7 +635,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ),
                                   ),
                                 ),
-
                               const SizedBox(height: 10),
                               const Divider(),
                             ],
@@ -1693,6 +1704,7 @@ class VideoReelItem extends StatefulWidget {
 
 class _VideoReelItemState extends State<VideoReelItem> {
   late VideoPlayerController _controller;
+
   @override
   void initState() {
     super.initState();
