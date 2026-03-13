@@ -6,8 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:timeago/timeago.dart'
-    as timeago; // 👈 ఇక్కడ మనం కొత్త ప్యాకేజీని తెచ్చుకున్నాం
+import 'package:timeago/timeago.dart' as timeago; // 👈 టైమ్ కోసం కొత్త ప్యాకేజీ
 import 'firebase_options.dart';
 
 void main() async {
@@ -16,7 +15,6 @@ void main() async {
   runApp(const MySocialApp());
 }
 
-// --- 1. రూట్ యాప్ ---
 class MySocialApp extends StatefulWidget {
   const MySocialApp({super.key});
   @override
@@ -66,7 +64,6 @@ class _MySocialAppState extends State<MySocialApp> {
   }
 }
 
-// --- 2. మెయిన్ నావిగేషన్ ---
 class MainNavigation extends StatefulWidget {
   final VoidCallback toggleTheme;
   const MainNavigation({super.key, required this.toggleTheme});
@@ -145,7 +142,6 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 }
 
-// --- 3. హోమ్ స్క్రీన్ ---
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
   @override
@@ -298,6 +294,16 @@ class _HomeScreenState extends State<HomeScreen> {
                       itemCount: snapshot.data!.docs.length,
                       itemBuilder: (context, index) {
                         var comment = snapshot.data!.docs[index];
+
+                        // 👇 కామెంట్స్ కి కూడా టైమ్ చూపిద్దాం
+                        String commentTime = "";
+                        if (comment['timestamp'] != null) {
+                          commentTime = timeago.format(
+                            (comment['timestamp'] as Timestamp).toDate(),
+                            locale: 'en_short',
+                          );
+                        }
+
                         return ListTile(
                           leading: CircleAvatar(
                             radius: 15,
@@ -306,12 +312,24 @@ class _HomeScreenState extends State<HomeScreen> {
                               style: const TextStyle(fontSize: 12),
                             ),
                           ),
-                          title: Text(
-                            comment['username'],
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
+                          title: Row(
+                            children: [
+                              Text(
+                                comment['username'],
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 14,
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                commentTime,
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  color: Colors.grey,
+                                ),
+                              ),
+                            ],
                           ),
                           subtitle: Text(comment['text']),
                         );
@@ -500,7 +518,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           int commentCount = post['commentCount'] ?? 0;
                           String caption = post['caption'] ?? "";
 
-                          // 👇 టైమ్ ని కాలిక్యులేట్ చేస్తున్నాం
+                          // 👇 టైమ్ క్యాలిక్యులేషన్ లాజిక్ (Time Ago)
                           String timeAgo = "Just now";
                           if (post['timestamp'] != null) {
                             timeAgo = timeago.format(
@@ -529,7 +547,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     fontSize: 12,
                                     color: Colors.grey,
                                   ),
-                                ), // 👈 ఇక్కడ Time చూపిస్తాం
+                                ), // 👈 ఇక్కడ Time Ago వస్తుంది
                                 trailing: post['ownerId'] == currentUid
                                     ? IconButton(
                                         icon: const Icon(
@@ -614,6 +632,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                 ],
                               ),
+
                               if (caption.isNotEmpty)
                                 Padding(
                                   padding: const EdgeInsets.symmetric(
@@ -635,6 +654,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ),
                                   ),
                                 ),
+
                               const SizedBox(height: 10),
                               const Divider(),
                             ],
@@ -911,7 +931,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
-// --- 5. లాగిన్ & సైన్అప్ ---
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
   @override
@@ -1089,7 +1108,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
   }
 }
 
-// --- 6. సెర్చ్ & ఎక్స్‌ప్లోర్ స్క్రీన్ ---
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
   @override
@@ -1217,7 +1235,6 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 }
 
-// --- 7. ఇతరుల ప్రొఫైల్ చూసే స్క్రీన్ ---
 class OtherUserProfileScreen extends StatelessWidget {
   final String uid;
   const OtherUserProfileScreen({super.key, required this.uid});
@@ -1426,7 +1443,6 @@ class OtherUserProfileScreen extends StatelessWidget {
   }
 }
 
-// --- 8. INBOX స్క్రీన్ ---
 class InboxScreen extends StatelessWidget {
   const InboxScreen({super.key});
 
@@ -1504,7 +1520,6 @@ class InboxScreen extends StatelessWidget {
   }
 }
 
-// --- 9. చాట్ (DM) స్క్రీన్ ---
 class ChatScreen extends StatefulWidget {
   final String receiverId;
   final String receiverName;
@@ -1646,7 +1661,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
-// --- 10. రీల్స్ & ఇతర విడ్జెట్లు ---
 class ReelsScreen extends StatelessWidget {
   const ReelsScreen({super.key});
   @override
