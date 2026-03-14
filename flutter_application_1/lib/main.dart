@@ -57,11 +57,12 @@ class MainNavigation extends StatefulWidget {
 class _MainNavigationState extends State<MainNavigation> {
   int _selectedIndex = 0;
 
+  // main.dart లోని నేవిగేషన్ లిస్ట్
   final List<Widget> _screens = [
     const HomeScreen(),
     const SearchScreen(),
     const Center(child: Text("Reels coming soon!")),
-    const ProfileScreen(),
+    const ProfileScreen(), // 🌟 ఇక్కడ ఎర్రర్ రాకూడదు
   ];
 
   @override
