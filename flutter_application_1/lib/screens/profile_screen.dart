@@ -7,6 +7,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../widgets/safe_elements.dart';
 import 'post_details_screen.dart';
+import 'user_list_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -16,7 +17,7 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  // 1. 🌟 EDIT PROFILE DIALOG
+  // 1. EDIT PROFILE DIALOG
   void _showEditDialog(String currentName, String currentBio) {
     final nameCtrl = TextEditingController(text: currentName);
     final bioCtrl = TextEditingController(text: currentBio);
@@ -65,7 +66,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // 🌟 UPDATE PROFILE PICTURE (Line 80 Fixed)
+  // 2. UPDATE PROFILE PICTURE
+  // 🌟 UPDATE PROFILE PICTURE (Linter-Proof Fix)
   Future<void> _updateProfilePic() async {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(
@@ -75,21 +77,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
 
     if (image != null) {
-      // 1. await కి ముందు messenger ని తీసుకోకండి (లినర్ కొన్నిసార్లు దీన్ని ఒప్పుకోదు)
+      // 1. ఇక్కడ messenger ని కాప్చర్ చేయకూడదు
       String base64Image = base64Encode(await File(image.path).readAsBytes());
       String uid = FirebaseAuth.instance.currentUser!.uid;
 
-      // Async gap start
+      // 2. Async operation
       await FirebaseFirestore.instance.collection('users').doc(uid).update({
         "profilePic": base64Image,
       });
-      // Async gap end
 
-      // 🌟 అసలైన ఫిక్స్ ఇక్కడ ఉంది:
-      // await తర్వాత context ని వాడే ప్రతీ చోటా కచ్చితంగా 'mounted' చెక్ ఉండాలి.
+      // 3. ఇక్కడ కచ్చితంగా mounted చెక్ ఉండాలి
       if (!mounted) return;
 
-      // నేరుగా ScaffoldMessenger ని ఇక్కడ వాడండి
+      // 4. ఇక్కడ నేరుగా context ని వాడాలి
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text("Profile updated! 📸")));
@@ -101,14 +101,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final String uid = FirebaseAuth.instance.currentUser!.uid;
 
     return DefaultTabController(
-      length: 3, // 🌟 Posts, Reels, Saved
+      length: 3,
       child: StreamBuilder<DocumentSnapshot>(
         stream: FirebaseFirestore.instance
             .collection('users')
             .doc(uid)
             .snapshots(),
         builder: (context, userSnapshot) {
-          // ✅ FIXED: curly_braces_in_flow_control_structures (Line 104)
           if (!userSnapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
@@ -127,13 +126,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               actions: [
-                // 🌟 THREE-LINE MENU (PopupMenuButton)
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.menu),
                   onSelected: (value) {
-                    if (value == 'edit') _showEditDialog(name, bio);
-                    if (value == 'pic') _updateProfilePic();
-                    if (value == 'logout') FirebaseAuth.instance.signOut();
+                    if (value == 'edit') {
+                      _showEditDialog(name, bio);
+                    }
+                    if (value == 'pic') {
+                      _updateProfilePic();
+                    }
+                    if (value == 'logout') {
+                      FirebaseAuth.instance.signOut();
+                    }
                   },
                   itemBuilder: (context) => [
                     const PopupMenuItem(
@@ -147,17 +151,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       value: 'pic',
                       child: ListTile(
                         leading: Icon(Icons.camera_alt),
-                        title: Text("Change Profile Pic"),
+                        title: Text("Change Pic"),
                       ),
                     ),
                     const PopupMenuItem(
                       value: 'logout',
                       child: ListTile(
                         leading: Icon(Icons.logout, color: Colors.red),
-                        title: Text(
-                          "Logout",
-                          style: TextStyle(color: Colors.red),
-                        ),
+                        title: Text("Logout"),
                       ),
                     ),
                   ],
@@ -192,13 +193,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   num: postCount.toString(),
                                   label: "Posts",
                                 ),
-                                _StatColumn(
-                                  num: followers.length.toString(),
-                                  label: "Followers",
+                                GestureDetector(
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => UserListScreen(
+                                          title: "Followers",
+                                          userIds: followers,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  child: _StatColumn(
+                                    num: followers.length.toString(),
+                                    label: "Followers",
+                                  ),
                                 ),
-                                _StatColumn(
-                                  num: following.length.toString(),
-                                  label: "Following",
+                                GestureDetector(
+                                  onTap: () {
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => UserListScreen(
+                                          title: "Following",
+                                          userIds: following,
+                                        ),
+                                      ),
+                                    );
+                                  },
+                                  child: _StatColumn(
+                                    num: following.length.toString(),
+                                    label: "Following",
+                                  ),
                                 ),
                               ],
                             );
@@ -228,7 +255,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   unselectedLabelColor: Colors.grey,
                   tabs: [
                     Tab(icon: Icon(Icons.grid_on)),
-                    Tab(icon: Icon(Icons.video_library)), // 🌟 Reels Tab
+                    Tab(icon: Icon(Icons.video_library)),
                     Tab(icon: Icon(Icons.bookmark_border)),
                   ],
                 ),
@@ -241,7 +268,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             .where('ownerId', isEqualTo: uid)
                             .snapshots(),
                       ),
-                      // 🌟 User Reels Tab View
                       _buildReelsGrid(
                         FirebaseFirestore.instance
                             .collection('reels')
@@ -265,12 +291,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // 🌟 REELS GRID BUILDER
+  // 🌟 REELS GRID (Line 288 Fix)
   Widget _buildReelsGrid(Stream<QuerySnapshot> stream) {
     return StreamBuilder<QuerySnapshot>(
       stream: stream,
       builder: (context, snapshot) {
-        // ✅ FIXED: curly_braces_in_flow_control_structures (Line 264)
+        // ✅ FIXED: Added curly braces
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -295,12 +321,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // 🌟 POST GRID BUILDER
+  // 🌟 POST GRID (Line 313 Fix)
   Widget _buildPostGrid(Stream<QuerySnapshot> stream) {
     return StreamBuilder<QuerySnapshot>(
       stream: stream,
       builder: (context, snapshot) {
-        // ✅ FIXED: curly_braces_in_flow_control_structures (Line 289)
+        // ✅ FIXED: Added curly braces
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -316,12 +342,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           itemCount: posts.length,
           itemBuilder: (context, i) => GestureDetector(
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => PostDetailsScreen(postId: posts[i].id),
-              ),
-            ),
+            onTap: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => PostDetailsScreen(postId: posts[i].id),
+                ),
+              );
+            },
             child: SafeImage(
               base64String: (posts[i].data() as Map)['postData'],
             ),
