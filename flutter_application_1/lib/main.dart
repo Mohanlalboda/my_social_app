@@ -7,6 +7,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:google_fonts/google_fonts.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:path_provider/path_provider.dart';
 import 'firebase_options.dart';
 
 void main() async {
@@ -121,7 +123,7 @@ class _MainNavigationState extends State<MainNavigation> {
                   },
                 ),
                 IconButton(
-                  icon: const Icon(Icons.send_rounded),
+                  icon: const Icon(Icons.send_outlined),
                   onPressed: () {
                     Navigator.push(
                       context,
@@ -173,6 +175,26 @@ class PostWidget extends StatefulWidget {
 
 class _PostWidgetState extends State<PostWidget> {
   bool isLikeAnimating = false;
+
+  // 🌟 SOLVED: Updated to use the new SharePlus syntax
+  Future<void> _shareExternally(Map<String, dynamic> post) async {
+    try {
+      final bytes = base64Decode(post['postData']);
+      final tempDir = await getTemporaryDirectory();
+      final file = await File('${tempDir.path}/shared_post.png').create();
+      await file.writeAsBytes(bytes);
+
+      String shareText =
+          'Check out this post from ${post['username']} on MyBanjara!\n\n${post['caption'] ?? ''}';
+
+      // 🌟 NEW SYNTAX FOR SHARE PLUS
+      await SharePlus.instance.share(
+        ShareParams(files: [XFile(file.path)], text: shareText),
+      );
+    } catch (e) {
+      debugPrint('Error sharing to external platforms: $e');
+    }
+  }
 
   void _showComments(BuildContext context, String postId) {
     final TextEditingController commentController = TextEditingController();
@@ -346,67 +368,107 @@ class _PostWidgetState extends State<PostWidget> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
-        return StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance.collection('users').snapshots(),
-          builder: (context, snapshot) {
-            if (!snapshot.hasData) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            var users = snapshot.data!.docs
-                .where((doc) => doc['uid'] != currentUid)
-                .toList();
-            return Column(
-              children: [
-                const Padding(
-                  padding: EdgeInsets.all(15.0),
-                  child: Text(
-                    "Share to Followers",
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+        return Column(
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(15.0),
+              child: Text(
+                "Share Post",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+            ),
+            ListTile(
+              leading: const CircleAvatar(
+                backgroundColor: Colors.blueAccent,
+                child: Icon(Icons.share, color: Colors.white),
+              ),
+              title: const Text(
+                "Share via other apps (WhatsApp, Insta, etc.)",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              onTap: () async {
+                Navigator.pop(context);
+                await _shareExternally(post);
+              },
+            ),
+            const Divider(),
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 15.0, vertical: 5.0),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  "Send to Friends",
+                  style: TextStyle(
+                    color: Colors.grey,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
-                Expanded(
-                  child: ListView.builder(
+              ),
+            ),
+            Expanded(
+              child: StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('users')
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  var users = snapshot.data!.docs
+                      .where((doc) => doc['uid'] != currentUid)
+                      .toList();
+                  return ListView.builder(
                     itemCount: users.length,
                     itemBuilder: (context, index) {
-                      var user = users[index];
+                      var user = users[index].data() as Map<String, dynamic>;
                       return ListTile(
                         leading: CircleAvatar(
                           child: Text(user['username'][0].toUpperCase()),
                         ),
                         title: Text(user['username']),
-                        trailing: const Icon(Icons.send, color: Colors.blue),
-                        onTap: () async {
-                          String roomId =
-                              (currentUid.hashCode <= user['uid'].hashCode)
-                              ? "${currentUid}_${user['uid']}"
-                              : "${user['uid']}_$currentUid";
-
-                          await FirebaseFirestore.instance
-                              .collection('chatRooms')
-                              .doc(roomId)
-                              .collection('messages')
-                              .add({
-                                "senderId": currentUid,
-                                "message": "Check out this post!",
-                                "postId": post['postId'],
-                                "postImage": post['postData'],
-                                "timestamp": FieldValue.serverTimestamp(),
-                              });
-
-                          if (context.mounted) {
-                            Navigator.pop(context);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(content: Text("Post Sent! ✈️")),
-                            );
-                          }
-                        },
+                        trailing: ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            backgroundColor: Colors.blueAccent,
+                          ),
+                          child: const Text(
+                            "Send",
+                            style: TextStyle(color: Colors.white),
+                          ),
+                          onPressed: () async {
+                            String roomId =
+                                (currentUid.hashCode <= user['uid'].hashCode)
+                                ? "${currentUid}_${user['uid']}"
+                                : "${user['uid']}_$currentUid";
+                            await FirebaseFirestore.instance
+                                .collection('chatRooms')
+                                .doc(roomId)
+                                .collection('messages')
+                                .add({
+                                  "senderId": currentUid,
+                                  "message": "Check out this post!",
+                                  "postId": post['postId'],
+                                  "postImage": post['postData'],
+                                  "timestamp": FieldValue.serverTimestamp(),
+                                });
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text("Sent to Inbox! ✈️"),
+                                ),
+                              );
+                            }
+                          },
+                        ),
                       );
                     },
-                  ),
-                ),
-              ],
-            );
-          },
+                  );
+                },
+              ),
+            ),
+          ],
         );
       },
     );
@@ -567,7 +629,7 @@ class _PostWidgetState extends State<PostWidget> {
                 ),
                 const Spacer(),
                 IconButton(
-                  icon: const Icon(Icons.send_rounded),
+                  icon: const Icon(Icons.send_outlined),
                   onPressed: () => _showShareSheet(context, widget.post),
                 ),
                 IconButton(
