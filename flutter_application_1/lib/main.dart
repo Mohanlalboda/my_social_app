@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -175,21 +176,23 @@ class PostWidget extends StatefulWidget {
 
 class _PostWidgetState extends State<PostWidget> {
   bool isLikeAnimating = false;
+  bool? isSavedLocal;
 
-  // 🌟 NEW: Handle Save/Unsave Logic
   void _handleSave() async {
     String postId = widget.post['postId'];
     String currentUid = FirebaseAuth.instance.currentUser!.uid;
     List savedBy = widget.post['savedBy'] ?? [];
-    bool isSaved = savedBy.contains(currentUid);
+    bool isSaved = isSavedLocal ?? savedBy.contains(currentUid);
+
+    setState(() {
+      isSavedLocal = !isSaved;
+    });
 
     if (isSaved) {
-      // Unsave
       await FirebaseFirestore.instance.collection('posts').doc(postId).update({
         "savedBy": FieldValue.arrayRemove([currentUid]),
       });
     } else {
-      // Save
       await FirebaseFirestore.instance.collection('posts').doc(postId).update({
         "savedBy": FieldValue.arrayUnion([currentUid]),
       });
@@ -201,11 +204,12 @@ class _PostWidgetState extends State<PostWidget> {
     }
   }
 
-  // ... (ఇంతకుముందు ఉన్న _shareExternally, _showComments, _showShareSheet, _handleLike ఫంక్షన్స్ అలాగే ఉంచండి)
-
   Future<void> _shareExternally(Map<String, dynamic> post) async {
     try {
-      final bytes = base64Decode(post['postData']);
+      String cleanString = post['postData'].replaceAll(RegExp(r'\s+'), '');
+      String normalized = base64.normalize(cleanString);
+      final bytes = base64Decode(normalized);
+
       final tempDir = await getTemporaryDirectory();
       final file = await File('${tempDir.path}/shared_post.png').create();
       await file.writeAsBytes(bytes);
@@ -421,7 +425,9 @@ class _PostWidgetState extends State<PostWidget> {
                     style: TextStyle(fontWeight: FontWeight.bold),
                   ),
                   onTap: () async {
-                    Navigator.pop(context);
+                    if (context.mounted) {
+                      Navigator.pop(context);
+                    }
                     await _shareExternally(post);
                   },
                 ),
@@ -464,6 +470,7 @@ class _PostWidgetState extends State<PostWidget> {
                                 (currentUid.hashCode <= user['uid'].hashCode)
                                 ? "${currentUid}_${user['uid']}"
                                 : "${user['uid']}_$currentUid";
+
                             await FirebaseFirestore.instance
                                 .collection('chatRooms')
                                 .doc(roomId)
@@ -475,6 +482,7 @@ class _PostWidgetState extends State<PostWidget> {
                                   "postImage": post['postData'],
                                   "timestamp": FieldValue.serverTimestamp(),
                                 });
+
                             await FirebaseFirestore.instance
                                 .collection('chatRooms')
                                 .doc(roomId)
@@ -483,6 +491,7 @@ class _PostWidgetState extends State<PostWidget> {
                                   "lastTime": FieldValue.serverTimestamp(),
                                   "users": [currentUid, user['uid']],
                                 }, SetOptions(merge: true));
+
                             if (context.mounted) {
                               Navigator.pop(context);
                               Navigator.push(
@@ -545,13 +554,13 @@ class _PostWidgetState extends State<PostWidget> {
   Widget build(BuildContext context) {
     String postId = widget.post['postId'];
     String currentUid = FirebaseAuth.instance.currentUser!.uid;
+
     bool isLiked =
         (widget.post['likes'] != null &&
         widget.post['likes'][currentUid] == true);
 
-    // 🌟 Check if this post is saved by the current user
     List savedBy = widget.post['savedBy'] ?? [];
-    bool isSaved = savedBy.contains(currentUid);
+    bool isSaved = isSavedLocal ?? savedBy.contains(currentUid);
 
     int likeCount = (widget.post['likes'] != null)
         ? (widget.post['likes'] as Map).length
@@ -618,22 +627,12 @@ class _PostWidgetState extends State<PostWidget> {
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(15),
-                    child:
-                        (widget.post.containsKey('postData') &&
-                            widget.post['postData'] != null)
-                        ? Image.memory(
-                            base64Decode(widget.post['postData']),
-                            height: 400,
-                            width: double.infinity,
-                            fit: BoxFit.cover,
-                          )
-                        : Container(
-                            height: 400,
-                            color: Colors.grey[200],
-                            child: const Center(
-                              child: Icon(Icons.image_not_supported),
-                            ),
-                          ),
+                    child: SafeImage(
+                      base64String: widget.post['postData'],
+                      height: 400,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                    ),
                   ),
                 ),
                 AnimatedOpacity(
@@ -666,7 +665,9 @@ class _PostWidgetState extends State<PostWidget> {
                 const SizedBox(width: 15),
                 IconButton(
                   icon: const Icon(Icons.mode_comment_outlined),
-                  onPressed: () => _showComments(context, postId),
+                  onPressed: () {
+                    _showComments(context, postId);
+                  },
                 ),
                 Text(
                   "$commentCount",
@@ -675,15 +676,16 @@ class _PostWidgetState extends State<PostWidget> {
                 const Spacer(),
                 IconButton(
                   icon: const Icon(Icons.near_me_outlined, size: 28),
-                  onPressed: () => _showShareSheet(context, widget.post),
+                  onPressed: () {
+                    _showShareSheet(context, widget.post);
+                  },
                 ),
-                // 🌟 Update Bookmark icon and logic
                 IconButton(
                   icon: Icon(
                     isSaved ? Icons.bookmark : Icons.bookmark_border,
                     color: isSaved ? Colors.black : Colors.black87,
                   ),
-                  onPressed: _handleSave, // Call save function
+                  onPressed: _handleSave,
                 ),
               ],
             ),
@@ -723,6 +725,48 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   bool _isUploading = false;
+
+  Future<void> _uploadStory() async {
+    final ImagePicker picker = ImagePicker();
+    final XFile? image = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 15,
+      maxWidth: 600,
+    );
+
+    if (image != null) {
+      if (!mounted) {
+        return;
+      }
+      setState(() {
+        _isUploading = true;
+      });
+      try {
+        String base64Image = base64Encode(await File(image.path).readAsBytes());
+        String uid = FirebaseAuth.instance.currentUser!.uid;
+
+        await FirebaseFirestore.instance.collection('stories').add({
+          "ownerId": uid,
+          "storyData": base64Image,
+          "timestamp": FieldValue.serverTimestamp(),
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(
+            context,
+          ).showSnackBar(const SnackBar(content: Text("Story Added! 🌟")));
+        }
+      } catch (e) {
+        debugPrint(e.toString());
+      } finally {
+        if (mounted) {
+          setState(() {
+            _isUploading = false;
+          });
+        }
+      }
+    }
+  }
 
   Future<void> _uploadPost() async {
     final ImagePicker picker = ImagePicker();
@@ -883,12 +927,65 @@ class _HomeScreenState extends State<HomeScreen> {
                     var storyUsers = snapshot.data!.docs
                         .where((doc) => feedUserIds.contains(doc['uid']))
                         .toList();
+
                     return ListView.builder(
                       scrollDirection: Axis.horizontal,
-                      itemCount: storyUsers.length,
+                      itemCount: storyUsers.length + 1,
                       itemBuilder: (context, index) {
+                        if (index == 0) {
+                          return GestureDetector(
+                            onTap: _uploadStory,
+                            child: Padding(
+                              padding: const EdgeInsets.all(8.0),
+                              child: Column(
+                                children: [
+                                  Stack(
+                                    alignment: Alignment.bottomRight,
+                                    children: [
+                                      SafeProfilePic(
+                                        base64String: userData['profilePic'],
+                                        radius: 35,
+                                        fallbackText:
+                                            userData['username'] ?? "U",
+                                      ),
+                                      Container(
+                                        padding: const EdgeInsets.all(2),
+                                        decoration: const BoxDecoration(
+                                          color: Colors.white,
+                                          shape: BoxShape.circle,
+                                        ),
+                                        child: Container(
+                                          decoration: const BoxDecoration(
+                                            color: Colors.blue,
+                                            shape: BoxShape.circle,
+                                          ),
+                                          child: const Icon(
+                                            Icons.add,
+                                            color: Colors.white,
+                                            size: 18,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 5),
+                                  const Text(
+                                    "Your Story",
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }
+
                         var user =
-                            storyUsers[index].data() as Map<String, dynamic>;
+                            storyUsers[index - 1].data()
+                                as Map<String, dynamic>;
                         return GestureDetector(
                           onTap: () {
                             if (context.mounted) {
@@ -919,26 +1016,10 @@ class _HomeScreenState extends State<HomeScreen> {
                                   child: CircleAvatar(
                                     radius: 32,
                                     backgroundColor: Colors.white,
-                                    child: CircleAvatar(
+                                    child: SafeProfilePic(
+                                      base64String: user['profilePic'],
                                       radius: 30,
-                                      backgroundImage:
-                                          (user['profilePic'] != null &&
-                                              user['profilePic']
-                                                  .toString()
-                                                  .isNotEmpty)
-                                          ? MemoryImage(
-                                              base64Decode(user['profilePic']),
-                                            )
-                                          : null,
-                                      child:
-                                          (user['profilePic'] == null ||
-                                              user['profilePic']
-                                                  .toString()
-                                                  .isEmpty)
-                                          ? Text(
-                                              user['username'][0].toUpperCase(),
-                                            )
-                                          : null,
+                                      fallbackText: user['username'] ?? "U",
                                     ),
                                   ),
                                 ),
@@ -1110,17 +1191,10 @@ class _SearchScreenState extends State<SearchScreen> {
                           );
                         }
                       },
-                      child:
-                          (postDataMap.containsKey('postData') &&
-                              postDataMap['postData'] != null)
-                          ? Image.memory(
-                              base64Decode(postDataMap['postData']),
-                              fit: BoxFit.cover,
-                            )
-                          : Container(
-                              color: Colors.grey[300],
-                              child: const Icon(Icons.image_not_supported),
-                            ),
+                      child: SafeImage(
+                        base64String: postDataMap['postData'],
+                        fit: BoxFit.cover,
+                      ),
                     );
                   },
                 );
@@ -1148,7 +1222,11 @@ class _SearchScreenState extends State<SearchScreen> {
                     var userData =
                         filtered[index].data() as Map<String, dynamic>;
                     return ListTile(
-                      leading: const CircleAvatar(child: Icon(Icons.person)),
+                      leading: SafeProfilePic(
+                        base64String: userData['profilePic'],
+                        radius: 20,
+                        fallbackText: userData['username'] ?? "U",
+                      ),
                       title: Text(userData['username'] ?? 'User'),
                       onTap: () {
                         if (context.mounted) {
@@ -1226,17 +1304,10 @@ class InboxScreen extends StatelessWidget {
                   }
 
                   return ListTile(
-                    leading: CircleAvatar(
-                      backgroundImage:
-                          (user['profilePic'] != null &&
-                              user['profilePic'].toString().isNotEmpty)
-                          ? MemoryImage(base64Decode(user['profilePic']))
-                          : null,
-                      child:
-                          (user['profilePic'] == null ||
-                              user['profilePic'].toString().isEmpty)
-                          ? Text(user['username'][0].toUpperCase())
-                          : null,
+                    leading: SafeProfilePic(
+                      base64String: user['profilePic'],
+                      radius: 25,
+                      fallbackText: user['username'] ?? "U",
                     ),
                     title: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1421,8 +1492,8 @@ class _ChatScreenState extends State<ChatScreen> {
                                       data['postImage'] != null) ...[
                                     ClipRRect(
                                       borderRadius: BorderRadius.circular(10),
-                                      child: Image.memory(
-                                        base64Decode(data['postImage']),
+                                      child: SafeImage(
+                                        base64String: data['postImage'],
                                         height: 180,
                                         width: double.infinity,
                                         fit: BoxFit.cover,
@@ -1583,7 +1654,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           var userData = snapshot.data!.data() as Map<String, dynamic>? ?? {};
-          String profilePic = userData['profilePic'] ?? "";
           String name = userData['username'] ?? "User";
           String bio = userData['bio'] ?? "No bio yet.";
 
@@ -1650,17 +1720,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       child: Row(
                         children: [
-                          CircleAvatar(
+                          SafeProfilePic(
+                            base64String: userData['profilePic'],
                             radius: 40,
-                            backgroundImage: profilePic.isNotEmpty
-                                ? MemoryImage(base64Decode(profilePic))
-                                : null,
-                            child: profilePic.isEmpty
-                                ? Text(
-                                    name[0].toUpperCase(),
-                                    style: const TextStyle(fontSize: 24),
-                                  )
-                                : null,
+                            fallbackText: name,
                           ),
                           Expanded(
                             child: Row(
@@ -1714,7 +1777,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     Expanded(
                       child: TabBarView(
                         children: [
-                          // 🌟 Tab 1: My Posts
                           postCount == 0
                               ? const Center(child: Text("No posts yet!"))
                               : GridView.builder(
@@ -1743,26 +1805,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                           );
                                         }
                                       },
-                                      child:
-                                          (post.containsKey('postData') &&
-                                              post['postData'] != null)
-                                          ? Image.memory(
-                                              base64Decode(post['postData']),
-                                              fit: BoxFit.cover,
-                                            )
-                                          : Container(color: Colors.grey[200]),
+                                      child: SafeImage(
+                                        base64String: post['postData'],
+                                        fit: BoxFit.cover,
+                                      ),
                                     );
                                   },
                                 ),
-
-                          // 🌟 Tab 2: Saved Posts (NEW)
                           StreamBuilder<QuerySnapshot>(
                             stream: FirebaseFirestore.instance
                                 .collection('posts')
-                                .where(
-                                  'savedBy',
-                                  arrayContains: uid,
-                                ) // Fetch posts where current user is in savedBy array
+                                .where('savedBy', arrayContains: uid)
                                 .snapshots(),
                             builder: (context, savedSnapshot) {
                               if (!savedSnapshot.hasData) {
@@ -1805,14 +1858,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         );
                                       }
                                     },
-                                    child:
-                                        (post.containsKey('postData') &&
-                                            post['postData'] != null)
-                                        ? Image.memory(
-                                            base64Decode(post['postData']),
-                                            fit: BoxFit.cover,
-                                          )
-                                        : Container(color: Colors.grey[200]),
+                                    child: SafeImage(
+                                      base64String: post['postData'],
+                                      fit: BoxFit.cover,
+                                    ),
                                   );
                                 },
                               );
@@ -1884,6 +1933,7 @@ class StoryScreen extends StatefulWidget {
 class _StoryScreenState extends State<StoryScreen>
     with SingleTickerProviderStateMixin {
   late AnimationController _controller;
+
   @override
   void initState() {
     super.initState();
@@ -1910,49 +1960,97 @@ class _StoryScreenState extends State<StoryScreen>
 
   @override
   Widget build(BuildContext context) {
-    String profilePic = widget.user['profilePic'] ?? "";
     return Scaffold(
       backgroundColor: Colors.black,
       body: SafeArea(
-        child: Stack(
-          children: [
-            Center(
-              child: profilePic.isNotEmpty
-                  ? Image.memory(base64Decode(profilePic))
-                  : const Icon(Icons.person, size: 200, color: Colors.white),
-            ),
-            Positioned(
-              top: 10,
-              left: 10,
-              right: 10,
-              child: LinearProgressIndicator(
-                value: _controller.value,
-                backgroundColor: Colors.grey,
-                valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-              ),
-            ),
-            Positioned(
-              top: 30,
-              left: 10,
-              child: Text(
-                widget.user['username'] ?? "User",
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
+        child: StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('stories')
+              .where('ownerId', isEqualTo: widget.user['uid'])
+              .snapshots(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            var docs = snapshot.data!.docs;
+            docs.sort((a, b) {
+              Timestamp t1 = (a.data() as Map)['timestamp'] ?? Timestamp.now();
+              Timestamp t2 = (b.data() as Map)['timestamp'] ?? Timestamp.now();
+              return t2.compareTo(t1);
+            });
+
+            String? storyImage;
+            if (docs.isNotEmpty) {
+              storyImage = (docs.first.data() as Map)['storyData'];
+            }
+
+            return Stack(
+              children: [
+                Center(
+                  child: storyImage != null
+                      ? SafeImage(
+                          base64String: storyImage,
+                          fit: BoxFit.contain,
+                          width: double.infinity,
+                          height: double.infinity,
+                        )
+                      : const Text(
+                          "No Recent Story",
+                          style: TextStyle(color: Colors.white, fontSize: 18),
+                        ),
                 ),
-              ),
-            ),
-            Positioned(
-              top: 30,
-              right: 10,
-              child: IconButton(
-                icon: const Icon(Icons.close, color: Colors.white),
-                onPressed: () {
-                  Navigator.pop(context);
-                },
-              ),
-            ),
-          ],
+                Positioned(
+                  top: 10,
+                  left: 10,
+                  right: 10,
+                  child: LinearProgressIndicator(
+                    value: _controller.value,
+                    backgroundColor: Colors.grey[800],
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      Colors.white,
+                    ),
+                  ),
+                ),
+                Positioned(
+                  top: 30,
+                  left: 15,
+                  child: Row(
+                    children: [
+                      SafeProfilePic(
+                        base64String: widget.user['profilePic'],
+                        radius: 18,
+                        fallbackText: widget.user['username'] ?? "U",
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        widget.user['username'] ?? "User",
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Positioned(
+                  top: 25,
+                  right: 10,
+                  child: IconButton(
+                    icon: const Icon(
+                      Icons.close,
+                      color: Colors.white,
+                      size: 30,
+                    ),
+                    onPressed: () {
+                      Navigator.pop(context);
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -1985,7 +2083,6 @@ class OtherUserProfileScreen extends StatelessWidget {
           var userData = snapshot.data!.data() as Map<String, dynamic>;
           String name = userData['username'] ?? "User";
           String bio = userData['bio'] ?? "";
-          String profilePic = userData['profilePic'] ?? "";
           List followers = userData['followers'] ?? [];
           bool isFollowing = followers.contains(currentUid);
 
@@ -2005,14 +2102,10 @@ class OtherUserProfileScreen extends StatelessWidget {
                     padding: const EdgeInsets.all(20),
                     child: Row(
                       children: [
-                        CircleAvatar(
+                        SafeProfilePic(
+                          base64String: userData['profilePic'],
                           radius: 40,
-                          backgroundImage: profilePic.isNotEmpty
-                              ? MemoryImage(base64Decode(profilePic))
-                              : null,
-                          child: profilePic.isEmpty
-                              ? Text(name[0].toUpperCase())
-                              : null,
+                          fallbackText: name,
                         ),
                         Expanded(
                           child: Row(
@@ -2160,14 +2253,10 @@ class OtherUserProfileScreen extends StatelessWidget {
                                     );
                                   }
                                 },
-                                child:
-                                    (post.containsKey('postData') &&
-                                        post['postData'] != null)
-                                    ? Image.memory(
-                                        base64Decode(post['postData']),
-                                        fit: BoxFit.cover,
-                                      )
-                                    : Container(color: Colors.grey[200]),
+                                child: SafeImage(
+                                  base64String: post['postData'],
+                                  fit: BoxFit.cover,
+                                ),
                               );
                             },
                           )
@@ -2458,5 +2547,152 @@ class _SignUpScreenState extends State<SignUpScreen> {
         ),
       ),
     );
+  }
+}
+
+class SafeImage extends StatelessWidget {
+  final String? base64String;
+  final double? height;
+  final double? width;
+  final BoxFit fit;
+
+  const SafeImage({
+    super.key,
+    required this.base64String,
+    this.height,
+    this.width,
+    this.fit = BoxFit.cover,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (base64String == null || base64String!.trim().isEmpty) {
+      return Container(
+        height: height ?? 200,
+        width: width ?? double.infinity,
+        color: Colors.grey[200],
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.image_not_supported, color: Colors.grey, size: 40),
+              SizedBox(height: 5),
+              Text(
+                "No Image Data",
+                style: TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    try {
+      String cleanString = base64String!.replaceAll(RegExp(r'\s+'), '');
+      int padding = cleanString.length % 4;
+      if (padding != 0) {
+        cleanString += '=' * (4 - padding);
+      }
+
+      Uint8List bytes = base64Decode(cleanString);
+
+      return Image.memory(
+        bytes,
+        height: height,
+        width: width,
+        fit: fit,
+        gaplessPlayback: true,
+        errorBuilder: (context, error, stackTrace) {
+          return Container(
+            height: height ?? 200,
+            width: width ?? double.infinity,
+            color: Colors.grey[200],
+            child: const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.broken_image, color: Colors.grey, size: 40),
+                  SizedBox(height: 5),
+                  Text(
+                    "Image Corrupted",
+                    style: TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      );
+    } catch (e) {
+      return Container(
+        height: height ?? 200,
+        width: width ?? double.infinity,
+        color: Colors.red[50],
+        child: const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.error_outline, color: Colors.red, size: 40),
+              SizedBox(height: 5),
+              Text(
+                "Format Error",
+                style: TextStyle(color: Colors.red, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+  }
+}
+
+class SafeProfilePic extends StatelessWidget {
+  final String? base64String;
+  final double radius;
+  final String fallbackText;
+
+  const SafeProfilePic({
+    super.key,
+    required this.base64String,
+    required this.radius,
+    required this.fallbackText,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    if (base64String == null || base64String!.trim().isEmpty) {
+      return CircleAvatar(
+        radius: radius,
+        backgroundColor: Colors.blueAccent,
+        child: Text(
+          fallbackText.isNotEmpty ? fallbackText[0].toUpperCase() : "?",
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      );
+    }
+
+    try {
+      String cleanString = base64String!.replaceAll(RegExp(r'\s+'), '');
+      int padding = cleanString.length % 4;
+      if (padding != 0) {
+        cleanString += '=' * (4 - padding);
+      }
+      Uint8List bytes = base64Decode(cleanString);
+
+      return CircleAvatar(
+        radius: radius,
+        backgroundImage: MemoryImage(bytes),
+        onBackgroundImageError: (e, s) {},
+      );
+    } catch (e) {
+      return CircleAvatar(
+        radius: radius,
+        backgroundColor: Colors.grey[400],
+        child: const Icon(Icons.person, color: Colors.white),
+      );
+    }
   }
 }
