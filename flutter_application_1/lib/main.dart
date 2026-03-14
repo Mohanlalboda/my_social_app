@@ -100,6 +100,8 @@ class _MainNavigationState extends State<MainNavigation> {
 
   @override
   Widget build(BuildContext context) {
+    final String currentUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+
     return Scaffold(
       appBar: _selectedIndex == 3
           ? null
@@ -112,24 +114,94 @@ class _MainNavigationState extends State<MainNavigation> {
                 ),
               ),
               actions: [
-                IconButton(
-                  icon: const Icon(Icons.favorite_border),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const ActivityScreen(),
+                // 🌟 RED DOT NOTIFICATION FOR ACTIVITY (Likes/Comments/Follows)
+                StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('notifications')
+                      .where('receiverId', isEqualTo: currentUid)
+                      .where('isRead', isEqualTo: false) // Only unread
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    bool hasUnreadActivity =
+                        snapshot.hasData && snapshot.data!.docs.isNotEmpty;
+                    return Center(
+                      child: Stack(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.favorite_border),
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const ActivityScreen(),
+                                ),
+                              );
+                            },
+                          ),
+                          if (hasUnreadActivity)
+                            Positioned(
+                              right: 8,
+                              top: 8,
+                              child: Container(
+                                width: 10,
+                                height: 10,
+                                decoration: const BoxDecoration(
+                                  color: Colors.red,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     );
                   },
                 ),
-                IconButton(
-                  icon: const Icon(Icons.send_outlined),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const InboxScreen(),
+
+                // 🌟 RED DOT NOTIFICATION FOR INBOX
+                StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('chatRooms')
+                      .where('users', arrayContains: currentUid)
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    bool hasUnreadInbox = false;
+                    if (snapshot.hasData) {
+                      for (var doc in snapshot.data!.docs) {
+                        var data = doc.data() as Map<String, dynamic>;
+                        if (data['hasUnread_$currentUid'] == true) {
+                          hasUnreadInbox = true;
+                          break;
+                        }
+                      }
+                    }
+                    return Center(
+                      child: Stack(
+                        children: [
+                          IconButton(
+                            icon: const Icon(Icons.send_outlined),
+                            onPressed: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => const InboxScreen(),
+                                ),
+                              );
+                            },
+                          ),
+                          if (hasUnreadInbox)
+                            Positioned(
+                              right: 8,
+                              top: 8,
+                              child: Container(
+                                width: 10,
+                                height: 10,
+                                decoration: const BoxDecoration(
+                                  color: Colors.red,
+                                  shape: BoxShape.circle,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     );
                   },
@@ -229,6 +301,7 @@ class _PostWidgetState extends State<PostWidget> {
     final TextEditingController commentController = TextEditingController();
     final String currentUid = FirebaseAuth.instance.currentUser!.uid;
     final String currentEmail = FirebaseAuth.instance.currentUser!.email!;
+    final String postOwnerId = widget.post['ownerId'];
 
     showModalBottomSheet(
       context: context,
@@ -371,10 +444,26 @@ class _PostWidgetState extends State<PostWidget> {
                               "timestamp": FieldValue.serverTimestamp(),
                               "uid": currentUid,
                             });
+
                         await FirebaseFirestore.instance
                             .collection('posts')
                             .doc(postId)
                             .update({"commentCount": FieldValue.increment(1)});
+
+                        // 🌟 NOTIFY OWNER ABOUT THE COMMENT
+                        if (postOwnerId != currentUid) {
+                          await FirebaseFirestore.instance
+                              .collection('notifications')
+                              .add({
+                                "receiverId": postOwnerId,
+                                "senderId": currentUid,
+                                "senderName": currentEmail.split('@')[0],
+                                "type": "comment",
+                                "timestamp": FieldValue.serverTimestamp(),
+                                "isRead": false, // Marks as unread
+                              });
+                        }
+
                         commentController.clear();
                       }
                     },
@@ -490,6 +579,7 @@ class _PostWidgetState extends State<PostWidget> {
                                   "lastMessage": "Shared a post",
                                   "lastTime": FieldValue.serverTimestamp(),
                                   "users": [currentUid, user['uid']],
+                                  "hasUnread_${user['uid']}": true,
                                 }, SetOptions(merge: true));
 
                             if (context.mounted) {
@@ -534,6 +624,7 @@ class _PostWidgetState extends State<PostWidget> {
       await FirebaseFirestore.instance.collection('posts').doc(postId).update({
         "likes.$currentUid": true,
       });
+      // 🌟 ADDED isRead: false for Like Notification
       if (widget.post['ownerId'] != currentUid) {
         await FirebaseFirestore.instance.collection('notifications').add({
           "receiverId": widget.post['ownerId'],
@@ -541,6 +632,7 @@ class _PostWidgetState extends State<PostWidget> {
           "senderName": currentEmail.split('@')[0],
           "type": "like",
           "timestamp": FieldValue.serverTimestamp(),
+          "isRead": false,
         });
       }
     } else {
@@ -1081,8 +1173,33 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-class ActivityScreen extends StatelessWidget {
+// 🌟 UPDATED: ActivityScreen clears red dot automatically
+class ActivityScreen extends StatefulWidget {
   const ActivityScreen({super.key});
+  @override
+  State<ActivityScreen> createState() => _ActivityScreenState();
+}
+
+class _ActivityScreenState extends State<ActivityScreen> {
+  @override
+  void initState() {
+    super.initState();
+    _markNotificationsAsRead();
+  }
+
+  void _markNotificationsAsRead() async {
+    String currentUid = FirebaseAuth.instance.currentUser!.uid;
+    var unreadDocs = await FirebaseFirestore.instance
+        .collection('notifications')
+        .where('receiverId', isEqualTo: currentUid)
+        .where('isRead', isEqualTo: false)
+        .get();
+
+    for (var doc in unreadDocs.docs) {
+      doc.reference.update({'isRead': true});
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     String currentUid = FirebaseAuth.instance.currentUser!.uid;
@@ -1100,7 +1217,14 @@ class ActivityScreen extends StatelessWidget {
           if (snapshot.data!.docs.isEmpty) {
             return const Center(child: Text("No notifications yet."));
           }
-          var docs = snapshot.data!.docs;
+
+          var docs = snapshot.data!.docs.toList();
+          docs.sort((a, b) {
+            Timestamp t1 = (a.data() as Map)['timestamp'] ?? Timestamp.now();
+            Timestamp t2 = (b.data() as Map)['timestamp'] ?? Timestamp.now();
+            return t2.compareTo(t1);
+          });
+
           return ListView.builder(
             itemCount: docs.length,
             itemBuilder: (context, index) {
@@ -1290,6 +1414,7 @@ class InboxScreen extends StatelessWidget {
                 builder: (context, roomSnapshot) {
                   String lastMsg = "Tap to chat";
                   String lastTime = "";
+                  bool isUnread = false;
 
                   if (roomSnapshot.hasData && roomSnapshot.data!.exists) {
                     var roomData =
@@ -1301,6 +1426,7 @@ class InboxScreen extends StatelessWidget {
                         locale: 'en_short',
                       );
                     }
+                    isUnread = roomData['hasUnread_$currentUid'] == true;
                   }
 
                   return ListTile(
@@ -1318,9 +1444,12 @@ class InboxScreen extends StatelessWidget {
                         ),
                         Text(
                           lastTime,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 10,
-                            color: Colors.grey,
+                            color: isUnread ? Colors.blue : Colors.grey,
+                            fontWeight: isUnread
+                                ? FontWeight.bold
+                                : FontWeight.normal,
                           ),
                         ),
                       ],
@@ -1329,7 +1458,23 @@ class InboxScreen extends StatelessWidget {
                       lastMsg,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontWeight: isUnread
+                            ? FontWeight.bold
+                            : FontWeight.normal,
+                        color: isUnread ? Colors.black : Colors.grey,
+                      ),
                     ),
+                    trailing: isUnread
+                        ? Container(
+                            width: 10,
+                            height: 10,
+                            decoration: const BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                            ),
+                          )
+                        : null,
                     onTap: () {
                       if (context.mounted) {
                         Navigator.push(
@@ -1394,6 +1539,7 @@ class _ChatScreenState extends State<ChatScreen> {
         "lastMessage": msg,
         "lastTime": FieldValue.serverTimestamp(),
         "users": [senderId, widget.receiverId],
+        "hasUnread_${widget.receiverId}": true,
       }, SetOptions(merge: true));
     }
   }
@@ -1402,6 +1548,11 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget build(BuildContext context) {
     String currentUid = FirebaseAuth.instance.currentUser!.uid;
     String roomId = getChatRoomId(currentUid, widget.receiverId);
+
+    // 🌟 Mark Chat as Read when opened
+    FirebaseFirestore.instance.collection('chatRooms').doc(roomId).set({
+      "hasUnread_$currentUid": false,
+    }, SetOptions(merge: true));
 
     return Scaffold(
       appBar: AppBar(
@@ -1654,6 +1805,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             return const Center(child: CircularProgressIndicator());
           }
           var userData = snapshot.data!.data() as Map<String, dynamic>? ?? {};
+          String profilePic = userData['profilePic'] ?? "";
           String name = userData['username'] ?? "User";
           String bio = userData['bio'] ?? "No bio yet.";
 
@@ -1721,7 +1873,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       child: Row(
                         children: [
                           SafeProfilePic(
-                            base64String: userData['profilePic'],
+                            base64String: profilePic,
                             radius: 40,
                             fallbackText: name,
                           ),
@@ -2083,6 +2235,7 @@ class OtherUserProfileScreen extends StatelessWidget {
           var userData = snapshot.data!.data() as Map<String, dynamic>;
           String name = userData['username'] ?? "User";
           String bio = userData['bio'] ?? "";
+          String profilePic = userData['profilePic'] ?? "";
           List followers = userData['followers'] ?? [];
           bool isFollowing = followers.contains(currentUid);
 
@@ -2103,7 +2256,7 @@ class OtherUserProfileScreen extends StatelessWidget {
                     child: Row(
                       children: [
                         SafeProfilePic(
-                          base64String: userData['profilePic'],
+                          base64String: profilePic,
                           radius: 40,
                           fallbackText: name,
                         ),
@@ -2186,6 +2339,7 @@ class OtherUserProfileScreen extends StatelessWidget {
                                       "senderName": currentEmail.split('@')[0],
                                       "type": "follow",
                                       "timestamp": FieldValue.serverTimestamp(),
+                                      "isRead": false, // 🌟 NEW
                                     });
                               }
                             },
