@@ -1714,6 +1714,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     Expanded(
                       child: TabBarView(
                         children: [
+                          // 🌟 Tab 1: My Posts
                           postCount == 0
                               ? const Center(child: Text("No posts yet!"))
                               : GridView.builder(
@@ -1753,7 +1754,70 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     );
                                   },
                                 ),
-                          const Center(child: Text("Saved posts coming soon!")),
+
+                          // 🌟 Tab 2: Saved Posts (NEW)
+                          StreamBuilder<QuerySnapshot>(
+                            stream: FirebaseFirestore.instance
+                                .collection('posts')
+                                .where(
+                                  'savedBy',
+                                  arrayContains: uid,
+                                ) // Fetch posts where current user is in savedBy array
+                                .snapshots(),
+                            builder: (context, savedSnapshot) {
+                              if (!savedSnapshot.hasData) {
+                                return const Center(
+                                  child: CircularProgressIndicator(),
+                                );
+                              }
+                              var savedPosts = savedSnapshot.data!.docs;
+                              if (savedPosts.isEmpty) {
+                                return const Center(
+                                  child: Text(
+                                    "No saved posts yet 📌",
+                                    style: TextStyle(color: Colors.grey),
+                                  ),
+                                );
+                              }
+                              return GridView.builder(
+                                gridDelegate:
+                                    const SliverGridDelegateWithFixedCrossAxisCount(
+                                      crossAxisCount: 3,
+                                      crossAxisSpacing: 2,
+                                      mainAxisSpacing: 2,
+                                    ),
+                                itemCount: savedPosts.length,
+                                itemBuilder: (context, index) {
+                                  var post =
+                                      savedPosts[index].data()
+                                          as Map<String, dynamic>;
+                                  return GestureDetector(
+                                    onTap: () {
+                                      if (context.mounted) {
+                                        Navigator.push(
+                                          context,
+                                          MaterialPageRoute(
+                                            builder: (context) =>
+                                                PostDetailsScreen(
+                                                  postId: post['postId'],
+                                                ),
+                                          ),
+                                        );
+                                      }
+                                    },
+                                    child:
+                                        (post.containsKey('postData') &&
+                                            post['postData'] != null)
+                                        ? Image.memory(
+                                            base64Decode(post['postData']),
+                                            fit: BoxFit.cover,
+                                          )
+                                        : Container(color: Colors.grey[200]),
+                                  );
+                                },
+                              );
+                            },
+                          ),
                         ],
                       ),
                     ),
