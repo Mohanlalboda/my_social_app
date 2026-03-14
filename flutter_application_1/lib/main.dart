@@ -89,9 +89,9 @@ class _MainNavigationState extends State<MainNavigation> {
     super.initState();
     _screens = [
       const HomeScreen(),
-      const SearchScreen(), // Full Search Screen Restored
+      const SearchScreen(),
       const Center(child: Text("Reels coming soon!")),
-      const ProfileScreen(), // Full Profile Screen Restored
+      const ProfileScreen(),
     ];
   }
 
@@ -163,9 +163,6 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 }
 
-// ============================================================================
-// 🌟 POST WIDGET (With Comments, Share to Chat, Likes, Bookmarks)
-// ============================================================================
 class PostWidget extends StatefulWidget {
   final Map<String, dynamic> post;
   const PostWidget({super.key, required this.post});
@@ -514,12 +511,22 @@ class _PostWidgetState extends State<PostWidget> {
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(15),
-                    child: Image.memory(
-                      base64Decode(widget.post['postData']),
-                      height: 400,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                    ),
+                    child:
+                        (widget.post.containsKey('postData') &&
+                            widget.post['postData'] != null)
+                        ? Image.memory(
+                            base64Decode(widget.post['postData']),
+                            height: 400,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                          )
+                        : Container(
+                            height: 400,
+                            color: Colors.grey[200],
+                            child: const Center(
+                              child: Icon(Icons.image_not_supported),
+                            ),
+                          ),
                   ),
                 ),
                 AnimatedOpacity(
@@ -559,12 +566,10 @@ class _PostWidgetState extends State<PostWidget> {
                   style: const TextStyle(fontWeight: FontWeight.bold),
                 ),
                 const Spacer(),
-                // 🌟 Share Button
                 IconButton(
                   icon: const Icon(Icons.send_rounded),
                   onPressed: () => _showShareSheet(context, widget.post),
                 ),
-                // Bookmark Button
                 IconButton(
                   icon: const Icon(Icons.bookmark_border),
                   onPressed: () {},
@@ -651,15 +656,20 @@ class _HomeScreenState extends State<HomeScreen> {
                       SwitchListTile(
                         title: const Text("Private Post"),
                         value: isPrivatePost,
-                        onChanged: (val) =>
-                            setStateDialog(() => isPrivatePost = val),
+                        onChanged: (val) {
+                          setStateDialog(() {
+                            isPrivatePost = val;
+                          });
+                        },
                       ),
                     ],
                   ),
                 ),
                 actions: [
                   TextButton(
-                    onPressed: () => Navigator.pop(context),
+                    onPressed: () {
+                      Navigator.pop(context);
+                    },
                     child: const Text("Cancel"),
                   ),
                   ElevatedButton(
@@ -924,9 +934,6 @@ class ActivityScreen extends StatelessWidget {
   }
 }
 
-// ============================================================================
-// 🌟 SEARCH / EXPLORE SCREEN (Fully Restored with User Search & Post Grid)
-// ============================================================================
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
   @override
@@ -961,9 +968,13 @@ class _SearchScreenState extends State<SearchScreen> {
                 if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                var publicPosts = snapshot.data!.docs
-                    .where((doc) => (doc.data() as Map)['isPrivate'] != true)
-                    .toList();
+                var publicPosts = snapshot.data!.docs.where((doc) {
+                  var data = doc.data() as Map<String, dynamic>;
+                  return data.containsKey('isPrivate')
+                      ? data['isPrivate'] != true
+                      : true;
+                }).toList();
+
                 return GridView.builder(
                   padding: const EdgeInsets.all(2),
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -972,24 +983,35 @@ class _SearchScreenState extends State<SearchScreen> {
                     mainAxisSpacing: 2,
                   ),
                   itemCount: publicPosts.length,
-                  itemBuilder: (context, index) => GestureDetector(
-                    onTap: () {
-                      if (context.mounted) {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => PostDetailsScreen(
-                              postId: publicPosts[index].id,
+                  itemBuilder: (context, index) {
+                    var postDataMap =
+                        publicPosts[index].data() as Map<String, dynamic>;
+                    return GestureDetector(
+                      onTap: () {
+                        if (context.mounted) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => PostDetailsScreen(
+                                postId: publicPosts[index].id,
+                              ),
                             ),
-                          ),
-                        );
-                      }
-                    },
-                    child: Image.memory(
-                      base64Decode(publicPosts[index]['postData']),
-                      fit: BoxFit.cover,
-                    ),
-                  ),
+                          );
+                        }
+                      },
+                      child:
+                          (postDataMap.containsKey('postData') &&
+                              postDataMap['postData'] != null)
+                          ? Image.memory(
+                              base64Decode(postDataMap['postData']),
+                              fit: BoxFit.cover,
+                            )
+                          : Container(
+                              color: Colors.grey[300],
+                              child: const Icon(Icons.image_not_supported),
+                            ),
+                    );
+                  },
                 );
               },
             )
@@ -1001,32 +1023,35 @@ class _SearchScreenState extends State<SearchScreen> {
                 if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                var filtered = snapshot.data!.docs
-                    .where(
-                      (doc) => doc['username']
-                          .toString()
-                          .toLowerCase()
-                          .contains(_searchName),
-                    )
-                    .toList();
+                var filtered = snapshot.data!.docs.where((doc) {
+                  var data = doc.data() as Map<String, dynamic>;
+                  return data.containsKey('username') &&
+                      data['username'].toString().toLowerCase().contains(
+                        _searchName,
+                      );
+                }).toList();
+
                 return ListView.builder(
                   itemCount: filtered.length,
-                  itemBuilder: (context, index) => ListTile(
-                    leading: const CircleAvatar(child: Icon(Icons.person)),
-                    title: Text(filtered[index]['username']),
-                    onTap: () {
-                      if (context.mounted) {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => OtherUserProfileScreen(
-                              uid: filtered[index]['uid'],
+                  itemBuilder: (context, index) {
+                    var userData =
+                        filtered[index].data() as Map<String, dynamic>;
+                    return ListTile(
+                      leading: const CircleAvatar(child: Icon(Icons.person)),
+                      title: Text(userData['username'] ?? 'User'),
+                      onTap: () {
+                        if (context.mounted) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  OtherUserProfileScreen(uid: userData['uid']),
                             ),
-                          ),
-                        );
-                      }
-                    },
-                  ),
+                          );
+                        }
+                      },
+                    );
+                  },
                 );
               },
             ),
@@ -1281,7 +1306,8 @@ class _ChatScreenState extends State<ChatScreen> {
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  if (data.containsKey('postImage')) ...[
+                                  if (data.containsKey('postImage') &&
+                                      data['postImage'] != null) ...[
                                     ClipRRect(
                                       borderRadius: BorderRadius.circular(10),
                                       child: Image.memory(
@@ -1355,9 +1381,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
-// ============================================================================
-// 🌟 PROFILE SCREEN (Fully Restored with Change Profile Pic & Edit Profile)
-// ============================================================================
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
   @override
@@ -1387,7 +1410,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () {
+              Navigator.pop(context);
+            },
             child: const Text("Cancel"),
           ),
           ElevatedButton(
@@ -1560,7 +1585,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       child: SizedBox(
                         width: double.infinity,
                         child: OutlinedButton(
-                          onPressed: () => _showEditDialog(name, bio),
+                          onPressed: () {
+                            _showEditDialog(name, bio);
+                          },
                           child: const Text("Edit Profile"),
                         ),
                       ),
@@ -1582,6 +1609,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   gridDelegate:
                                       const SliverGridDelegateWithFixedCrossAxisCount(
                                         crossAxisCount: 3,
+                                        crossAxisSpacing: 2,
+                                        mainAxisSpacing: 2,
                                       ),
                                   itemCount: postCount,
                                   itemBuilder: (context, index) {
@@ -1602,10 +1631,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                           );
                                         }
                                       },
-                                      child: Image.memory(
-                                        base64Decode(post['postData']),
-                                        fit: BoxFit.cover,
-                                      ),
+                                      child:
+                                          (post.containsKey('postData') &&
+                                              post['postData'] != null)
+                                          ? Image.memory(
+                                              base64Decode(post['postData']),
+                                              fit: BoxFit.cover,
+                                            )
+                                          : Container(color: Colors.grey[200]),
                                     );
                                   },
                                 ),
@@ -1652,6 +1685,9 @@ class PostDetailsScreen extends StatelessWidget {
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
+          if (!snapshot.data!.exists) {
+            return const Center(child: Text("Post deleted or not found."));
+          }
           return SingleChildScrollView(
             child: PostWidget(
               post: snapshot.data!.data() as Map<String, dynamic>,
@@ -1680,7 +1716,9 @@ class _StoryScreenState extends State<StoryScreen>
       vsync: this,
       duration: const Duration(seconds: 5),
     );
-    _controller.addListener(() => setState(() {}));
+    _controller.addListener(() {
+      setState(() {});
+    });
     _controller.addStatusListener((status) {
       if (status == AnimationStatus.completed && mounted) {
         Navigator.pop(context);
@@ -1734,7 +1772,9 @@ class _StoryScreenState extends State<StoryScreen>
               right: 10,
               child: IconButton(
                 icon: const Icon(Icons.close, color: Colors.white),
-                onPressed: () => Navigator.pop(context),
+                onPressed: () {
+                  Navigator.pop(context);
+                },
               ),
             ),
           ],
@@ -1924,6 +1964,8 @@ class OtherUserProfileScreen extends StatelessWidget {
                             gridDelegate:
                                 const SliverGridDelegateWithFixedCrossAxisCount(
                                   crossAxisCount: 3,
+                                  crossAxisSpacing: 2,
+                                  mainAxisSpacing: 2,
                                 ),
                             itemCount: postCount,
                             itemBuilder: (context, index) {
@@ -1943,10 +1985,14 @@ class OtherUserProfileScreen extends StatelessWidget {
                                     );
                                   }
                                 },
-                                child: Image.memory(
-                                  base64Decode(post['postData']),
-                                  fit: BoxFit.cover,
-                                ),
+                                child:
+                                    (post.containsKey('postData') &&
+                                        post['postData'] != null)
+                                    ? Image.memory(
+                                        base64Decode(post['postData']),
+                                        fit: BoxFit.cover,
+                                      )
+                                    : Container(color: Colors.grey[200]),
                               );
                             },
                           )
@@ -2001,7 +2047,9 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
 
   Future<void> _login() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+    });
     try {
       await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: _emailController.text.trim(),
@@ -2015,7 +2063,9 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } finally {
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _isLoading = false;
+        });
       }
     }
   }
@@ -2117,7 +2167,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
   bool _isLoading = false;
 
   Future<void> _signUp() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+    });
     try {
       UserCredential userCredential = await FirebaseAuth.instance
           .createUserWithEmailAndPassword(
@@ -2147,7 +2199,9 @@ class _SignUpScreenState extends State<SignUpScreen> {
       }
     } finally {
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _isLoading = false;
+        });
       }
     }
   }
