@@ -176,7 +176,33 @@ class PostWidget extends StatefulWidget {
 class _PostWidgetState extends State<PostWidget> {
   bool isLikeAnimating = false;
 
-  // 🌟 SOLVED: Updated to use the new SharePlus syntax
+  // 🌟 NEW: Handle Save/Unsave Logic
+  void _handleSave() async {
+    String postId = widget.post['postId'];
+    String currentUid = FirebaseAuth.instance.currentUser!.uid;
+    List savedBy = widget.post['savedBy'] ?? [];
+    bool isSaved = savedBy.contains(currentUid);
+
+    if (isSaved) {
+      // Unsave
+      await FirebaseFirestore.instance.collection('posts').doc(postId).update({
+        "savedBy": FieldValue.arrayRemove([currentUid]),
+      });
+    } else {
+      // Save
+      await FirebaseFirestore.instance.collection('posts').doc(postId).update({
+        "savedBy": FieldValue.arrayUnion([currentUid]),
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("Post Saved to Profile! 📌")),
+        );
+      }
+    }
+  }
+
+  // ... (ఇంతకుముందు ఉన్న _shareExternally, _showComments, _showShareSheet, _handleLike ఫంక్షన్స్ అలాగే ఉంచండి)
+
   Future<void> _shareExternally(Map<String, dynamic> post) async {
     try {
       final bytes = base64Decode(post['postData']);
@@ -187,7 +213,6 @@ class _PostWidgetState extends State<PostWidget> {
       String shareText =
           'Check out this post from ${post['username']} on MyBanjara!\n\n${post['caption'] ?? ''}';
 
-      // 🌟 NEW SYNTAX FOR SHARE PLUS
       await SharePlus.instance.share(
         ShareParams(files: [XFile(file.path)], text: shareText),
       );
@@ -368,56 +393,57 @@ class _PostWidgetState extends State<PostWidget> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) {
-        return Column(
-          children: [
-            const Padding(
-              padding: EdgeInsets.all(15.0),
-              child: Text(
-                "Share Post",
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-              ),
-            ),
-            ListTile(
-              leading: const CircleAvatar(
-                backgroundColor: Colors.blueAccent,
-                child: Icon(Icons.share, color: Colors.white),
-              ),
-              title: const Text(
-                "Share via other apps (WhatsApp, Insta, etc.)",
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              onTap: () async {
-                Navigator.pop(context);
-                await _shareExternally(post);
-              },
-            ),
-            const Divider(),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 15.0, vertical: 5.0),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  "Send to Friends",
-                  style: TextStyle(
-                    color: Colors.grey,
-                    fontWeight: FontWeight.bold,
+        return StreamBuilder<QuerySnapshot>(
+          stream: FirebaseFirestore.instance.collection('users').snapshots(),
+          builder: (context, snapshot) {
+            if (!snapshot.hasData) {
+              return const Center(child: CircularProgressIndicator());
+            }
+            var users = snapshot.data!.docs
+                .where((doc) => doc['uid'] != currentUid)
+                .toList();
+            return Column(
+              children: [
+                const Padding(
+                  padding: EdgeInsets.all(15.0),
+                  child: Text(
+                    "Share Post",
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
                   ),
                 ),
-              ),
-            ),
-            Expanded(
-              child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('users')
-                    .snapshots(),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
-                  var users = snapshot.data!.docs
-                      .where((doc) => doc['uid'] != currentUid)
-                      .toList();
-                  return ListView.builder(
+                ListTile(
+                  leading: const CircleAvatar(
+                    backgroundColor: Colors.blueAccent,
+                    child: Icon(Icons.share, color: Colors.white),
+                  ),
+                  title: const Text(
+                    "Share via other apps",
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  onTap: () async {
+                    Navigator.pop(context);
+                    await _shareExternally(post);
+                  },
+                ),
+                const Divider(),
+                const Padding(
+                  padding: EdgeInsets.symmetric(
+                    horizontal: 15.0,
+                    vertical: 5.0,
+                  ),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      "Send to Friends",
+                      style: TextStyle(
+                        color: Colors.grey,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: ListView.builder(
                     itemCount: users.length,
                     itemBuilder: (context, index) {
                       var user = users[index].data() as Map<String, dynamic>;
@@ -428,14 +454,10 @@ class _PostWidgetState extends State<PostWidget> {
                         title: Text(user['username']),
                         trailing: ElevatedButton(
                           style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blueAccent,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(20),
                             ),
-                            backgroundColor: Colors.blueAccent,
-                          ),
-                          child: const Text(
-                            "Send",
-                            style: TextStyle(color: Colors.white),
                           ),
                           onPressed: () async {
                             String roomId =
@@ -453,22 +475,39 @@ class _PostWidgetState extends State<PostWidget> {
                                   "postImage": post['postData'],
                                   "timestamp": FieldValue.serverTimestamp(),
                                 });
+                            await FirebaseFirestore.instance
+                                .collection('chatRooms')
+                                .doc(roomId)
+                                .set({
+                                  "lastMessage": "Shared a post",
+                                  "lastTime": FieldValue.serverTimestamp(),
+                                  "users": [currentUid, user['uid']],
+                                }, SetOptions(merge: true));
                             if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text("Sent to Inbox! ✈️"),
+                              Navigator.pop(context);
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => ChatScreen(
+                                    receiverId: user['uid'],
+                                    receiverName: user['username'],
+                                  ),
                                 ),
                               );
                             }
                           },
+                          child: const Text(
+                            "Send",
+                            style: TextStyle(color: Colors.white),
+                          ),
                         ),
                       );
                     },
-                  );
-                },
-              ),
-            ),
-          ],
+                  ),
+                ),
+              ],
+            );
+          },
         );
       },
     );
@@ -505,9 +544,15 @@ class _PostWidgetState extends State<PostWidget> {
   @override
   Widget build(BuildContext context) {
     String postId = widget.post['postId'];
+    String currentUid = FirebaseAuth.instance.currentUser!.uid;
     bool isLiked =
         (widget.post['likes'] != null &&
-        widget.post['likes'][FirebaseAuth.instance.currentUser!.uid] == true);
+        widget.post['likes'][currentUid] == true);
+
+    // 🌟 Check if this post is saved by the current user
+    List savedBy = widget.post['savedBy'] ?? [];
+    bool isSaved = savedBy.contains(currentUid);
+
     int likeCount = (widget.post['likes'] != null)
         ? (widget.post['likes'] as Map).length
         : 0;
@@ -629,12 +674,16 @@ class _PostWidgetState extends State<PostWidget> {
                 ),
                 const Spacer(),
                 IconButton(
-                  icon: const Icon(Icons.send_outlined),
+                  icon: const Icon(Icons.near_me_outlined, size: 28),
                   onPressed: () => _showShareSheet(context, widget.post),
                 ),
+                // 🌟 Update Bookmark icon and logic
                 IconButton(
-                  icon: const Icon(Icons.bookmark_border),
-                  onPressed: () {},
+                  icon: Icon(
+                    isSaved ? Icons.bookmark : Icons.bookmark_border,
+                    color: isSaved ? Colors.black : Colors.black87,
+                  ),
+                  onPressed: _handleSave, // Call save function
                 ),
               ],
             ),
