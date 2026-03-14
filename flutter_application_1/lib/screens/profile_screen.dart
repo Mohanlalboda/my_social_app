@@ -67,7 +67,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   // 2. UPDATE PROFILE PICTURE
-  // 🌟 UPDATE PROFILE PICTURE (Linter-Proof Fix)
   Future<void> _updateProfilePic() async {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(
@@ -77,23 +76,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
 
     if (image != null) {
-      // 1. ఇక్కడ messenger ని కాప్చర్ చేయకూడదు
       String base64Image = base64Encode(await File(image.path).readAsBytes());
       String uid = FirebaseAuth.instance.currentUser!.uid;
 
-      // 2. Async operation
       await FirebaseFirestore.instance.collection('users').doc(uid).update({
         "profilePic": base64Image,
       });
 
-      // 3. ఇక్కడ కచ్చితంగా mounted చెక్ ఉండాలి
       if (!mounted) return;
-
-      // 4. ఇక్కడ నేరుగా context ని వాడాలి
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text("Profile updated! 📸")));
     }
+  }
+
+  // 3. 🌟 SHOW FULL PROFILE PICTURE (Pop-up Dialog)
+  void _showFullProfilePic(String base64String, String fallbackName) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Hero(
+              tag: 'profilePic_zoom',
+              child: SafeProfilePic(
+                base64String: base64String,
+                radius: 150, // ఫోటో పెద్దగా కనిపించడానికి
+                fallbackText: fallbackName.isNotEmpty ? fallbackName[0] : "U",
+              ),
+            ),
+            const SizedBox(height: 20),
+            IconButton(
+              icon: const Icon(Icons.close, color: Colors.white, size: 30),
+              onPressed: () => Navigator.pop(context),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -129,15 +152,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.menu),
                   onSelected: (value) {
-                    if (value == 'edit') {
-                      _showEditDialog(name, bio);
-                    }
-                    if (value == 'pic') {
-                      _updateProfilePic();
-                    }
-                    if (value == 'logout') {
-                      FirebaseAuth.instance.signOut();
-                    }
+                    if (value == 'edit') _showEditDialog(name, bio);
+                    if (value == 'pic') _updateProfilePic();
+                    if (value == 'logout') FirebaseAuth.instance.signOut();
                   },
                   itemBuilder: (context) => [
                     const PopupMenuItem(
@@ -171,10 +188,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   padding: const EdgeInsets.all(20),
                   child: Row(
                     children: [
-                      SafeProfilePic(
-                        base64String: userData['profilePic'],
-                        radius: 40,
-                        fallbackText: name.isNotEmpty ? name[0] : "U",
+                      // 🌟 FIXED: Added GestureDetector & Hero to the Profile Pic
+                      GestureDetector(
+                        onTap: () {
+                          _showFullProfilePic(
+                            userData['profilePic'] ?? "",
+                            name,
+                          );
+                        },
+                        child: Hero(
+                          tag: 'profilePic_zoom',
+                          child: SafeProfilePic(
+                            base64String: userData['profilePic'],
+                            radius: 40,
+                            fallbackText: name.isNotEmpty ? name[0] : "U",
+                          ),
+                        ),
                       ),
                       Expanded(
                         child: StreamBuilder<QuerySnapshot>(
@@ -194,34 +223,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   label: "Posts",
                                 ),
                                 GestureDetector(
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => UserListScreen(
-                                          title: "Followers",
-                                          userIds: followers,
-                                        ),
+                                  onTap: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => UserListScreen(
+                                        title: "Followers",
+                                        userIds: followers,
                                       ),
-                                    );
-                                  },
+                                    ),
+                                  ),
                                   child: _StatColumn(
                                     num: followers.length.toString(),
                                     label: "Followers",
                                   ),
                                 ),
                                 GestureDetector(
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => UserListScreen(
-                                          title: "Following",
-                                          userIds: following,
-                                        ),
+                                  onTap: () => Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (context) => UserListScreen(
+                                        title: "Following",
+                                        userIds: following,
                                       ),
-                                    );
-                                  },
+                                    ),
+                                  ),
                                   child: _StatColumn(
                                     num: following.length.toString(),
                                     label: "Following",
@@ -291,12 +316,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // 🌟 REELS GRID (Line 288 Fix)
   Widget _buildReelsGrid(Stream<QuerySnapshot> stream) {
     return StreamBuilder<QuerySnapshot>(
       stream: stream,
       builder: (context, snapshot) {
-        // ✅ FIXED: Added curly braces
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
@@ -321,12 +344,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // 🌟 POST GRID (Line 313 Fix)
   Widget _buildPostGrid(Stream<QuerySnapshot> stream) {
     return StreamBuilder<QuerySnapshot>(
       stream: stream,
       builder: (context, snapshot) {
-        // ✅ FIXED: Added curly braces
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
