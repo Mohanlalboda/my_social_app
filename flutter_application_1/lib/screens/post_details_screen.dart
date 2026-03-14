@@ -16,11 +16,9 @@ class PostDetailsScreen extends StatelessWidget {
             .doc(postId)
             .snapshots(),
         builder: (context, snapshot) {
-          // 🌟 FIXED: Added curly braces for 'if' blocks
           if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
-
           if (!snapshot.data!.exists) {
             return const Center(child: Text("Post not found"));
           }

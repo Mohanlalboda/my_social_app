@@ -5,7 +5,6 @@ import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
-// మనం విడగొట్టిన విడ్జెట్స్ మరియు స్క్రీన్స్ ఇంపోర్ట్స్
 import '../widgets/post_widget.dart';
 import '../widgets/safe_elements.dart';
 import 'story_screen.dart';
@@ -19,7 +18,6 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   bool _isUploading = false;
 
-  // 🌟 STORY UPLOAD LOGIC
   Future<void> _uploadStory() async {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(
@@ -29,11 +27,9 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     if (image != null) {
-      // ఏవైనా మార్పులు చేసే ముందు విడ్జెట్ ఇంకా స్క్రీన్ మీద ఉందో లేదో చెక్ చేయాలి
       if (!mounted) {
         return;
       }
-
       setState(() {
         _isUploading = true;
       });
@@ -48,7 +44,6 @@ class _HomeScreenState extends State<HomeScreen> {
           "timestamp": FieldValue.serverTimestamp(),
         });
 
-        // 🌟 FIXED: Guard check after async gap
         if (!mounted) {
           return;
         }
@@ -67,7 +62,6 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // 🌟 POST UPLOAD LOGIC
   Future<void> _uploadPost() async {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(
@@ -80,7 +74,6 @@ class _HomeScreenState extends State<HomeScreen> {
       if (!mounted) {
         return;
       }
-
       TextEditingController captionController = TextEditingController();
       bool isPrivatePost = false;
 
@@ -126,18 +119,18 @@ class _HomeScreenState extends State<HomeScreen> {
                     onPressed: () => Navigator.pop(dialogContext),
                     child: const Text("Cancel"),
                   ),
-                  // ... (మునుపటి imports)
-
-                  // _uploadPost మెథడ్ లోపల ఈ మార్పు చేసాను:
                   ElevatedButton(
                     onPressed: () async {
                       final navigator = Navigator.of(dialogContext);
                       final messenger = ScaffoldMessenger.of(context);
-
                       navigator.pop();
 
-                      if (!mounted) return;
-                      setState(() => _isUploading = true);
+                      if (!mounted) {
+                        return;
+                      }
+                      setState(() {
+                        _isUploading = true;
+                      });
 
                       try {
                         String base64Image = base64Encode(
@@ -167,7 +160,6 @@ class _HomeScreenState extends State<HomeScreen> {
                               "isPrivate": isPrivatePost,
                             });
 
-                        // 🌟 FIXED: Use mounted check strictly here
                         if (mounted) {
                           messenger.showSnackBar(
                             const SnackBar(content: Text("Shared! 🌎")),
@@ -177,7 +169,9 @@ class _HomeScreenState extends State<HomeScreen> {
                         debugPrint(e.toString());
                       } finally {
                         if (mounted) {
-                          setState(() => _isUploading = false);
+                          setState(() {
+                            _isUploading = false;
+                          });
                         }
                       }
                     },
@@ -195,7 +189,39 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final String currentUid = FirebaseAuth.instance.currentUser!.uid;
+
     return Scaffold(
+      appBar: AppBar(
+        title: const Text(
+          "My Social App",
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        actions: [
+          StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('messages')
+                .where('receiverId', isEqualTo: currentUid)
+                .where('isRead', isEqualTo: false)
+                .snapshots(),
+            builder: (context, snapshot) {
+              int unreadCount = snapshot.hasData
+                  ? snapshot.data!.docs.length
+                  : 0;
+              return Padding(
+                padding: const EdgeInsets.only(right: 15.0),
+                child: Badge(
+                  isLabelVisible: unreadCount > 0,
+                  label: Text(unreadCount.toString()),
+                  child: IconButton(
+                    icon: const Icon(Icons.message_outlined, size: 28),
+                    onPressed: () {},
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: const Color(0xFFFD1D1D),
         onPressed: _uploadPost,
@@ -287,7 +313,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                 as Map<String, dynamic>;
                         return GestureDetector(
                           onTap: () {
-                            // 🌟 FIXED: Navigation inside curly braces
                             Navigator.push(
                               context,
                               MaterialPageRoute(
@@ -340,7 +365,6 @@ class _HomeScreenState extends State<HomeScreen> {
                             .orderBy('timestamp', descending: true)
                             .snapshots(),
                         builder: (context, snapshot) {
-                          // 🌟 FIXED: Added curly braces (Line 330 error)
                           if (!snapshot.hasData) {
                             return const Center(
                               child: CircularProgressIndicator(),
@@ -353,7 +377,6 @@ class _HomeScreenState extends State<HomeScreen> {
                               )
                               .toList();
 
-                          // 🌟 FIXED: Added curly braces (Line 341 error)
                           if (feedPosts.isEmpty) {
                             return const Center(
                               child: Text("Follow people to see posts! 🌎"),
