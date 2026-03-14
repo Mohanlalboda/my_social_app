@@ -305,10 +305,12 @@ class _PostWidgetState extends State<PostWidget> {
               ],
             ),
           ),
-          if (widget.post['caption'].isNotEmpty)
+          // 🌟 కొత్త కోడ్ (Null-safe చెక్)
+          if (widget.post['caption'] != null &&
+              widget.post['caption'].toString().trim().isNotEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 5),
-              child: Text(widget.post['caption']),
+              child: Text(widget.post['caption'].toString()),
             ),
         ],
       ),

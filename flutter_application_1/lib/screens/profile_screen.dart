@@ -4,9 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-
+import 'scrolling_posts_screen.dart';
 import '../widgets/safe_elements.dart';
-import 'post_details_screen.dart';
 import 'user_list_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -90,7 +89,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // 3. 🌟 SHOW FULL PROFILE PICTURE (Pop-up Dialog)
+  // 3. SHOW FULL PROFILE PICTURE
   void _showFullProfilePic(String base64String, String fallbackName) {
     showDialog(
       context: context,
@@ -104,7 +103,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               tag: 'profilePic_zoom',
               child: SafeProfilePic(
                 base64String: base64String,
-                radius: 150, // ఫోటో పెద్దగా కనిపించడానికి
+                radius: 150,
                 fallbackText: fallbackName.isNotEmpty ? fallbackName[0] : "U",
               ),
             ),
@@ -188,7 +187,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   padding: const EdgeInsets.all(20),
                   child: Row(
                     children: [
-                      // 🌟 FIXED: Added GestureDetector & Hero to the Profile Pic
                       GestureDetector(
                         onTap: () {
                           _showFullProfilePic(
@@ -316,6 +314,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // 🌟 REELS GRID
   Widget _buildReelsGrid(Stream<QuerySnapshot> stream) {
     return StreamBuilder<QuerySnapshot>(
       stream: stream,
@@ -328,6 +327,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           return const Center(child: Text("No Reels yet."));
         }
         return GridView.builder(
+          // 🌟 FIXED: Added AlwaysScrollableScrollPhysics here
+          physics: const AlwaysScrollableScrollPhysics(),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 3,
             crossAxisSpacing: 2,
@@ -344,6 +345,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // 🌟 POST GRID
   Widget _buildPostGrid(Stream<QuerySnapshot> stream) {
     return StreamBuilder<QuerySnapshot>(
       stream: stream,
@@ -355,7 +357,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         if (posts.isEmpty) {
           return const Center(child: Text("No posts found."));
         }
+        List<String> postIds = posts.map((doc) => doc.id).toList();
         return GridView.builder(
+          // 🌟 FIXED: Added AlwaysScrollableScrollPhysics here
+          physics: const AlwaysScrollableScrollPhysics(),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 3,
             crossAxisSpacing: 2,
@@ -367,7 +372,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => PostDetailsScreen(postId: posts[i].id),
+                  builder: (context) =>
+                      ScrollingPostsScreen(postIds: postIds, initialIndex: i),
                 ),
               );
             },
