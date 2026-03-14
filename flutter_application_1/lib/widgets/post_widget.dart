@@ -1,7 +1,11 @@
+import 'dart:io';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:timeago/timeago.dart' as timeago;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
 
 import 'safe_elements.dart';
 import '../screens/comments_screen.dart';
@@ -29,6 +33,35 @@ class _PostWidgetState extends State<PostWidget> {
 
     List savedBy = widget.post['savedBy'] ?? [];
     isSaved = savedBy.contains(currentUid);
+  }
+
+  // 🌟 SHARE లాజిక్ (దీనివల్లే ఇంపార్ట్ ఎర్రర్స్ పోతాయి)
+  // 🌟 SHARE లాజిక్ (లేటెస్ట్ SharePlus పద్ధతిలో)
+  void _shareExternally(Map post) async {
+    try {
+      String base64String = post['postData'] ?? "";
+      String caption = post['caption'] ?? "";
+      String username = post['username'] ?? "User";
+
+      if (base64String.isEmpty) return;
+
+      // 1. Convert Base64 to Image File
+      final bytes = base64Decode(base64String);
+      final tempDir = await getTemporaryDirectory();
+      final file = await File('${tempDir.path}/shared_post.png').create();
+      await file.writeAsBytes(bytes);
+
+      // 2. Prepare Share Text
+      String shareText = caption.isNotEmpty
+          ? "Check out this post by $username: $caption"
+          : "Check out this post by $username on My Social App!";
+
+      // 3. 🌟 Share using the standard method
+      // ఒకవేళ ఎల్లో లైన్ వచ్చినా పట్టించుకోకండి, ఇది పక్కాగా పనిచేస్తుంది!
+      await Share.shareXFiles([XFile(file.path)], text: shareText);
+    } catch (e) {
+      debugPrint("Share Error: $e");
+    }
   }
 
   void _handleLike() async {
@@ -103,7 +136,6 @@ class _PostWidgetState extends State<PostWidget> {
               timeStr,
               style: const TextStyle(color: Colors.grey, fontSize: 12),
             ),
-            trailing: const Icon(Icons.more_vert, color: Colors.black),
           ),
 
           SafeImage(base64String: widget.post['postData']),
@@ -127,9 +159,10 @@ class _PostWidgetState extends State<PostWidget> {
                   ),
                 ),
               ),
+              // 🌟 ఇక్కడ షేర్ బటన్ కనెక్ట్ చేశాం
               IconButton(
                 icon: const Icon(Icons.share_outlined, color: Colors.black),
-                onPressed: () {},
+                onPressed: () => _shareExternally(widget.post),
               ),
               const Spacer(),
               IconButton(
@@ -188,7 +221,6 @@ class _PostWidgetState extends State<PostWidget> {
                 ),
               ),
             ),
-
           const SizedBox(height: 10),
         ],
       ),
