@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:timeago/timeago.dart' as timeago; // 🌟 టైమ్ ఫార్మాటింగ్ కోసం
+import 'package:timeago/timeago.dart' as timeago;
+
 import '../widgets/safe_elements.dart';
 import 'post_details_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   final String receiverId;
   final String receiverName;
+
   const ChatScreen({
     super.key,
     required this.receiverId,
@@ -19,57 +21,65 @@ class ChatScreen extends StatefulWidget {
 }
 
 class _ChatScreenState extends State<ChatScreen> {
-  final TextEditingController _msgController = TextEditingController();
+  final TextEditingController _messageController = TextEditingController();
+  final String currentUid = FirebaseAuth.instance.currentUser!.uid;
 
-  String getChatRoomId(String a, String b) {
-    return a.hashCode <= b.hashCode ? "${a}_$b" : "${b}_$a";
+  void _sendMessage() async {
+    // 🌟 FIXED: Added curly braces
+    if (_messageController.text.trim().isEmpty) {
+      return;
+    }
+
+    await FirebaseFirestore.instance.collection('messages').add({
+      'senderId': currentUid,
+      'receiverId': widget.receiverId,
+      'text': _messageController.text.trim(),
+      'type': 'text',
+      'timestamp': FieldValue.serverTimestamp(),
+      'isRead': false,
+    });
+
+    _messageController.clear();
   }
 
   @override
   Widget build(BuildContext context) {
-    String currentUid = FirebaseAuth.instance.currentUser!.uid;
-    String roomId = getChatRoomId(currentUid, widget.receiverId);
-
-    // చాట్ ఓపెన్ చేయగానే అన్‌రీడ్ మెసేజ్ మార్క్ తీసేయడానికి
-    FirebaseFirestore.instance.collection('chatRooms').doc(roomId).set({
-      "hasUnread_$currentUid": false,
-    }, SetOptions(merge: true));
-
     return Scaffold(
-      appBar: AppBar(
-        title: Text(
-          widget.receiverName,
-          style: const TextStyle(fontWeight: FontWeight.bold),
-        ),
-      ),
+      appBar: AppBar(title: Text(widget.receiverName)),
       body: Column(
         children: [
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
-                  .collection('chatRooms')
-                  .doc(roomId)
                   .collection('messages')
                   .orderBy('timestamp', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
+                // 🌟 FIXED: Added curly braces
                 if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                var msgs = snapshot.data!.docs;
+                var messages = snapshot.data!.docs.where((doc) {
+                  return (doc['senderId'] == currentUid &&
+                          doc['receiverId'] == widget.receiverId) ||
+                      (doc['senderId'] == widget.receiverId &&
+                          doc['receiverId'] == currentUid);
+                }).toList();
+
                 return ListView.builder(
                   reverse: true,
-                  itemCount: msgs.length,
+                  itemCount: messages.length,
                   itemBuilder: (context, index) {
-                    var m = msgs[index].data() as Map<String, dynamic>;
-                    bool isMe = m['senderId'] == currentUid;
+                    var msg = messages[index].data() as Map<String, dynamic>;
+                    bool isMe = msg['senderId'] == currentUid;
 
-                    // 🌟 TIME FORMATTING LOGIC
-                    String timeStr = "";
-                    if (m['timestamp'] != null) {
-                      DateTime date = (m['timestamp'] as Timestamp).toDate();
-                      timeStr = timeago.format(date, locale: 'en_short');
+                    String messageTime = "";
+                    if (msg['timestamp'] != null) {
+                      messageTime = timeago.format(
+                        (msg['timestamp'] as Timestamp).toDate(),
+                        locale: 'en_short',
+                      );
                     }
 
                     return Align(
@@ -82,68 +92,44 @@ class _ChatScreenState extends State<ChatScreen> {
                             : CrossAxisAlignment.start,
                         children: [
                           Container(
-                            padding: const EdgeInsets.all(12),
                             margin: const EdgeInsets.symmetric(
-                              vertical: 4,
                               horizontal: 10,
+                              vertical: 2,
                             ),
                             constraints: BoxConstraints(
-                              maxWidth: MediaQuery.of(context).size.width * 0.7,
+                              maxWidth:
+                                  MediaQuery.of(context).size.width * 0.75,
                             ),
-                            decoration: BoxDecoration(
-                              color: isMe ? Colors.red[400] : Colors.grey[200],
-                              borderRadius: BorderRadius.only(
-                                topLeft: const Radius.circular(15),
-                                topRight: const Radius.circular(15),
-                                bottomLeft: isMe
-                                    ? const Radius.circular(15)
-                                    : Radius.zero,
-                                bottomRight: isMe
-                                    ? Radius.zero
-                                    : const Radius.circular(15),
-                              ),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                if (m['postImage'] != null) ...[
-                                  GestureDetector(
-                                    onTap: () => Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) => PostDetailsScreen(
-                                          postId: m['postId'],
-                                        ),
-                                      ),
+                            child: msg['type'] == 'post_share'
+                                ? SharedPostPreview(
+                                    postId: msg['postId'],
+                                    isMe: isMe,
+                                  )
+                                : Container(
+                                    padding: const EdgeInsets.all(12),
+                                    decoration: BoxDecoration(
+                                      color: isMe
+                                          ? Colors.blue
+                                          : Colors.grey[300],
+                                      borderRadius: BorderRadius.circular(15),
                                     ),
-                                    child: ClipRRect(
-                                      borderRadius: BorderRadius.circular(10),
-                                      child: SafeImage(
-                                        base64String: m['postImage'],
-                                        height: 150,
+                                    child: Text(
+                                      msg['text'] ?? "",
+                                      style: TextStyle(
+                                        color: isMe
+                                            ? Colors.white
+                                            : Colors.black,
                                       ),
                                     ),
                                   ),
-                                  const SizedBox(height: 5),
-                                ],
-                                Text(
-                                  m['message'] ?? "",
-                                  style: TextStyle(
-                                    color: isMe ? Colors.white : Colors.black,
-                                    fontSize: 15,
-                                  ),
-                                ),
-                              ],
-                            ),
                           ),
-                          // 🌟 DISPLAY TIMESTAMP BELOW BUBBLE
                           Padding(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 15,
                               vertical: 2,
                             ),
                             child: Text(
-                              timeStr,
+                              messageTime,
                               style: const TextStyle(
                                 fontSize: 10,
                                 color: Colors.grey,
@@ -158,57 +144,36 @@ class _ChatScreenState extends State<ChatScreen> {
               },
             ),
           ),
-          // మెసేజ్ పంపే బాక్స్
-          Padding(
-            padding: const EdgeInsets.all(10.0),
+
+          Container(
+            padding: const EdgeInsets.all(8),
+            color: Colors.white,
             child: Row(
               children: [
                 Expanded(
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 15),
-                    child: TextField(
-                      controller: _msgController,
-                      decoration: const InputDecoration(
-                        hintText: "Type a message...",
-                        border: InputBorder.none,
+                  child: TextField(
+                    controller: _messageController,
+                    decoration: InputDecoration(
+                      hintText: "Type a message...",
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(20),
+                        borderSide: BorderSide.none,
+                      ),
+                      filled: true,
+                      fillColor: Colors.grey[200],
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 15,
+                        vertical: 10,
                       ),
                     ),
                   ),
                 ),
                 const SizedBox(width: 8),
                 CircleAvatar(
-                  backgroundColor: Colors.red,
+                  backgroundColor: Colors.blue,
                   child: IconButton(
-                    icon: const Icon(Icons.send, color: Colors.white, size: 20),
-                    onPressed: () async {
-                      if (_msgController.text.trim().isEmpty) return;
-                      String msg = _msgController.text.trim();
-                      _msgController.clear();
-
-                      await FirebaseFirestore.instance
-                          .collection('chatRooms')
-                          .doc(roomId)
-                          .collection('messages')
-                          .add({
-                            "senderId": currentUid,
-                            "message": msg,
-                            "timestamp": FieldValue.serverTimestamp(),
-                          });
-
-                      await FirebaseFirestore.instance
-                          .collection('chatRooms')
-                          .doc(roomId)
-                          .set({
-                            "lastMessage": msg,
-                            "lastTime": FieldValue.serverTimestamp(),
-                            "users": [currentUid, widget.receiverId],
-                            "hasUnread_${widget.receiverId}": true,
-                          }, SetOptions(merge: true));
-                    },
+                    icon: const Icon(Icons.send, color: Colors.white),
+                    onPressed: _sendMessage,
                   ),
                 ),
               ],
@@ -216,6 +181,100 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class SharedPostPreview extends StatelessWidget {
+  final String postId;
+  final bool isMe;
+  const SharedPostPreview({
+    super.key,
+    required this.postId,
+    required this.isMe,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('posts')
+          .doc(postId)
+          .snapshots(),
+      builder: (context, snapshot) {
+        // 🌟 FIXED: Added curly braces
+        if (!snapshot.hasData || !snapshot.data!.exists) {
+          return Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.grey[200],
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Text(
+              "Post Unavailable",
+              style: TextStyle(color: Colors.grey),
+            ),
+          );
+        }
+
+        var postData = snapshot.data!.data() as Map<String, dynamic>;
+
+        return GestureDetector(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => PostDetailsScreen(postId: postId),
+              ),
+            );
+          },
+          child: Container(
+            decoration: BoxDecoration(
+              color: isMe ? Colors.blue[50] : Colors.grey[200],
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.post_add, size: 16, color: Colors.grey),
+                      const SizedBox(width: 5),
+                      Expanded(
+                        child: Text(
+                          "Shared a post by ${postData['username']}",
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: SafeImage(base64String: postData['postData']),
+                ),
+                if (postData['caption'] != null &&
+                    postData['caption'].toString().isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Text(
+                      postData['caption'],
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 }

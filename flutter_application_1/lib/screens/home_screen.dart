@@ -18,7 +18,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   bool _isUploading = false;
 
-  Future<void> _uploadStory() async {
+  Future<void> _uploadStory(Map<String, dynamic> userData) async {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(
       source: ImageSource.gallery,
@@ -39,7 +39,10 @@ class _HomeScreenState extends State<HomeScreen> {
         String uid = FirebaseAuth.instance.currentUser!.uid;
 
         await FirebaseFirestore.instance.collection('stories').add({
+          "uid": uid,
           "ownerId": uid,
+          "username": userData['username'] ?? "User",
+          "profilePic": userData['profilePic'] ?? "",
           "storyData": base64Image,
           "timestamp": FieldValue.serverTimestamp(),
         });
@@ -121,6 +124,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   ),
                   ElevatedButton(
                     onPressed: () async {
+                      // 🌟 FIXED: context ఎర్రర్ రాకుండా ముందే messenger ని తీసుకుంటున్నాం
                       final navigator = Navigator.of(dialogContext);
                       final messenger = ScaffoldMessenger.of(context);
                       navigator.pop();
@@ -166,7 +170,8 @@ class _HomeScreenState extends State<HomeScreen> {
                           );
                         }
                       } catch (e) {
-                        debugPrint(e.toString());
+                        // 🌟 FIXED: Empty catch ఎర్రర్ రాకుండా ప్రింట్ పెట్టాం
+                        debugPrint("Upload Post Error: $e");
                       } finally {
                         if (mounted) {
                           setState(() {
@@ -191,37 +196,6 @@ class _HomeScreenState extends State<HomeScreen> {
     final String currentUid = FirebaseAuth.instance.currentUser!.uid;
 
     return Scaffold(
-      appBar: AppBar(
-        title: const Text(
-          "My Social App",
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        actions: [
-          StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('messages')
-                .where('receiverId', isEqualTo: currentUid)
-                .where('isRead', isEqualTo: false)
-                .snapshots(),
-            builder: (context, snapshot) {
-              int unreadCount = snapshot.hasData
-                  ? snapshot.data!.docs.length
-                  : 0;
-              return Padding(
-                padding: const EdgeInsets.only(right: 15.0),
-                child: Badge(
-                  isLabelVisible: unreadCount > 0,
-                  label: Text(unreadCount.toString()),
-                  child: IconButton(
-                    icon: const Icon(Icons.message_outlined, size: 28),
-                    onPressed: () {},
-                  ),
-                ),
-              );
-            },
-          ),
-        ],
-      ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: const Color(0xFFFD1D1D),
         onPressed: _uploadPost,
@@ -233,6 +207,7 @@ class _HomeScreenState extends State<HomeScreen> {
             .doc(currentUid)
             .snapshots(),
         builder: (context, userSnapshot) {
+          // 🌟 FIXED: Added curly braces
           if (!userSnapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
@@ -242,29 +217,43 @@ class _HomeScreenState extends State<HomeScreen> {
           List following = userData['following'] ?? [];
           List feedUserIds = List.from(following)..add(currentUid);
 
+          DateTime yesterday = DateTime.now().subtract(
+            const Duration(hours: 24),
+          );
+
           return Column(
             children: [
               SizedBox(
                 height: 110,
                 child: StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
-                      .collection('users')
+                      .collection('stories')
+                      .where('timestamp', isGreaterThanOrEqualTo: yesterday)
                       .snapshots(),
                   builder: (context, snapshot) {
+                    // 🌟 FIXED: Added curly braces
                     if (!snapshot.hasData) {
                       return const SizedBox();
                     }
-                    var storyUsers = snapshot.data!.docs
-                        .where((doc) => feedUserIds.contains(doc['uid']))
+
+                    var validStories = snapshot.data!.docs
+                        .where((doc) => feedUserIds.contains(doc['ownerId']))
                         .toList();
+
+                    Map<String, Map<String, dynamic>> uniqueStoryUsers = {};
+                    for (var doc in validStories) {
+                      var data = doc.data() as Map<String, dynamic>;
+                      uniqueStoryUsers[data['ownerId']] = data;
+                    }
+                    var storyList = uniqueStoryUsers.values.toList();
 
                     return ListView.builder(
                       scrollDirection: Axis.horizontal,
-                      itemCount: storyUsers.length + 1,
+                      itemCount: storyList.length + 1,
                       itemBuilder: (context, index) {
                         if (index == 0) {
                           return GestureDetector(
-                            onTap: _uploadStory,
+                            onTap: () => _uploadStory(userData),
                             child: Padding(
                               padding: const EdgeInsets.all(8.0),
                               child: Column(
@@ -308,18 +297,15 @@ class _HomeScreenState extends State<HomeScreen> {
                           );
                         }
 
-                        var user =
-                            storyUsers[index - 1].data()
-                                as Map<String, dynamic>;
+                        var userStory = storyList[index - 1];
                         return GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => StoryScreen(user: user),
-                              ),
-                            );
-                          },
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  StoryScreen(user: userStory),
+                            ),
+                          ),
                           child: Padding(
                             padding: const EdgeInsets.all(8.0),
                             child: Column(
@@ -337,13 +323,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ),
                                   ),
                                   child: SafeProfilePic(
-                                    base64String: user['profilePic'],
+                                    base64String: userStory['profilePic'],
                                     radius: 30,
-                                    fallbackText: user['username'] ?? "U",
+                                    fallbackText: userStory['username'] ?? "U",
                                   ),
                                 ),
                                 Text(
-                                  user['username'],
+                                  userStory['username'] ?? "User",
                                   style: const TextStyle(fontSize: 10),
                                 ),
                               ],
@@ -365,6 +351,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             .orderBy('timestamp', descending: true)
                             .snapshots(),
                         builder: (context, snapshot) {
+                          // 🌟 FIXED: Added curly braces
                           if (!snapshot.hasData) {
                             return const Center(
                               child: CircularProgressIndicator(),
@@ -377,6 +364,7 @@ class _HomeScreenState extends State<HomeScreen> {
                               )
                               .toList();
 
+                          // 🌟 FIXED: Added curly braces
                           if (feedPosts.isEmpty) {
                             return const Center(
                               child: Text("Follow people to see posts! 🌎"),

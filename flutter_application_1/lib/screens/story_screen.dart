@@ -201,13 +201,17 @@ class _StoryScreenState extends State<StoryScreen>
                                   base64String: widget.user['profilePic'],
                                   radius: 18,
                                   fallbackText:
-                                      widget.user['username'].isNotEmpty
-                                      ? widget.user['username'][0]
+                                      (widget.user['username'] != null &&
+                                          widget.user['username']
+                                              .toString()
+                                              .trim()
+                                              .isNotEmpty)
+                                      ? widget.user['username'][0].toUpperCase()
                                       : "U",
                                 ),
                                 const SizedBox(width: 10),
                                 Text(
-                                  widget.user['username'],
+                                  widget.user['username'] ?? "User",
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontWeight: FontWeight.bold,

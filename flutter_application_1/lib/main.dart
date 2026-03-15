@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart'; // 🌟 Added for Red Dots
 import 'package:google_fonts/google_fonts.dart';
 
-// 🌟 మీ కొత్త ఫైల్స్ అన్నింటినీ ఇక్కడ ఇంపోర్ట్ చేస్తున్నాం
 import 'firebase_options.dart';
 import 'screens/login_screen.dart';
 import 'screens/home_screen.dart';
@@ -57,16 +57,17 @@ class MainNavigation extends StatefulWidget {
 class _MainNavigationState extends State<MainNavigation> {
   int _selectedIndex = 0;
 
-  // main.dart లోని నేవిగేషన్ లిస్ట్
   final List<Widget> _screens = [
     const HomeScreen(),
     const SearchScreen(),
     const Center(child: Text("Reels coming soon!")),
-    const ProfileScreen(), // 🌟 ఇక్కడ ఎర్రర్ రాకూడదు
+    const ProfileScreen(),
   ];
 
   @override
   Widget build(BuildContext context) {
+    final currentUser = FirebaseAuth.instance.currentUser;
+
     return Scaffold(
       appBar: _selectedIndex == 3
           ? null
@@ -81,23 +82,67 @@ class _MainNavigationState extends State<MainNavigation> {
                 ),
               ),
               actions: [
-                IconButton(
-                  icon: const Icon(Icons.favorite_border, color: Colors.black),
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const ActivityScreen(),
-                    ),
-                  ),
+                // 🌟 FIX 6: Activity (Heart) Red Dot
+                StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('notifications')
+                      .where('receiverId', isEqualTo: currentUser?.uid)
+                      .where('isRead', isEqualTo: false)
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    int unreadCount = snapshot.hasData
+                        ? snapshot.data!.docs.length
+                        : 0;
+                    return Badge(
+                      isLabelVisible: unreadCount > 0,
+                      label: Text(unreadCount.toString()),
+                      child: IconButton(
+                        icon: const Icon(
+                          Icons.favorite_border,
+                          color: Colors.black,
+                        ),
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const ActivityScreen(),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
-                IconButton(
-                  icon: const Icon(Icons.send_outlined, color: Colors.black),
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const InboxScreen(),
-                    ),
-                  ),
+                const SizedBox(width: 10),
+                // 🌟 FIX 6: Messages (Inbox) Red Dot
+                StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('messages')
+                      .where('receiverId', isEqualTo: currentUser?.uid)
+                      .where('isRead', isEqualTo: false)
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    int unreadCount = snapshot.hasData
+                        ? snapshot.data!.docs.length
+                        : 0;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 10),
+                      child: Badge(
+                        isLabelVisible: unreadCount > 0,
+                        label: Text(unreadCount.toString()),
+                        child: IconButton(
+                          icon: const Icon(
+                            Icons.send_outlined,
+                            color: Colors.black,
+                          ),
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const InboxScreen(),
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
