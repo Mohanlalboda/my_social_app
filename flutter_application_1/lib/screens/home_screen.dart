@@ -228,10 +228,12 @@ class _HomeScreenState extends State<HomeScreen> {
                 child: StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
                       .collection('stories')
-                      .where('timestamp', isGreaterThanOrEqualTo: yesterday)
+                      .where(
+                        'timestamp',
+                        isGreaterThanOrEqualTo: yesterday,
+                      ) // 🌟 24 గంటల లాజిక్
                       .snapshots(),
                   builder: (context, snapshot) {
-                    // 🌟 FIXED: Added curly braces
                     if (!snapshot.hasData) {
                       return const SizedBox();
                     }
@@ -243,6 +245,8 @@ class _HomeScreenState extends State<HomeScreen> {
                     Map<String, Map<String, dynamic>> uniqueStoryUsers = {};
                     for (var doc in validStories) {
                       var data = doc.data() as Map<String, dynamic>;
+                      data['storyId'] =
+                          doc.id; // 🌟 స్టోరీ ఐడీని కూడా పంపుతున్నాం
                       uniqueStoryUsers[data['ownerId']] = data;
                     }
                     var storyList = uniqueStoryUsers.values.toList();
@@ -263,7 +267,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                     children: [
                                       SafeProfilePic(
                                         base64String: userData['profilePic'],
-                                        radius: 35,
+                                        radius: 32,
                                         fallbackText:
                                             userData['username'] ?? "U",
                                       ),
@@ -281,12 +285,13 @@ class _HomeScreenState extends State<HomeScreen> {
                                           child: const Icon(
                                             Icons.add,
                                             color: Colors.white,
-                                            size: 18,
+                                            size: 16,
                                           ),
                                         ),
                                       ),
                                     ],
                                   ),
+                                  const SizedBox(height: 4),
                                   const Text(
                                     "Your Story",
                                     style: TextStyle(fontSize: 10),
@@ -298,6 +303,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         }
 
                         var userStory = storyList[index - 1];
+
+                        // 🌟 ఇది మనం చూశామా లేదా అని చెక్ చేస్తుంది
+                        List viewers = userStory['viewers'] ?? [];
+                        bool isSeen = viewers.contains(currentUid);
+
                         return GestureDetector(
                           onTap: () => Navigator.push(
                             context,
@@ -312,22 +322,37 @@ class _HomeScreenState extends State<HomeScreen> {
                               children: [
                                 Container(
                                   padding: const EdgeInsets.all(3),
-                                  decoration: const BoxDecoration(
+                                  decoration: BoxDecoration(
                                     shape: BoxShape.circle,
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        Colors.purple,
-                                        Colors.red,
-                                        Colors.orange,
-                                      ],
+                                    // 🌟 చూసేస్తే బార్డర్ ఉండదు, చూడకపోతే రంగుల బార్డర్ వస్తుంది
+                                    gradient: isSeen
+                                        ? null
+                                        : const LinearGradient(
+                                            colors: [
+                                              Colors.purple,
+                                              Colors.red,
+                                              Colors.orange,
+                                            ],
+                                          ),
+                                    color: isSeen ? Colors.grey.shade400 : null,
+                                  ),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(
+                                      2,
+                                    ), // తెల్లటి గ్యాప్ కోసం
+                                    decoration: const BoxDecoration(
+                                      shape: BoxShape.circle,
+                                      color: Colors.white,
+                                    ),
+                                    child: SafeProfilePic(
+                                      base64String: userStory['profilePic'],
+                                      radius: 28,
+                                      fallbackText:
+                                          userStory['username'] ?? "U",
                                     ),
                                   ),
-                                  child: SafeProfilePic(
-                                    base64String: userStory['profilePic'],
-                                    radius: 30,
-                                    fallbackText: userStory['username'] ?? "U",
-                                  ),
                                 ),
+                                const SizedBox(height: 4),
                                 Text(
                                   userStory['username'] ?? "User",
                                   style: const TextStyle(fontSize: 10),

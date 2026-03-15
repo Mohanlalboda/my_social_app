@@ -35,10 +35,21 @@ class _CommentsScreenState extends State<CommentsScreen> {
             'timestamp': FieldValue.serverTimestamp(),
           });
 
-      await FirebaseFirestore.instance
+      var postDoc = await FirebaseFirestore.instance
           .collection('posts')
           .doc(widget.postId)
-          .update({'commentCount': FieldValue.increment(1)});
+          .get();
+      String postOwnerId = postDoc['ownerId'];
+
+      if (uid != postOwnerId) {
+        await FirebaseFirestore.instance.collection('notifications').add({
+          'receiverId': postOwnerId,
+          'senderName': username,
+          'type': 'comment',
+          'timestamp': FieldValue.serverTimestamp(),
+          'isRead': false,
+        });
+      }
 
       _commentController.clear();
 

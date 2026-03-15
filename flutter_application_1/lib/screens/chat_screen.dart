@@ -25,21 +25,35 @@ class _ChatScreenState extends State<ChatScreen> {
   final String currentUid = FirebaseAuth.instance.currentUser!.uid;
 
   void _sendMessage() async {
-    // 🌟 FIXED: Added curly braces
     if (_messageController.text.trim().isEmpty) {
       return;
     }
 
+    String messageText = _messageController.text.trim();
+    _messageController.clear(); // ముందుగానే క్లియర్ చేస్తున్నాం
+
+    // 1. మెసేజ్ సేవ్ చేయడం
     await FirebaseFirestore.instance.collection('messages').add({
       'senderId': currentUid,
       'receiverId': widget.receiverId,
-      'text': _messageController.text.trim(),
+      'text': messageText,
       'type': 'text',
       'timestamp': FieldValue.serverTimestamp(),
       'isRead': false,
     });
 
-    _messageController.clear();
+    // 🌟 2. ChatRoom ని అప్‌డేట్ చేయడం (ఇన్‌బాక్స్ కోసం)
+    String roomId = currentUid.hashCode <= widget.receiverId.hashCode
+        ? "${currentUid}_${widget.receiverId}"
+        : "${widget.receiverId}_$currentUid";
+
+    await FirebaseFirestore.instance.collection('chatRooms').doc(roomId).set({
+      'users': [currentUid, widget.receiverId],
+      'lastMessage': messageText,
+      'timestamp': FieldValue.serverTimestamp(),
+      'hasUnread_${widget.receiverId}':
+          true, // అవతలి వాళ్ళకి unread అని సెట్ చేస్తున్నాం
+    }, SetOptions(merge: true));
   }
 
   @override
@@ -55,9 +69,40 @@ class _ChatScreenState extends State<ChatScreen> {
                   .orderBy('timestamp', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
-                // 🌟 FIXED: Added curly braces
                 if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
+                }
+
+                // 🌟 ఆటోమేటిక్ రీడ్ లాజిక్: మనం చాట్ ఓపెన్ చేయగానే చూడనివి చూసినట్లు (Read) అవుతాయి
+                var unreadForMe = snapshot.data!.docs
+                    .where(
+                      (doc) =>
+                          doc['receiverId'] == currentUid &&
+                          doc['senderId'] == widget.receiverId &&
+                          doc['isRead'] == false,
+                    )
+                    .toList();
+
+                if (unreadForMe.isNotEmpty) {
+                  Future.microtask(() {
+                    WriteBatch batch = FirebaseFirestore.instance.batch();
+                    for (var doc in unreadForMe) {
+                      batch.update(doc.reference, {'isRead': true});
+                    }
+                    batch.commit();
+
+                    String roomId =
+                        currentUid.hashCode <= widget.receiverId.hashCode
+                        ? "${currentUid}_${widget.receiverId}"
+                        : "${widget.receiverId}_$currentUid";
+                    FirebaseFirestore.instance
+                        .collection('chatRooms')
+                        .doc(roomId)
+                        .update({'hasUnread_$currentUid': false})
+                        .catchError(
+                          (e) {},
+                        ); // Ignore error if chatRoom doesn't exist yet
+                  });
                 }
 
                 var messages = snapshot.data!.docs.where((doc) {
@@ -144,7 +189,6 @@ class _ChatScreenState extends State<ChatScreen> {
               },
             ),
           ),
-
           Container(
             padding: const EdgeInsets.all(8),
             color: Colors.white,
@@ -202,7 +246,6 @@ class SharedPostPreview extends StatelessWidget {
           .doc(postId)
           .snapshots(),
       builder: (context, snapshot) {
-        // 🌟 FIXED: Added curly braces
         if (!snapshot.hasData || !snapshot.data!.exists) {
           return Container(
             padding: const EdgeInsets.all(10),
