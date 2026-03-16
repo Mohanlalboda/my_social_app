@@ -5,7 +5,9 @@ import 'package:timeago/timeago.dart' as timeago;
 
 class CommentsScreen extends StatefulWidget {
   final String postId;
-  const CommentsScreen({super.key, required this.postId});
+  final bool isReel;
+
+  const CommentsScreen({super.key, required this.postId, this.isReel = false});
 
   @override
   State<CommentsScreen> createState() => _CommentsScreenState();
@@ -24,8 +26,10 @@ class _CommentsScreenState extends State<CommentsScreen> {
       String uid = FirebaseAuth.instance.currentUser!.uid;
       String username = FirebaseAuth.instance.currentUser!.email!.split('@')[0];
 
+      String collectionName = widget.isReel ? 'reels' : 'posts';
+
       await FirebaseFirestore.instance
-          .collection('posts')
+          .collection(collectionName)
           .doc(widget.postId)
           .collection('comments')
           .add({
@@ -35,40 +39,37 @@ class _CommentsScreenState extends State<CommentsScreen> {
             'timestamp': FieldValue.serverTimestamp(),
           });
 
-      var postDoc = await FirebaseFirestore.instance
-          .collection('posts')
+      var docRef = await FirebaseFirestore.instance
+          .collection(collectionName)
           .doc(widget.postId)
           .get();
-      String postOwnerId = postDoc['ownerId'];
 
-      if (uid != postOwnerId) {
+      String ownerId = widget.isReel ? docRef['uid'] : docRef['ownerId'];
+
+      if (ownerId != uid) {
         await FirebaseFirestore.instance.collection('notifications').add({
-          'receiverId': postOwnerId,
+          'receiverId': ownerId,
+          'senderId': uid,
           'senderName': username,
           'type': 'comment',
-          'timestamp': FieldValue.serverTimestamp(),
+          'postId': widget.postId,
           'isRead': false,
+          'timestamp': FieldValue.serverTimestamp(),
         });
       }
 
       _commentController.clear();
-
-      // 🌟 FIXED: Added mounted check before using context
-      if (!mounted) {
-        return;
-      }
-      FocusScope.of(context).unfocus();
     } catch (e) {
-      debugPrint(e.toString());
-    } finally {
-      if (mounted) {
-        setState(() => _isPosting = false);
-      }
+      debugPrint("🚨 Error saving comment: $e");
     }
+
+    setState(() => _isPosting = false);
   }
 
   @override
   Widget build(BuildContext context) {
+    String collectionName = widget.isReel ? 'reels' : 'posts';
+
     return Scaffold(
       appBar: AppBar(title: const Text("Comments")),
       body: Column(
@@ -76,52 +77,50 @@ class _CommentsScreenState extends State<CommentsScreen> {
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
-                  .collection('posts')
+                  .collection(collectionName)
                   .doc(widget.postId)
                   .collection('comments')
                   .orderBy('timestamp', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
-                // 🌟 FIXED: Added curly braces
                 if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
-
                 var comments = snapshot.data!.docs;
-                // 🌟 FIXED: Added curly braces
                 if (comments.isEmpty) {
                   return const Center(
                     child: Text("No comments yet. Be the first!"),
                   );
                 }
-
                 return ListView.builder(
                   itemCount: comments.length,
                   itemBuilder: (context, index) {
-                    var comment =
-                        comments[index].data() as Map<String, dynamic>;
-                    String timeStr = comment['timestamp'] != null
-                        ? timeago.format(
-                            (comment['timestamp'] as Timestamp).toDate(),
-                          )
+                    var c = comments[index].data() as Map<String, dynamic>;
+                    String timeStr = c['timestamp'] != null
+                        ? timeago.format((c['timestamp'] as Timestamp).toDate())
                         : "Just now";
-
                     return ListTile(
                       leading: const CircleAvatar(
-                        backgroundColor: Colors.grey,
+                        backgroundColor: Colors.blueAccent,
                         child: Icon(Icons.person, color: Colors.white),
                       ),
-                      title: Text(
-                        comment['username'] ?? "User",
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      subtitle: Text(comment['text']),
-                      trailing: Text(
-                        timeStr,
-                        style: const TextStyle(
-                          fontSize: 10,
-                          color: Colors.grey,
+                      title: RichText(
+                        text: TextSpan(
+                          style: const TextStyle(color: Colors.black),
+                          children: [
+                            TextSpan(
+                              text: "${c['username']} ",
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            TextSpan(text: c['text']),
+                          ],
                         ),
+                      ),
+                      subtitle: Text(
+                        timeStr,
+                        style: const TextStyle(fontSize: 12),
                       ),
                     );
                   },
@@ -129,15 +128,9 @@ class _CommentsScreenState extends State<CommentsScreen> {
               },
             ),
           ),
-          const Divider(height: 1),
           SafeArea(
             child: Padding(
-              padding: const EdgeInsets.only(
-                left: 16,
-                right: 8,
-                bottom: 8,
-                top: 8,
-              ),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               child: Row(
                 children: [
                   Expanded(
