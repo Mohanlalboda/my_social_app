@@ -22,6 +22,9 @@ class _ReelItemState extends State<ReelItem> {
   bool _isLiked = false;
   int _likeCount = 0;
   bool _showHeartAnimation = false;
+
+  bool _isSaved = false; // 🌟 రీల్ సేవ్ అయిందో లేదో చెక్ చేయడానికి
+
   late String currentUid;
   late String reelOwnerId;
 
@@ -34,6 +37,8 @@ class _ReelItemState extends State<ReelItem> {
     List likes = widget.reelData['likes'] ?? [];
     _isLiked = likes.contains(currentUid);
     _likeCount = likes.length;
+
+    _checkIfSaved(); // 🌟 స్క్రీన్ ఓపెన్ అవ్వగానే సేవ్ అయిందో లేదో చెక్ చేస్తుంది
 
     _controller =
         VideoPlayerController.networkUrl(Uri.parse(widget.reelData['videoUrl']))
@@ -50,6 +55,61 @@ class _ReelItemState extends State<ReelItem> {
               .catchError((e) {
                 debugPrint("🚨 Reel Play Error: $e");
               });
+  }
+
+  // 🌟 సేవ్ అయిన రీల్స్ లిస్ట్ లాగే ఫంక్షన్
+  void _checkIfSaved() async {
+    try {
+      var doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUid)
+          .get();
+      List savedReels = doc.data()?['saved_reels'] ?? [];
+      if (mounted) {
+        setState(() {
+          _isSaved = savedReels.contains(widget.reelData['reelId']);
+        });
+      }
+    } catch (e) {
+      debugPrint("Error checking saved status: $e");
+    }
+  }
+
+  // 🌟 సేవ్ / అన్-సేవ్ చేసే ఫంక్షన్
+  void _toggleSave() async {
+    setState(() {
+      _isSaved = !_isSaved;
+    });
+
+    try {
+      if (_isSaved) {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUid)
+            .update({
+              'saved_reels': FieldValue.arrayUnion([widget.reelData['reelId']]),
+            });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Reel Saved! 📌"),
+              duration: Duration(seconds: 1),
+            ),
+          );
+        }
+      } else {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUid)
+            .update({
+              'saved_reels': FieldValue.arrayRemove([
+                widget.reelData['reelId'],
+              ]),
+            });
+      }
+    } catch (e) {
+      debugPrint("🚨 Save Error: $e");
+    }
   }
 
   void _toggleLike() async {
@@ -121,15 +181,18 @@ class _ReelItemState extends State<ReelItem> {
     }
   }
 
-  // 🌟 యాప్ లోని యూజర్స్ కి సెండ్ చేయడానికి మ్యాజిక్ ఫంక్షన్
+  // 🌟 ఇన్‌బాక్స్ కి రీల్ పంపే ఫంక్షన్ (ఇప్పుడు 'type': 'reel' గా వెళ్తుంది)
   void _sendReelToUser(String receiverId, String receiverName) async {
-    Navigator.pop(context); // మెనూ క్లోజ్ అవ్వడానికి
+    Navigator.pop(context);
     try {
       await FirebaseFirestore.instance.collection('messages').add({
         'senderId': currentUid,
         'receiverId': receiverId,
-        'text': "🎬 Check out this Reel:\n${widget.reelData['videoUrl']}",
-        'type': 'text',
+        'text': "🎬 Sent a Reel",
+        'type': 'reel', // 🌟 నార్మల్ టెక్స్ట్ కాకుండా రీల్ అని చెప్తున్నాం
+        'reelId': widget.reelData['reelId'],
+        'videoUrl': widget.reelData['videoUrl'],
+        'thumbnail': widget.reelData['thumbnail'] ?? '',
         'timestamp': FieldValue.serverTimestamp(),
         'isRead': false,
       });
@@ -146,7 +209,6 @@ class _ReelItemState extends State<ReelItem> {
     }
   }
 
-  // 🌟 కొత్తగా యాడ్ చేసిన Share Menu (Internal + External)
   void _showShareMenu() {
     showModalBottomSheet(
       context: context,
@@ -157,9 +219,7 @@ class _ReelItemState extends State<ReelItem> {
       ),
       builder: (context) {
         return SizedBox(
-          height:
-              MediaQuery.of(context).size.height *
-              0.6, // స్క్రీన్ లో సగం వస్తుంది
+          height: MediaQuery.of(context).size.height * 0.6,
           child: Column(
             children: [
               const Padding(
@@ -173,7 +233,6 @@ class _ReelItemState extends State<ReelItem> {
                   ),
                 ),
               ),
-              // ఎక్స్‌టర్నల్ షేర్ (WhatsApp, Insta కు పంపడానికి)
               ListTile(
                 leading: const CircleAvatar(
                   backgroundColor: Colors.white24,
@@ -202,7 +261,6 @@ class _ReelItemState extends State<ReelItem> {
                   ),
                 ),
               ),
-              // ఇంటర్నల్ యూజర్స్ లిస్ట్
               Expanded(
                 child: StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
@@ -374,7 +432,6 @@ class _ReelItemState extends State<ReelItem> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // 📺 1. వీడియో ప్లేయర్
         _isInitialized
             ? GestureDetector(
                 onTap: () {
@@ -398,7 +455,6 @@ class _ReelItemState extends State<ReelItem> {
                 child: CircularProgressIndicator(color: Colors.white),
               ),
 
-        // ⬛ 2. బ్లాక్ షాడో
         Positioned(
           bottom: 0,
           left: 0,
@@ -418,7 +474,6 @@ class _ReelItemState extends State<ReelItem> {
           ),
         ),
 
-        // ⏸️ 3. పాజ్ అయినప్పుడు "Play" సింబల్
         if (!isPlaying && _isInitialized)
           const IgnorePointer(
             child: Center(
@@ -430,7 +485,6 @@ class _ReelItemState extends State<ReelItem> {
             ),
           ),
 
-        // 💖 4. డబుల్ టాప్ లైక్ యానిమేషన్
         IgnorePointer(
           child: Center(
             child: AnimatedOpacity(
@@ -450,7 +504,6 @@ class _ReelItemState extends State<ReelItem> {
           ),
         ),
 
-        // 🔘 5. రైట్ సైడ్ బటన్స్
         Positioned(
           bottom: 20,
           right: 15,
@@ -465,7 +518,6 @@ class _ReelItemState extends State<ReelItem> {
               ),
               const SizedBox(height: 20),
 
-              // 💬 కామెంట్స్ కౌంట్
               StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance
                     .collection('reels')
@@ -496,7 +548,6 @@ class _ReelItemState extends State<ReelItem> {
               ),
               const SizedBox(height: 20),
 
-              // ✈️ ఇక్కడే మనం యాడ్ చేసిన ఇంటర్నల్ షేర్ ఫంక్షన్ లింక్ చేసాం
               _buildActionIcon(
                 icon: Icons.send_outlined,
                 color: Colors.white,
@@ -505,7 +556,6 @@ class _ReelItemState extends State<ReelItem> {
               ),
               const SizedBox(height: 20),
 
-              // ⚙️ త్రీ డాట్స్
               GestureDetector(
                 onTap: _showOptionsDialog,
                 child: const Icon(
@@ -516,26 +566,17 @@ class _ReelItemState extends State<ReelItem> {
               ),
               const SizedBox(height: 20),
 
-              // మ్యూజిక్ ఐకాన్
-              Container(
-                height: 35,
-                width: 35,
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.white, width: 2),
-                  borderRadius: BorderRadius.circular(8),
-                  color: Colors.grey.shade800,
-                ),
-                child: const Icon(
-                  Icons.music_note,
-                  color: Colors.white,
-                  size: 20,
-                ),
+              // 🌟 మ్యూజిక్ ఐకాన్ బదులు SAVE (Bookmark) ఐకాన్ పెట్టేశాం!
+              _buildActionIcon(
+                icon: _isSaved ? Icons.bookmark : Icons.bookmark_border,
+                color: Colors.white,
+                label: "Save",
+                onTap: _toggleSave,
               ),
             ],
           ),
         ),
 
-        // ✍️ 6. లెఫ్ట్ సైడ్ యూజర్ డీటెయిల్స్ (🌟 రియల్ టైమ్ డేటా లాగేలా మార్చాం)
         Positioned(
           bottom: 20,
           left: 15,
@@ -552,8 +593,7 @@ class _ReelItemState extends State<ReelItem> {
 
               var userData =
                   snapshot.data!.data() as Map<String, dynamic>? ?? {};
-              String realUsername =
-                  userData['username'] ?? "User"; // 🌟 ఒరిజినల్ యూజర్ నేమ్
+              String realUsername = userData['username'] ?? "User";
               List followers = userData['followers'] ?? [];
               bool isFollowing = followers.contains(currentUid);
 
@@ -633,17 +673,6 @@ class _ReelItemState extends State<ReelItem> {
                     style: const TextStyle(color: Colors.white, fontSize: 14),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 12),
-                  const Row(
-                    children: [
-                      Icon(Icons.music_note, color: Colors.white, size: 16),
-                      SizedBox(width: 5),
-                      Text(
-                        "Original Audio",
-                        style: TextStyle(color: Colors.white, fontSize: 13),
-                      ),
-                    ],
                   ),
                 ],
               );

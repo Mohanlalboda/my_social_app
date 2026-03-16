@@ -5,6 +5,7 @@ import 'package:timeago/timeago.dart' as timeago;
 
 import '../widgets/safe_elements.dart';
 import 'post_details_screen.dart';
+import 'reels_screen.dart'; // 🌟 రీల్స్ ఓపెన్ చేయడానికి ఇది కావాలి
 
 class ChatScreen extends StatefulWidget {
   final String receiverId;
@@ -30,9 +31,8 @@ class _ChatScreenState extends State<ChatScreen> {
     }
 
     String messageText = _messageController.text.trim();
-    _messageController.clear(); // ముందుగానే క్లియర్ చేస్తున్నాం
+    _messageController.clear();
 
-    // 1. మెసేజ్ సేవ్ చేయడం
     await FirebaseFirestore.instance.collection('messages').add({
       'senderId': currentUid,
       'receiverId': widget.receiverId,
@@ -42,7 +42,6 @@ class _ChatScreenState extends State<ChatScreen> {
       'isRead': false,
     });
 
-    // 🌟 2. ChatRoom ని అప్‌డేట్ చేయడం (ఇన్‌బాక్స్ కోసం)
     String roomId = currentUid.hashCode <= widget.receiverId.hashCode
         ? "${currentUid}_${widget.receiverId}"
         : "${widget.receiverId}_$currentUid";
@@ -51,8 +50,7 @@ class _ChatScreenState extends State<ChatScreen> {
       'users': [currentUid, widget.receiverId],
       'lastMessage': messageText,
       'timestamp': FieldValue.serverTimestamp(),
-      'hasUnread_${widget.receiverId}':
-          true, // అవతలి వాళ్ళకి unread అని సెట్ చేస్తున్నాం
+      'hasUnread_${widget.receiverId}': true,
     }, SetOptions(merge: true));
   }
 
@@ -73,7 +71,6 @@ class _ChatScreenState extends State<ChatScreen> {
                   return const Center(child: CircularProgressIndicator());
                 }
 
-                // 🌟 ఆటోమేటిక్ రీడ్ లాజిక్: మనం చాట్ ఓపెన్ చేయగానే చూడనివి చూసినట్లు (Read) అవుతాయి
                 var unreadForMe = snapshot.data!.docs
                     .where(
                       (doc) =>
@@ -99,9 +96,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         .collection('chatRooms')
                         .doc(roomId)
                         .update({'hasUnread_$currentUid': false})
-                        .catchError(
-                          (e) {},
-                        ); // Ignore error if chatRoom doesn't exist yet
+                        .catchError((e) {});
                   });
                 }
 
@@ -145,7 +140,13 @@ class _ChatScreenState extends State<ChatScreen> {
                               maxWidth:
                                   MediaQuery.of(context).size.width * 0.75,
                             ),
-                            child: msg['type'] == 'post_share'
+                            // 🌟 ఇక్కడే మ్యాజిక్: రీల్ అయితే ఈ డిజైన్ వస్తుంది
+                            child: msg['type'] == 'reel'
+                                ? SharedReelPreview(
+                                    reelId: msg['reelId'],
+                                    isMe: isMe,
+                                  )
+                                : msg['type'] == 'post_share'
                                 ? SharedPostPreview(
                                     postId: msg['postId'],
                                     isMe: isMe,
@@ -229,6 +230,121 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
+// ----------------------------------------------------
+// 🌟 కొత్తగా యాడ్ చేసిన REEL PREVIEW విడ్జెట్
+// ----------------------------------------------------
+class SharedReelPreview extends StatelessWidget {
+  final String reelId;
+  final bool isMe;
+  const SharedReelPreview({
+    super.key,
+    required this.reelId,
+    required this.isMe,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<DocumentSnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('reels')
+          .doc(reelId)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || !snapshot.data!.exists) {
+          return Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.grey[200],
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Text(
+              "Reel Unavailable",
+              style: TextStyle(color: Colors.grey),
+            ),
+          );
+        }
+
+        var reelData = snapshot.data!.data() as Map<String, dynamic>;
+
+        return GestureDetector(
+          onTap: () {
+            // 🌟 దీనిపై క్లిక్ చేస్తే ఒరిజినల్ రీల్స్ స్క్రీన్ ఓపెన్ అవుతుంది
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    const ReelsScreen(), // లేదా ఒక సింగిల్ రీల్ పేజీ అయినా పెట్టుకోవచ్చు
+              ),
+            );
+          },
+          child: Container(
+            width: 200,
+            decoration: BoxDecoration(
+              color: isMe ? Colors.blue[50] : Colors.grey[200],
+              borderRadius: BorderRadius.circular(15),
+              border: Border.all(color: Colors.grey.shade300),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(8.0),
+                  child: Row(
+                    children: [
+                      const Icon(
+                        Icons.video_library,
+                        size: 16,
+                        color: Colors.grey,
+                      ),
+                      const SizedBox(width: 5),
+                      Expanded(
+                        child: Text(
+                          "Shared a Reel by ${reelData['username'] ?? 'User'}",
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                // 🌟 ఇక్కడ రీల్ కి సంబంధించిన ఒక చిన్న బ్లాక్ బాక్స్ ప్లే ఐకాన్ తో చూపిస్తున్నాం
+                Container(
+                  height: 250,
+                  width: double.infinity,
+                  color: Colors.black,
+                  child: const Center(
+                    child: Icon(
+                      Icons.play_circle_fill,
+                      color: Colors.white,
+                      size: 50,
+                    ),
+                  ),
+                ),
+                if (reelData['caption'] != null &&
+                    reelData['caption'].toString().isNotEmpty)
+                  Padding(
+                    padding: const EdgeInsets.all(8.0),
+                    child: Text(
+                      reelData['caption'],
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+// పాత పోస్ట్ ప్రివ్యూ విడ్జెట్
 class SharedPostPreview extends StatelessWidget {
   final String postId;
   final bool isMe;

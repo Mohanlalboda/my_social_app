@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+
 import 'scrolling_posts_screen.dart';
 import '../widgets/safe_elements.dart';
 import 'user_list_screen.dart';
@@ -140,6 +141,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           String bio = userData['bio'] ?? "No bio yet.";
           List followers = userData['followers'] ?? [];
           List following = userData['following'] ?? [];
+          List savedReels = userData['saved_reels'] ?? [];
 
           return Scaffold(
             appBar: AppBar(
@@ -277,32 +279,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   labelColor: Colors.red,
                   unselectedLabelColor: Colors.grey,
                   tabs: [
-                    Tab(icon: Icon(Icons.grid_on)),
-                    Tab(icon: Icon(Icons.video_library)),
-                    Tab(icon: Icon(Icons.bookmark_border)),
+                    Tab(icon: Icon(Icons.grid_on)), // My Posts
+                    Tab(icon: Icon(Icons.video_library)), // My Reels
+                    Tab(icon: Icon(Icons.bookmark_border)), // Saved
                   ],
                 ),
                 Expanded(
                   child: TabBarView(
                     children: [
+                      // 1. My Posts
                       _buildPostGrid(
                         FirebaseFirestore.instance
                             .collection('posts')
                             .where('ownerId', isEqualTo: uid)
                             .snapshots(),
                       ),
+                      // 2. My Reels
                       _buildReelsGrid(
                         FirebaseFirestore.instance
                             .collection('reels')
-                            .where('ownerId', isEqualTo: uid)
+                            .where('uid', isEqualTo: uid)
                             .snapshots(),
                       ),
-                      _buildPostGrid(
-                        FirebaseFirestore.instance
-                            .collection('posts')
-                            .where('savedBy', arrayContains: uid)
-                            .snapshots(),
-                      ),
+                      // 3. Saved Tab
+                      _buildSavedTab(uid, savedReels),
                     ],
                   ),
                 ),
@@ -314,8 +314,114 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // 🌟 REELS GRID
-  Widget _buildReelsGrid(Stream<QuerySnapshot> stream) {
+  // 🌟 మూడవ ట్యాబ్ కోసం స్పెషల్ డిజైన్ (Saved Posts + Saved Reels)
+  Widget _buildSavedTab(String uid, List<dynamic> savedReelIds) {
+    return ListView(
+      physics: const AlwaysScrollableScrollPhysics(),
+      children: [
+        const Padding(
+          padding: EdgeInsets.all(12),
+          child: Text(
+            "📌 Saved Posts",
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+        ),
+        _buildPostGrid(
+          FirebaseFirestore.instance
+              .collection('posts')
+              .where('savedBy', arrayContains: uid)
+              .snapshots(),
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+        ),
+        const Divider(height: 30, thickness: 1),
+        const Padding(
+          padding: EdgeInsets.all(12),
+          child: Text(
+            "🎬 Saved Reels",
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+          ),
+        ),
+        _buildSavedReelsGrid(savedReelIds),
+        const SizedBox(height: 20),
+      ],
+    );
+  }
+
+  // 🌟 సేవ్ చేసిన రీల్స్ ని చూపించే గ్రిడ్
+  Widget _buildSavedReelsGrid(List<dynamic> savedReelsIds) {
+    if (savedReelsIds.isEmpty) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(20),
+          child: Text("No saved reels.", style: TextStyle(color: Colors.grey)),
+        ),
+      );
+    }
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance.collection('reels').snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        var reels = snapshot.data!.docs
+            .where((doc) => savedReelsIds.contains(doc.id))
+            .toList();
+
+        if (reels.isEmpty) {
+          return const Center(
+            child: Text(
+              "No saved reels found.",
+              style: TextStyle(color: Colors.grey),
+            ),
+          );
+        }
+
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            crossAxisSpacing: 2,
+            mainAxisSpacing: 2,
+            childAspectRatio: 0.7,
+          ),
+          itemCount: reels.length,
+          itemBuilder: (context, i) {
+            return Container(
+              color: Colors.black87,
+              child: const Stack(
+                fit: StackFit.expand,
+                children: [
+                  Center(
+                    child: Icon(
+                      Icons.play_circle_fill,
+                      color: Colors.white54,
+                      size: 40,
+                    ),
+                  ),
+                  Positioned(
+                    top: 5,
+                    right: 5,
+                    child: Icon(Icons.bookmark, color: Colors.white, size: 16),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // 🌟 REELS GRID (Normal)
+  Widget _buildReelsGrid(
+    Stream<QuerySnapshot> stream, {
+    bool shrinkWrap = false,
+    ScrollPhysics? physics,
+  }) {
     return StreamBuilder<QuerySnapshot>(
       stream: stream,
       builder: (context, snapshot) {
@@ -327,8 +433,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
           return const Center(child: Text("No Reels yet."));
         }
         return GridView.builder(
-          // 🌟 FIXED: Added AlwaysScrollableScrollPhysics here
-          physics: const AlwaysScrollableScrollPhysics(),
+          shrinkWrap: shrinkWrap,
+          physics: physics ?? const AlwaysScrollableScrollPhysics(),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 3,
             crossAxisSpacing: 2,
@@ -337,16 +443,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           itemCount: reels.length,
           itemBuilder: (context, i) => Container(
-            color: Colors.black12,
-            child: const Icon(Icons.play_circle_outline, color: Colors.white),
+            color: Colors.black87,
+            child: const Center(
+              child: Icon(
+                Icons.play_arrow_rounded,
+                color: Colors.white54,
+                size: 40,
+              ),
+            ),
           ),
         );
       },
     );
   }
 
-  // 🌟 POST GRID
-  Widget _buildPostGrid(Stream<QuerySnapshot> stream) {
+  // 🌟 POST GRID (Normal)
+  Widget _buildPostGrid(
+    Stream<QuerySnapshot> stream, {
+    bool shrinkWrap = false,
+    ScrollPhysics? physics,
+  }) {
     return StreamBuilder<QuerySnapshot>(
       stream: stream,
       builder: (context, snapshot) {
@@ -359,8 +475,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         }
         List<String> postIds = posts.map((doc) => doc.id).toList();
         return GridView.builder(
-          // 🌟 FIXED: Added AlwaysScrollableScrollPhysics here
-          physics: const AlwaysScrollableScrollPhysics(),
+          shrinkWrap: shrinkWrap,
+          physics: physics ?? const AlwaysScrollableScrollPhysics(),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 3,
             crossAxisSpacing: 2,
