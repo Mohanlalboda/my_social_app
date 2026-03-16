@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-
+import 'add_reel_screen.dart';
 import '../widgets/post_widget.dart';
 import '../widgets/safe_elements.dart';
 import 'story_screen.dart';
@@ -191,15 +191,65 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  // 🌟 + బటన్ నొక్కగానే వచ్చే పాపప్ మెనూ ఫంక్షన్
+  void _showAddOptions(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Wrap(
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text(
+                  "Create New",
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo, color: Colors.blue),
+                title: const Text('Post (Photo)'),
+                onTap: () {
+                  Navigator.pop(context); // పాపప్ క్లోజ్ అవుతుంది
+                  _uploadPost(); // 📸 మీ పాత గ్యాలరీ ఫంక్షన్ రన్ అవుతుంది
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.video_library, color: Colors.red),
+                title: const Text('Reel (Video)'),
+                onTap: () {
+                  Navigator.pop(context); // పాపప్ క్లోజ్ అవుతుంది
+                  // 🎬 మనం క్రియేట్ చేసిన వీడియో (రీల్) స్క్రీన్‌కి వెళ్తుంది
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const AddReelScreen(),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // 🌟 + బటన్ నొక్కగానే కింద నుండి వచ్చే మెనూ
+ 
   @override
   Widget build(BuildContext context) {
     final String currentUid = FirebaseAuth.instance.currentUser!.uid;
 
     return Scaffold(
+      // 🌟 ఇక్కడ డైరెక్ట్ గ్యాలరీ కాకుండా మనం రాసిన పాపప్ మెనూ వస్తుంది
       floatingActionButton: FloatingActionButton(
         backgroundColor: const Color(0xFFFD1D1D),
-        onPressed: _uploadPost,
-        child: const Icon(Icons.add_a_photo, color: Colors.white),
+        onPressed: () => _showAddOptions(context),
+        child: const Icon(Icons.add, color: Colors.white),
       ),
       body: StreamBuilder<DocumentSnapshot>(
         stream: FirebaseFirestore.instance

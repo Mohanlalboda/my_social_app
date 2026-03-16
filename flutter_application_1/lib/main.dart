@@ -11,6 +11,7 @@ import 'screens/search_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/activity_screen.dart';
 import 'screens/inbox_screen.dart';
+import 'screens/reels_screen.dart'; // 🌟 మన రీల్స్ స్క్రీన్ ఇక్కడ ఇంపోర్ట్ చేశాం!
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -57,10 +58,11 @@ class MainNavigation extends StatefulWidget {
 class _MainNavigationState extends State<MainNavigation> {
   int _selectedIndex = 0;
 
+  // 🌟 దొంగ దొరికాడు! ఇక్కడ పాత డమ్మీ టెక్స్ట్ తీసేసి, మన ReelsScreen() పెట్టేశాం
   final List<Widget> _screens = [
     const HomeScreen(),
     const SearchScreen(),
-    const Center(child: Text("Reels coming soon!")),
+    const ReelsScreen(), // 🎬 ఇక్కడే మ్యాజిక్ జరుగుతుంది
     const ProfileScreen(),
   ];
 
@@ -69,7 +71,10 @@ class _MainNavigationState extends State<MainNavigation> {
     final currentUser = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
-      appBar: _selectedIndex == 3
+      appBar:
+          _selectedIndex == 3 ||
+              _selectedIndex ==
+                  2 // 🌟 రీల్స్ స్క్రీన్ లో కూడా పైనున్న యాప్ బార్ వద్దు అనుకుంటే ఇలా పెట్టాలి (Instagram లాగా)
           ? null
           : AppBar(
               elevation: 0.5,
