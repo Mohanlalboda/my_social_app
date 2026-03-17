@@ -1,3 +1,5 @@
+// ignore_for_file: curly_braces_in_flow_control_structures
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -5,7 +7,7 @@ import 'package:timeago/timeago.dart' as timeago;
 
 import '../widgets/safe_elements.dart';
 import 'post_details_screen.dart';
-import 'reels_screen.dart'; // 🌟 రీల్స్ ఓపెన్ చేయడానికి ఇది కావాలి
+import 'single_reel_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   final String receiverId;
@@ -26,9 +28,7 @@ class _ChatScreenState extends State<ChatScreen> {
   final String currentUid = FirebaseAuth.instance.currentUser!.uid;
 
   void _sendMessage() async {
-    if (_messageController.text.trim().isEmpty) {
-      return;
-    }
+    if (_messageController.text.trim().isEmpty) return;
 
     String messageText = _messageController.text.trim();
     _messageController.clear();
@@ -67,9 +67,8 @@ class _ChatScreenState extends State<ChatScreen> {
                   .orderBy('timestamp', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
-                if (!snapshot.hasData) {
+                if (!snapshot.hasData)
                   return const Center(child: CircularProgressIndicator());
-                }
 
                 var unreadForMe = snapshot.data!.docs
                     .where(
@@ -113,14 +112,12 @@ class _ChatScreenState extends State<ChatScreen> {
                   itemBuilder: (context, index) {
                     var msg = messages[index].data() as Map<String, dynamic>;
                     bool isMe = msg['senderId'] == currentUid;
-
-                    String messageTime = "";
-                    if (msg['timestamp'] != null) {
-                      messageTime = timeago.format(
-                        (msg['timestamp'] as Timestamp).toDate(),
-                        locale: 'en_short',
-                      );
-                    }
+                    String messageTime = msg['timestamp'] != null
+                        ? timeago.format(
+                            (msg['timestamp'] as Timestamp).toDate(),
+                            locale: 'en_short',
+                          )
+                        : "";
 
                     return Align(
                       alignment: isMe
@@ -140,7 +137,6 @@ class _ChatScreenState extends State<ChatScreen> {
                               maxWidth:
                                   MediaQuery.of(context).size.width * 0.75,
                             ),
-                            // 🌟 ఇక్కడే మ్యాజిక్: రీల్ అయితే ఈ డిజైన్ వస్తుంది
                             child: msg['type'] == 'reel'
                                 ? SharedReelPreview(
                                     reelId: msg['reelId'],
@@ -230,9 +226,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
-// ----------------------------------------------------
-// 🌟 కొత్తగా యాడ్ చేసిన REEL PREVIEW విడ్జెట్
-// ----------------------------------------------------
 class SharedReelPreview extends StatelessWidget {
   final String reelId;
   final bool isMe;
@@ -263,20 +256,12 @@ class SharedReelPreview extends StatelessWidget {
             ),
           );
         }
-
         var reelData = snapshot.data!.data() as Map<String, dynamic>;
-
         return GestureDetector(
-          onTap: () {
-            // 🌟 దీనిపై క్లిక్ చేస్తే ఒరిజినల్ రీల్స్ స్క్రీన్ ఓపెన్ అవుతుంది
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) =>
-                    const ReelsScreen(), // లేదా ఒక సింగిల్ రీల్ పేజీ అయినా పెట్టుకోవచ్చు
-              ),
-            );
-          },
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => SingleReelScreen(reelId: reelId)),
+          ),
           child: Container(
             width: 200,
             decoration: BoxDecoration(
@@ -311,7 +296,6 @@ class SharedReelPreview extends StatelessWidget {
                     ],
                   ),
                 ),
-                // 🌟 ఇక్కడ రీల్ కి సంబంధించిన ఒక చిన్న బ్లాక్ బాక్స్ ప్లే ఐకాన్ తో చూపిస్తున్నాం
                 Container(
                   height: 250,
                   width: double.infinity,
@@ -344,7 +328,6 @@ class SharedReelPreview extends StatelessWidget {
   }
 }
 
-// పాత పోస్ట్ ప్రివ్యూ విడ్జెట్
 class SharedPostPreview extends StatelessWidget {
   final String postId;
   final bool isMe;
@@ -375,18 +358,14 @@ class SharedPostPreview extends StatelessWidget {
             ),
           );
         }
-
         var postData = snapshot.data!.data() as Map<String, dynamic>;
-
         return GestureDetector(
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => PostDetailsScreen(postId: postId),
-              ),
-            );
-          },
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => PostDetailsScreen(postId: postId),
+            ),
+          ),
           child: Container(
             decoration: BoxDecoration(
               color: isMe ? Colors.blue[50] : Colors.grey[200],

@@ -15,9 +15,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
   bool _isLoading = false;
 
   Future<void> _signUp() async {
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
     try {
       UserCredential userCredential = await FirebaseAuth.instance
           .createUserWithEmailAndPassword(
@@ -38,21 +36,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
             "following": [],
           });
 
-      // 🌟 FIXED: Guard check before using context (Line 40)
       if (!mounted) return;
       Navigator.pop(context);
     } catch (e) {
-      // 🌟 FIXED: Guard check before showing SnackBar (Line 44)
       if (!mounted) return;
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -69,7 +61,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
           child: Padding(
             padding: const EdgeInsets.all(30),
             child: SingleChildScrollView(
-              // Added scroll for small screens
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -84,24 +75,30 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   const SizedBox(height: 40),
                   TextField(
                     controller: _usernameController,
+                    style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
                       hintText: "Username",
+                      hintStyle: const TextStyle(color: Colors.white70),
                       filled: true,
                       fillColor: Colors.white.withValues(alpha: 0.2),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(15),
+                        borderSide: BorderSide.none,
                       ),
                     ),
                   ),
                   const SizedBox(height: 15),
                   TextField(
                     controller: _emailController,
+                    style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
                       hintText: "Email",
+                      hintStyle: const TextStyle(color: Colors.white70),
                       filled: true,
                       fillColor: Colors.white.withValues(alpha: 0.2),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(15),
+                        borderSide: BorderSide.none,
                       ),
                     ),
                   ),
@@ -109,12 +106,15 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   TextField(
                     controller: _passwordController,
                     obscureText: true,
+                    style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
                       hintText: "Password",
+                      hintStyle: const TextStyle(color: Colors.white70),
                       filled: true,
                       fillColor: Colors.white.withValues(alpha: 0.2),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(15),
+                        borderSide: BorderSide.none,
                       ),
                     ),
                   ),

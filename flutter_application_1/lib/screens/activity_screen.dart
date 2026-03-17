@@ -1,3 +1,5 @@
+// ignore_for_file: curly_braces_in_flow_control_structures
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -15,7 +17,6 @@ class _ActivityScreenState extends State<ActivityScreen> {
 
   @override
   void dispose() {
-    // 🌟 యాక్టివిటీ స్క్రీన్ మూసేసి బ్యాక్ వెళ్ళగానే అన్నీ 'Read' అయిపోతాయి (Red dot పోతుంది)
     _markAllAsRead();
     super.dispose();
   }
@@ -26,7 +27,6 @@ class _ActivityScreenState extends State<ActivityScreen> {
         .where('receiverId', isEqualTo: currentUid)
         .where('isRead', isEqualTo: false)
         .get();
-
     WriteBatch batch = FirebaseFirestore.instance.batch();
     for (var doc in unreadDocs.docs) {
       batch.update(doc.reference, {'isRead': true});
@@ -34,13 +34,11 @@ class _ActivityScreenState extends State<ActivityScreen> {
     await batch.commit();
   }
 
-  // 🌟 క్లియర్ ఆల్ ఫంక్షన్ (అన్నీ డిలీట్ చేయడానికి)
   Future<void> _clearAll() async {
     var allDocs = await FirebaseFirestore.instance
         .collection('notifications')
         .where('receiverId', isEqualTo: currentUid)
         .get();
-
     WriteBatch batch = FirebaseFirestore.instance.batch();
     for (var doc in allDocs.docs) {
       batch.delete(doc.reference);
@@ -90,42 +88,30 @@ class _ActivityScreenState extends State<ActivityScreen> {
             .where('receiverId', isEqualTo: currentUid)
             .snapshots(),
         builder: (context, snapshot) {
-          // 🌟 కర్లీ బ్రాకెట్స్ ఫిక్స్ చేసాము
-          if (snapshot.hasError) {
+          if (snapshot.hasError)
             return const Center(child: Text("Something went wrong!"));
-          }
-          if (!snapshot.hasData) {
+          if (!snapshot.hasData)
             return const Center(child: CircularProgressIndicator());
-          }
 
           var notifications = snapshot.data!.docs.toList();
-
           notifications.sort((a, b) {
             var dataA = a.data() as Map<String, dynamic>;
             var dataB = b.data() as Map<String, dynamic>;
             Timestamp? tA = dataA['timestamp'];
             Timestamp? tB = dataB['timestamp'];
-            // 🌟 కర్లీ బ్రాకెట్స్ ఫిక్స్ చేసాము
-            if (tA == null) {
-              return 1;
-            }
-            if (tB == null) {
-              return -1;
-            }
+            if (tA == null) return 1;
+            if (tB == null) return -1;
             return tB.compareTo(tA);
           });
 
-          // 🌟 కర్లీ బ్రాకెట్స్ ఫిక్స్ చేసాము
-          if (notifications.isEmpty) {
+          if (notifications.isEmpty)
             return const Center(child: Text("No new activity"));
-          }
 
           return ListView.builder(
             itemCount: notifications.length,
             itemBuilder: (context, index) {
               var notif = notifications[index].data() as Map<String, dynamic>;
               bool isRead = notif['isRead'] ?? true;
-
               String timeStr = notif['timestamp'] != null
                   ? timeago.format((notif['timestamp'] as Timestamp).toDate())
                   : "Just now";
@@ -149,12 +135,10 @@ class _ActivityScreenState extends State<ActivityScreen> {
               }
 
               return ListTile(
-                // 🌟 FIX: withOpacity బదులు లేటెస్ట్ withValues వాడాము
                 tileColor: isRead
                     ? Colors.transparent
                     : Colors.blue.withValues(alpha: 0.05),
                 leading: CircleAvatar(
-                  // 🌟 FIX: withOpacity బదులు లేటెస్ట్ withValues వాడాము
                   backgroundColor: iconColor.withValues(alpha: 0.2),
                   child: Icon(iconData, color: iconColor, size: 20),
                 ),

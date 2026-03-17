@@ -1,10 +1,12 @@
+// ignore_for_file: curly_braces_in_flow_control_structures
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../widgets/safe_elements.dart';
 import 'post_details_screen.dart';
 import 'chat_screen.dart';
-import 'user_list_screen.dart'; // 🌟 లిస్ట్ చూడటానికి ఇది కావాలి
+import 'user_list_screen.dart';
 
 class OtherUserProfileScreen extends StatefulWidget {
   final String uid;
@@ -25,13 +27,11 @@ class _OtherUserProfileScreenState extends State<OtherUserProfileScreen> {
           .doc(widget.uid)
           .snapshots(),
       builder: (context, s) {
-        if (!s.hasData) {
+        if (!s.hasData)
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
-        }
-
-        var u = s.data!.data() as Map<String, dynamic>;
+        var u = s.data!.data() as Map<String, dynamic>? ?? {};
 
         List followers = u['followers'] ?? [];
         List following = u['following'] ?? [];
@@ -58,7 +58,6 @@ class _OtherUserProfileScreenState extends State<OtherUserProfileScreen> {
               Text(u['bio'] ?? "No bio yet."),
               const SizedBox(height: 10),
 
-              // 🌟 Followers & Following Count Section 🌟
               StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance
                     .collection('posts')
@@ -108,7 +107,6 @@ class _OtherUserProfileScreenState extends State<OtherUserProfileScreen> {
               ),
               const SizedBox(height: 20),
 
-              // 🌟 Follow & Message Buttons 🌟
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -119,7 +117,6 @@ class _OtherUserProfileScreenState extends State<OtherUserProfileScreen> {
                     ),
                     onPressed: () async {
                       if (isF) {
-                        // UNFOLLOW LOGIC
                         await FirebaseFirestore.instance
                             .collection('users')
                             .doc(widget.uid)
@@ -132,19 +129,15 @@ class _OtherUserProfileScreenState extends State<OtherUserProfileScreen> {
                             .update({
                               'following': FieldValue.arrayRemove([widget.uid]),
                             });
-
-                        // Delete Notification
                         var notifs = await FirebaseFirestore.instance
                             .collection('notifications')
                             .where('receiverId', isEqualTo: widget.uid)
                             .where('senderId', isEqualTo: myId)
                             .where('type', isEqualTo: 'follow')
                             .get();
-                        for (var doc in notifs.docs) {
+                        for (var doc in notifs.docs)
                           await doc.reference.delete();
-                        }
                       } else {
-                        // FOLLOW LOGIC
                         await FirebaseFirestore.instance
                             .collection('users')
                             .doc(widget.uid)
@@ -157,8 +150,6 @@ class _OtherUserProfileScreenState extends State<OtherUserProfileScreen> {
                             .update({
                               'following': FieldValue.arrayUnion([widget.uid]),
                             });
-
-                        // Send Notification
                         await FirebaseFirestore.instance
                             .collection('notifications')
                             .add({
@@ -175,24 +166,21 @@ class _OtherUserProfileScreenState extends State<OtherUserProfileScreen> {
                   ),
                   const SizedBox(width: 10),
                   OutlinedButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => ChatScreen(
-                            receiverId: widget.uid,
-                            receiverName: u['username'] ?? "User",
-                          ),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ChatScreen(
+                          receiverId: widget.uid,
+                          receiverName: u['username'] ?? "User",
                         ),
-                      );
-                    },
+                      ),
+                    ),
                     child: const Text("Message"),
                   ),
                 ],
               ),
               const Divider(),
 
-              // 🌟 Posts Grid 🌟
               Expanded(
                 child: StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
@@ -200,9 +188,8 @@ class _OtherUserProfileScreenState extends State<OtherUserProfileScreen> {
                       .where('ownerId', isEqualTo: widget.uid)
                       .snapshots(),
                   builder: (context, ps) {
-                    if (!ps.hasData) {
+                    if (!ps.hasData)
                       return const Center(child: CircularProgressIndicator());
-                    }
                     var posts = ps.data!.docs;
                     return GridView.builder(
                       gridDelegate:
@@ -236,7 +223,6 @@ class _OtherUserProfileScreenState extends State<OtherUserProfileScreen> {
   }
 }
 
-// 🌟 Widget for displaying stats like Posts, Followers, Following
 class _StatColumn extends StatelessWidget {
   final String num;
   final String label;

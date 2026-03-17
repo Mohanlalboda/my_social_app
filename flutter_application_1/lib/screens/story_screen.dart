@@ -1,8 +1,12 @@
-import 'dart:convert'; // 🌟 Base64 కోసం ఇది ముఖ్యం
+// ignore_for_file: curly_braces_in_flow_control_structures
+
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:timeago/timeago.dart' as timeago;
+
+import '../widgets/safe_elements.dart'; // 🌟 క్రాష్ అవ్వకుండా ఉండటానికి ఇది యాడ్ చేశాం
 
 class StoryScreen extends StatefulWidget {
   final Map<String, dynamic> user;
@@ -14,126 +18,214 @@ class StoryScreen extends StatefulWidget {
 
 class _StoryScreenState extends State<StoryScreen> {
   VideoPlayerController? _videoController;
-  bool _isInitialized = false;
+  int _currentIndex = 0;
+  List<DocumentSnapshot> _userStories = [];
+  Timer? _timer;
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    // 🌟 స్టోరీ వీడియో అయితే దాన్ని లోడ్ చేస్తున్నాం
-    if (widget.user['type'] == 'video' && widget.user['storyUrl'] != null) {
-      _videoController =
-          VideoPlayerController.networkUrl(Uri.parse(widget.user['storyUrl']))
-            ..initialize().then((_) {
+    _loadAllStoriesOfUser();
+  }
+
+  void _loadAllStoriesOfUser() async {
+    String ownerId = widget.user['ownerId']?.toString() ?? "";
+    DateTime yesterday = DateTime.now().subtract(const Duration(hours: 24));
+
+    var snapshot = await FirebaseFirestore.instance
+        .collection('stories')
+        .where('ownerId', isEqualTo: ownerId)
+        .where('timestamp', isGreaterThanOrEqualTo: yesterday)
+        .orderBy('timestamp', descending: false)
+        .get();
+
+    if (snapshot.docs.isNotEmpty) {
+      if (mounted) {
+        setState(() {
+          _userStories = snapshot.docs;
+          _isLoading = false;
+        });
+        _showStory();
+      }
+    } else {
+      if (mounted) Navigator.pop(context);
+    }
+  }
+
+  void _showStory() {
+    _timer?.cancel();
+    _videoController?.dispose();
+    _videoController = null;
+
+    if (_userStories.isEmpty) return;
+    var currentStory =
+        _userStories[_currentIndex].data() as Map<String, dynamic>;
+    String storyUrl = currentStory['storyUrl']?.toString() ?? "";
+
+    if (currentStory['type'] == 'video' && storyUrl.isNotEmpty) {
+      _videoController = VideoPlayerController.networkUrl(Uri.parse(storyUrl))
+        ..initialize()
+            .then((_) {
               if (mounted) {
-                setState(() => _isInitialized = true);
+                setState(() {});
                 _videoController!.play();
-                _videoController!.setLooping(true);
+                _videoController!.addListener(() {
+                  if (_videoController!.value.position ==
+                      _videoController!.value.duration) {
+                    _nextStory();
+                  }
+                });
               }
+            })
+            .catchError((e) {
+              _nextStory();
+              return null;
             });
+    } else {
+      _timer = Timer(const Duration(seconds: 5), () => _nextStory());
+    }
+    if (mounted) setState(() {});
+  }
+
+  void _nextStory() {
+    if (_currentIndex < _userStories.length - 1) {
+      setState(() => _currentIndex++);
+      _showStory();
+    } else {
+      if (mounted) Navigator.pop(context);
     }
   }
 
   @override
   void dispose() {
+    _timer?.cancel();
     _videoController?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    String timeStr = widget.user['timestamp'] != null
-        ? timeago.format((widget.user['timestamp'] as Timestamp).toDate())
-        : "";
+    if (_isLoading)
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(child: CircularProgressIndicator(color: Colors.white)),
+      );
 
-    // 🌟 ప్రొఫైల్ పిక్ బేస్64 డేటా అయితే దాన్ని డీకోడ్ చేయడం
-    ImageProvider? profileImage;
-    if (widget.user['profilePic'] != null &&
-        widget.user['profilePic'].toString().isNotEmpty) {
-      try {
-        profileImage = MemoryImage(base64Decode(widget.user['profilePic']));
-      } catch (e) {
-        debugPrint("Profile Pic Error: $e");
-      }
+    var currentStory =
+        _userStories[_currentIndex].data() as Map<String, dynamic>;
+    String storyUrl = currentStory['storyUrl']?.toString() ?? "";
+    String profilePic = currentStory['profilePic']?.toString() ?? "";
+    String username = currentStory['username']?.toString() ?? "User";
+
+    // 🌟 సేఫ్ టైమ్ స్టాంప్ చెక్
+    String postedTime = "Just now";
+    if (currentStory['timestamp'] != null &&
+        currentStory['timestamp'] is Timestamp) {
+      postedTime = timeago.format(
+        (currentStory['timestamp'] as Timestamp).toDate(),
+        locale: 'en_short',
+      );
     }
 
     return Scaffold(
       backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          // 1. మెయిన్ కంటెంట్ (Image or Video)
-          Center(
-            child: widget.user['type'] == 'video'
-                ? (_isInitialized
-                      ? AspectRatio(
-                          aspectRatio: _videoController!.value.aspectRatio,
-                          child: VideoPlayer(_videoController!),
-                        )
-                      : const CircularProgressIndicator(color: Colors.white))
-                : Image.network(
-                    widget.user['storyUrl'] ?? "",
-                    fit: BoxFit.contain,
-                    width: double.infinity,
-                    errorBuilder: (context, error, stackTrace) => const Icon(
-                      Icons.broken_image,
-                      color: Colors.white,
-                      size: 50,
-                    ),
-                    loadingBuilder: (context, child, loadingProgress) {
-                      if (loadingProgress == null) return child;
-                      return const Center(
-                        child: CircularProgressIndicator(color: Colors.white),
-                      );
-                    },
-                  ),
-          ),
-
-          // 2. టాప్ బార్ (User Info & Close Button)
-          Positioned(
-            top: 50,
-            left: 15,
-            right: 15,
-            child: Row(
-              children: [
-                CircleAvatar(
-                  backgroundColor: Colors.blueAccent,
-                  backgroundImage: profileImage,
-                  child: profileImage == null
-                      ? Text(
-                          widget.user['username'][0].toUpperCase(),
-                          style: const TextStyle(color: Colors.white),
-                        )
-                      : null,
-                ),
-                const SizedBox(width: 10),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      widget.user['username'] ?? "User",
-                      style: const TextStyle(
+      body: GestureDetector(
+        onTapDown: (details) {
+          if (details.globalPosition.dx <
+              MediaQuery.of(context).size.width / 3) {
+            if (_currentIndex > 0) {
+              setState(() => _currentIndex--);
+              _showStory();
+            }
+          } else {
+            _nextStory();
+          }
+        },
+        child: Stack(
+          children: [
+            Center(
+              child: currentStory['type'] == 'video'
+                  ? (_videoController != null &&
+                            _videoController!.value.isInitialized
+                        ? AspectRatio(
+                            aspectRatio: _videoController!.value.aspectRatio,
+                            child: VideoPlayer(_videoController!),
+                          )
+                        : const CircularProgressIndicator(color: Colors.white))
+                  : Image.network(
+                      storyUrl,
+                      fit: BoxFit.contain,
+                      width: double.infinity,
+                      errorBuilder: (c, e, s) => const Icon(
+                        Icons.broken_image,
                         color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
+                        size: 50,
                       ),
                     ),
-                    Text(
-                      timeStr,
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ],
-                ),
-                const Spacer(),
-                IconButton(
-                  icon: const Icon(Icons.close, color: Colors.white, size: 30),
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ],
             ),
-          ),
-        ],
+            Positioned(
+              top: 50,
+              left: 10,
+              right: 10,
+              child: Row(
+                children: List.generate(_userStories.length, (index) {
+                  return Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 2),
+                      child: LinearProgressIndicator(
+                        value: index == _currentIndex
+                            ? null
+                            : (index < _currentIndex ? 1.0 : 0.0),
+                        backgroundColor: Colors.white24,
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          Colors.white,
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ),
+            ),
+            Positioned(
+              top: 70,
+              left: 15,
+              right: 15,
+              child: Row(
+                children: [
+                  // 🌟 క్రాష్ అవ్వకుండా SafeProfilePic వాడాం
+                  SafeProfilePic(
+                    base64String: profilePic,
+                    radius: 18,
+                    fallbackText: username.isNotEmpty ? username[0] : "U",
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    username,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    postedTime,
+                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(
+                      Icons.close,
+                      color: Colors.white,
+                      size: 28,
+                    ),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

@@ -1,10 +1,12 @@
+// ignore_for_file: curly_braces_in_flow_control_structures
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 
 import '../widgets/safe_elements.dart';
 import 'other_user_profile_screen.dart';
 import 'scrolling_posts_screen.dart';
-import 'single_reel_screen.dart'; // నిన్న మనం చేసిన సింగిల్ రీల్ పేజీ
+import 'single_reel_screen.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -17,41 +19,35 @@ class _SearchScreenState extends State<SearchScreen> {
   final TextEditingController searchController = TextEditingController();
   bool isShowUsers = false;
 
-  // 🌟 డేటాబేస్ నుండి పోస్ట్‌లు మరియు రీల్స్ రెండింటినీ లాగి కలిపే ఫంక్షన్ (Explore కోసం)
   Future<List<Map<String, dynamic>>> getExploreContent() async {
     List<Map<String, dynamic>> allContent = [];
-
     try {
-      // 1. పోస్ట్స్ లాగుతున్నాం
       var postsSnap = await FirebaseFirestore.instance
           .collection('posts')
           .limit(20)
           .get();
       for (var doc in postsSnap.docs) {
         var data = doc.data();
-        data['item_type'] = 'post'; // ఇది పోస్ట్ అని గుర్తుపెట్టుకోవడానికి
+        data['item_type'] = 'post';
         data['id'] = doc.id;
         allContent.add(data);
       }
 
-      // 2. రీల్స్ లాగుతున్నాం
       var reelsSnap = await FirebaseFirestore.instance
           .collection('reels')
           .limit(20)
           .get();
       for (var doc in reelsSnap.docs) {
         var data = doc.data();
-        data['item_type'] = 'reel'; // ఇది రీల్ అని గుర్తుపెట్టుకోవడానికి
+        data['item_type'] = 'reel';
         data['id'] = doc.id;
         allContent.add(data);
       }
 
-      // 3. వాటిని షఫుల్ (మిక్స్) చేస్తున్నాం (ఇన్‌స్టాగ్రామ్ ఫీల్ కోసం)
       allContent.shuffle();
     } catch (e) {
       debugPrint("Explore Fetch Error: $e");
     }
-
     return allContent;
   }
 
@@ -75,13 +71,10 @@ class _SearchScreenState extends State<SearchScreen> {
             suffixIcon: isShowUsers
                 ? IconButton(
                     icon: const Icon(Icons.clear, color: Colors.grey),
-                    onPressed: () {
-                      setState(() {
-                        searchController.clear();
-                        isShowUsers =
-                            false; // క్లియర్ చేయగానే మళ్లీ ఎక్స్‌ప్లోర్ గ్రిడ్ వస్తుంది
-                      });
-                    },
+                    onPressed: () => setState(() {
+                      searchController.clear();
+                      isShowUsers = false;
+                    }),
                   )
                 : null,
             filled: true,
@@ -92,27 +85,18 @@ class _SearchScreenState extends State<SearchScreen> {
               borderSide: BorderSide.none,
             ),
           ),
-          onFieldSubmitted: (String _) {
-            setState(() {
-              isShowUsers = searchController.text.trim().isNotEmpty;
-            });
-          },
+          onFieldSubmitted: (String _) => setState(
+            () => isShowUsers = searchController.text.trim().isNotEmpty,
+          ),
           onChanged: (String text) {
-            if (text.isEmpty) {
-              setState(() {
-                isShowUsers = false;
-              });
-            }
+            if (text.isEmpty) setState(() => isShowUsers = false);
           },
         ),
       ),
-
-      // 🌟 ఎవరైనా పేరు సెర్చ్ చేస్తే ఆ యూజర్ లిస్ట్ వస్తుంది, లేకపోతే రీల్స్+పోస్ట్స్ గ్రిడ్ వస్తుంది!
       body: isShowUsers ? _buildUserSearchStream() : _buildExploreGrid(),
     );
   }
 
-  // 👤 1. యూజర్లని సెర్చ్ చేసినప్పుడు చూపించే లిస్ట్
   Widget _buildUserSearchStream() {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
@@ -123,20 +107,16 @@ class _SearchScreenState extends State<SearchScreen> {
           )
           .snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) {
+        if (!snapshot.hasData)
           return const Center(child: CircularProgressIndicator());
-        }
-
         var users = snapshot.data!.docs;
-
-        if (users.isEmpty) {
+        if (users.isEmpty)
           return const Center(
             child: Text(
               "No users found.",
               style: TextStyle(color: Colors.grey, fontSize: 16),
             ),
           );
-        }
 
         return ListView.builder(
           itemCount: users.length,
@@ -164,16 +144,13 @@ class _SearchScreenState extends State<SearchScreen> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              onTap: () {
-                // యూజర్ పేరు మీద క్లిక్ చేస్తే ప్రొఫైల్ ఓపెన్ అవుతుంది
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) =>
-                        OtherUserProfileScreen(uid: users[index].id),
-                  ),
-                );
-              },
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) =>
+                      OtherUserProfileScreen(uid: users[index].id),
+                ),
+              ),
             );
           },
         );
@@ -181,27 +158,21 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  // 📸🎬 2. సెర్చ్ చేయనప్పుడు ఇన్‌స్టాగ్రామ్ లాగా చూపించే ఎక్స్‌ప్లోర్ గ్రిడ్
   Widget _buildExploreGrid() {
     return FutureBuilder<List<Map<String, dynamic>>>(
       future: getExploreContent(),
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+        if (snapshot.connectionState == ConnectionState.waiting)
           return const Center(child: CircularProgressIndicator());
-        }
-
-        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+        if (!snapshot.hasData || snapshot.data!.isEmpty)
           return const Center(
             child: Text(
               "No posts or reels yet. Follow some people! 🌟",
               style: TextStyle(color: Colors.grey),
             ),
           );
-        }
 
         List<Map<String, dynamic>> exploreData = snapshot.data!;
-
-        // కేవలం పోస్ట్‌ల ఐడీలను మాత్రమే ఫిల్టర్ చేస్తున్నాం (స్క్రోలింగ్ స్క్రీన్ కి పంపడానికి)
         List<String> onlyPostIds = exploreData
             .where((item) => item['item_type'] == 'post')
             .map((item) => item['id'] as String)
@@ -213,7 +184,7 @@ class _SearchScreenState extends State<SearchScreen> {
             crossAxisCount: 3,
             crossAxisSpacing: 2,
             mainAxisSpacing: 2,
-            childAspectRatio: 1, // స్క్వేర్ షేప్ లో వస్తాయి
+            childAspectRatio: 1,
           ),
           itemCount: exploreData.length,
           itemBuilder: (context, index) {
@@ -223,7 +194,6 @@ class _SearchScreenState extends State<SearchScreen> {
             return GestureDetector(
               onTap: () {
                 if (isReel) {
-                  // 🎬 రీల్ అయితే సింగిల్ రీల్ వ్యూ ఓపెన్ అవుతుంది
                   Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -232,7 +202,6 @@ class _SearchScreenState extends State<SearchScreen> {
                     ),
                   );
                 } else {
-                  // 📸 పోస్ట్ అయితే స్క్రోలింగ్ పోస్ట్స్ వ్యూ ఓపెన్ అవుతుంది
                   int actualIndex = onlyPostIds.indexOf(item['id']);
                   Navigator.push(
                     context,
@@ -248,12 +217,9 @@ class _SearchScreenState extends State<SearchScreen> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // బ్యాక్‌గ్రౌండ్ ఇమేజ్ (పోస్ట్ కి అయితే ఫోటో, రీల్ అయితే ప్రస్తుతానికి బ్లాక్ బాక్స్)
                   isReel
                       ? Container(color: Colors.black87)
                       : SafeImage(base64String: item['postData']),
-
-                  // రీల్ అయితే పైన కుడివైపు మూలలో రీల్స్ ఐకాన్
                   if (isReel)
                     const Positioned(
                       top: 5,
@@ -264,8 +230,6 @@ class _SearchScreenState extends State<SearchScreen> {
                         size: 20,
                       ),
                     ),
-
-                  // రీల్ అయితే మధ్యలో చిన్న ప్లే ఐకాన్
                   if (isReel)
                     const Center(
                       child: Icon(

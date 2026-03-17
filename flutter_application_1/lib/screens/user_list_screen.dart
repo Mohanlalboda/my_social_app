@@ -25,8 +25,9 @@ class UserListScreen extends StatelessWidget {
                       .snapshots(),
                   builder: (context, snapshot) {
                     if (!snapshot.hasData) return const SizedBox();
-                    
-                    var userData = snapshot.data!.data() as Map<String, dynamic>? ?? {};
+
+                    var userData =
+                        snapshot.data!.data() as Map<String, dynamic>? ?? {};
                     String name = userData['username'] ?? "User";
                     String profilePic = userData['profilePic'] ?? "";
 
@@ -36,12 +37,16 @@ class UserListScreen extends StatelessWidget {
                         radius: 20,
                         fallbackText: name.isNotEmpty ? name[0] : "U",
                       ),
-                      title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                      title: Text(
+                        name,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
                       onTap: () {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => OtherUserProfileScreen(uid: userIds[index]),
+                            builder: (context) =>
+                                OtherUserProfileScreen(uid: userIds[index]),
                           ),
                         );
                       },

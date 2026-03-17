@@ -1,3 +1,5 @@
+// ignore_for_file: curly_braces_in_flow_control_structures
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -16,17 +18,15 @@ class InboxScreen extends StatelessWidget {
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance.collection('users').snapshots(),
         builder: (context, snapshot) {
-          if (!snapshot.hasData) {
+          if (!snapshot.hasData)
             return const Center(child: CircularProgressIndicator());
-          }
 
           var users = snapshot.data!.docs
               .where((doc) => doc.id != currentUid)
               .toList();
 
-          if (users.isEmpty) {
+          if (users.isEmpty)
             return const Center(child: Text("No users found to chat with."));
-          }
 
           return ListView.builder(
             itemCount: users.length,
@@ -44,7 +44,6 @@ class InboxScreen extends StatelessWidget {
                 builder: (context, roomSnapshot) {
                   var d = roomSnapshot.data?.data() as Map<String, dynamic>?;
 
-                  // 🌟 ఇక్కడ ఆ పర్టిక్యులర్ యూజర్ నుండి వచ్చిన "చూడని" మెసేజ్ ల కౌంట్ తీసుకుంటున్నాం
                   return StreamBuilder<QuerySnapshot>(
                     stream: FirebaseFirestore.instance
                         .collection('messages')
@@ -80,24 +79,21 @@ class InboxScreen extends StatelessWidget {
                             color: isUnread ? Colors.black : Colors.grey,
                           ),
                         ),
-                        // 🌟 రెడ్ డాట్ తో పాటు మెసేజ్ ల కౌంట్ ఇక్కడ వస్తుంది!
                         trailing: isUnread
                             ? Badge(
                                 label: Text(unreadCount.toString()),
                                 backgroundColor: Colors.red,
                               )
                             : null,
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => ChatScreen(
-                                receiverId: u['uid'],
-                                receiverName: u['username'],
-                              ),
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => ChatScreen(
+                              receiverId: u['uid'],
+                              receiverName: u['username'],
                             ),
-                          );
-                        },
+                          ),
+                        ),
                       );
                     },
                   );

@@ -15,28 +15,19 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _isLoading = false;
 
   Future<void> _login() async {
-    setState(() {
-      _isLoading = true;
-    });
+    setState(() => _isLoading = true);
     try {
       await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
-      // లాగిన్ సక్సెస్ అయితే authStateChanges వల్ల ఆటోమేటిక్‌గా మెయిన్ స్క్రీన్‌కి వెళ్తుంది.
     } catch (e) {
-      // 🌟 FIXED: Guard check before showing SnackBar
       if (!mounted) return;
-
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(SnackBar(content: Text(e.toString())));
     } finally {
-      if (mounted) {
-        setState(() {
-          _isLoading = false;
-        });
-      }
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -64,7 +55,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   const SizedBox(height: 50),
-                  // TextField లోపల ఈ మార్పులు చేయండి:
                   TextField(
                     controller: _emailController,
                     style: const TextStyle(color: Colors.white),
@@ -72,7 +62,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       hintText: "Email",
                       hintStyle: const TextStyle(color: Colors.white70),
                       filled: true,
-                      // 🌟 FIXED: Changed withOpacity to withValues
                       fillColor: Colors.white.withValues(alpha: 0.2),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(15),
@@ -89,7 +78,6 @@ class _LoginScreenState extends State<LoginScreen> {
                       hintText: "Password",
                       hintStyle: const TextStyle(color: Colors.white70),
                       filled: true,
-                      // 🌟 FIXED: Changed withOpacity to withValues
                       fillColor: Colors.white.withValues(alpha: 0.2),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(15),
@@ -113,14 +101,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ),
                   TextButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const SignUpScreen(),
-                        ),
-                      );
-                    },
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const SignUpScreen()),
+                    ),
                     child: const Text(
                       "Don't have an account? Sign Up",
                       style: TextStyle(color: Colors.white),

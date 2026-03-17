@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'post_details_screen.dart'; // మీ పాత పోస్ట్ చూసే స్క్రీన్
+import 'post_details_screen.dart';
 
 class ScrollingPostsScreen extends StatefulWidget {
   final List<String> postIds;
@@ -21,7 +21,6 @@ class _ScrollingPostsScreenState extends State<ScrollingPostsScreen> {
   @override
   void initState() {
     super.initState();
-    // 🌟 మీరు ఏ ఫోటోపై క్లిక్ చేశారో, అది ముందుగా ఓపెన్ అయ్యేలా సెట్ చేస్తున్నాం
     _pageController = PageController(initialPage: widget.initialIndex);
   }
 
@@ -34,15 +33,12 @@ class _ScrollingPostsScreenState extends State<ScrollingPostsScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor:
-          Colors.black, // ఇన్‌స్టాగ్రామ్ లాగా బ్లాక్ బ్యాక్‌గ్రౌండ్
+      backgroundColor: Colors.black,
       body: PageView.builder(
-        scrollDirection:
-            Axis.vertical, // 🌟 పైకి కిందకి స్క్రోల్ అవ్వడానికి ఇది ముఖ్యం
+        scrollDirection: Axis.vertical,
         controller: _pageController,
         itemCount: widget.postIds.length,
         itemBuilder: (context, index) {
-          // 🌟 ఇక్కడ మీ పాత PostDetailsScreen ని పేజీల్లాగా వాడుతున్నాం!
           return PostDetailsScreen(postId: widget.postIds[index]);
         },
       ),

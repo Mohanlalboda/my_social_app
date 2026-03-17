@@ -15,56 +15,38 @@ class AddPostScreen extends StatefulWidget {
 }
 
 class _AddPostScreenState extends State<AddPostScreen> {
-  // 📸 పోస్ట్ కోసం వేరియబుల్స్
   File? _selectedImage;
   final TextEditingController _postCaptionController = TextEditingController();
   bool _isUploadingPost = false;
-  bool _isPostPublic = true; // 🌟 కొత్తగా యాడ్ చేసిన Public/Private స్విచ్
+  bool _isPostPublic = true;
 
-  // 🎬 రీల్ కోసం వేరియబుల్స్
   File? _selectedVideo;
   final TextEditingController _reelCaptionController = TextEditingController();
   bool _isUploadingReel = false;
-  bool _isReelPublic = true; // 🌟 రీల్స్ కోసం కూడా
+  bool _isReelPublic = true;
 
   Future<void> _pickImage() async {
     final picker = ImagePicker();
-    final pickedFile = await picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 50,
-    );
-    if (pickedFile != null) {
-      setState(() {
-        _selectedImage = File(pickedFile.path);
-      });
-    }
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery, imageQuality: 50);
+    if (pickedFile != null) setState(() => _selectedImage = File(pickedFile.path));
   }
 
   Future<void> _pickVideo() async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickVideo(source: ImageSource.gallery);
-    if (pickedFile != null) {
-      setState(() {
-        _selectedVideo = File(pickedFile.path);
-      });
-    }
+    if (pickedFile != null) setState(() => _selectedVideo = File(pickedFile.path));
   }
 
   Future<void> _uploadPost() async {
     if (_selectedImage == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please select an image! 📸")),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please select an image! 📸")));
       return;
     }
     setState(() => _isUploadingPost = true);
 
     try {
       String uid = FirebaseAuth.instance.currentUser!.uid;
-      var userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
+      var userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
       String username = userDoc.data()?['username'] ?? 'User';
       String profilePic = userDoc.data()?['profilePic'] ?? '';
 
@@ -80,8 +62,7 @@ class _AddPostScreenState extends State<AddPostScreen> {
         'caption': _postCaptionController.text.trim(),
         'likes': [],
         'savedBy': [],
-        'isPublic':
-            _isPostPublic, // 🌟 డేటాబేస్‌లో పబ్లిక్ స్టేటస్ సేవ్ అవుతుంది
+        'isPublic': _isPostPublic,
         'timestamp': FieldValue.serverTimestamp(),
       });
 
@@ -91,43 +72,28 @@ class _AddPostScreenState extends State<AddPostScreen> {
         _isPostPublic = true;
       });
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Post uploaded successfully! ✅"),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Post uploaded successfully! ✅"), backgroundColor: Colors.green));
     } catch (e) {
       debugPrint("Post Upload Error: $e");
     }
-    setState(() => _isUploadingPost = false);
+    if (mounted) setState(() => _isUploadingPost = false);
   }
 
   Future<void> _uploadReel() async {
     if (_selectedVideo == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please select a video from gallery! 🎬")),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please select a video from gallery! 🎬")));
       return;
     }
     setState(() => _isUploadingReel = true);
 
     try {
       String uid = FirebaseAuth.instance.currentUser!.uid;
-      var userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
+      var userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
       String username = userDoc.data()?['username'] ?? 'User';
       String profilePic = userDoc.data()?['profilePic'] ?? '';
       String reelId = const Uuid().v4();
 
-      Reference storageRef = FirebaseStorage.instance
-          .ref()
-          .child('reels')
-          .child('$reelId.mp4');
+      Reference storageRef = FirebaseStorage.instance.ref().child('reels').child('$reelId.mp4');
       UploadTask uploadTask = storageRef.putFile(_selectedVideo!);
       TaskSnapshot snapshot = await uploadTask;
       String videoUrl = await snapshot.ref.getDownloadURL();
@@ -141,8 +107,7 @@ class _AddPostScreenState extends State<AddPostScreen> {
         'caption': _reelCaptionController.text.trim(),
         'likes': [],
         'savedBy': [],
-        'isPublic':
-            _isReelPublic, // 🌟 రీల్ కూడా పబ్లిక్/ప్రైవేట్ సేవ్ అవుతుంది
+        'isPublic': _isReelPublic,
         'timestamp': FieldValue.serverTimestamp(),
       });
 
@@ -152,26 +117,11 @@ class _AddPostScreenState extends State<AddPostScreen> {
         _isReelPublic = true;
       });
 
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Reel uploaded successfully! 🎬✅"),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Reel uploaded successfully! 🎬✅"), backgroundColor: Colors.green));
     } catch (e) {
       debugPrint("Reel Upload Error: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Error: ${e.toString()}"),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
     }
-    setState(() => _isUploadingReel = false);
+    if (mounted) setState(() => _isUploadingReel = false);
   }
 
   @override
@@ -187,10 +137,7 @@ class _AddPostScreenState extends State<AddPostScreen> {
       length: 2,
       child: Scaffold(
         appBar: AppBar(
-          title: const Text(
-            "New Post",
-            style: TextStyle(fontWeight: FontWeight.bold),
-          ),
+          title: const Text("New Post", style: TextStyle(fontWeight: FontWeight.bold)),
           bottom: const TabBar(
             indicatorColor: Colors.blue,
             labelColor: Colors.blue,
@@ -203,7 +150,6 @@ class _AddPostScreenState extends State<AddPostScreen> {
         ),
         body: TabBarView(
           children: [
-            // 📸 1. POST TAB
             SingleChildScrollView(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -213,91 +159,35 @@ class _AddPostScreenState extends State<AddPostScreen> {
                     child: Container(
                       height: 300,
                       width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).cardColor,
-                        borderRadius: BorderRadius.circular(15),
-                        border: Border.all(color: Colors.grey.shade300),
-                      ),
+                      decoration: BoxDecoration(color: Theme.of(context).cardColor, borderRadius: BorderRadius.circular(15), border: Border.all(color: Colors.grey.shade300)),
                       child: _selectedImage != null
-                          ? ClipRRect(
-                              borderRadius: BorderRadius.circular(15),
-                              child: Image.file(
-                                _selectedImage!,
-                                fit: BoxFit.cover,
-                              ),
-                            )
-                          : const Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.add_a_photo,
-                                  size: 50,
-                                  color: Colors.grey,
-                                ),
-                                SizedBox(height: 10),
-                                Text(
-                                  "Tap to select photo",
-                                  style: TextStyle(color: Colors.grey),
-                                ),
-                              ],
-                            ),
+                          ? ClipRRect(borderRadius: BorderRadius.circular(15), child: Image.file(_selectedImage!, fit: BoxFit.cover))
+                          : const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.add_a_photo, size: 50, color: Colors.grey), SizedBox(height: 10), Text("Tap to select photo", style: TextStyle(color: Colors.grey))]),
                     ),
                   ),
                   const SizedBox(height: 20),
-                  TextField(
-                    controller: _postCaptionController,
-                    maxLines: 3,
-                    decoration: InputDecoration(
-                      hintText: "Write a caption...",
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      filled: true,
-                    ),
-                  ),
+                  TextField(controller: _postCaptionController, maxLines: 3, decoration: InputDecoration(hintText: "Write a caption...", border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)), filled: true)),
                   const SizedBox(height: 15),
-                  // 🌟 Public / Private స్విచ్
                   SwitchListTile(
                     title: const Text("Make this post Public"),
                     value: _isPostPublic,
-                    // 🌟 ఇక్కడ మార్పు చేయండి
                     activeThumbColor: Colors.white,
                     activeTrackColor: Colors.blue,
-                    onChanged: (bool value) {
-                      setState(() {
-                        _isPostPublic = value;
-                      });
-                    },
+                    onChanged: (bool value) => setState(() => _isPostPublic = value),
                   ),
                   const SizedBox(height: 20),
                   SizedBox(
                     width: double.infinity,
                     height: 50,
                     child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blue,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.blue, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
                       onPressed: _isUploadingPost ? null : _uploadPost,
-                      child: _isUploadingPost
-                          ? const CircularProgressIndicator(color: Colors.white)
-                          : const Text(
-                              "Share Post",
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                      child: _isUploadingPost ? const CircularProgressIndicator(color: Colors.white) : const Text("Share Post", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                     ),
                   ),
                 ],
               ),
             ),
-
-            // 🎬 2. REEL TAB
             SingleChildScrollView(
               padding: const EdgeInsets.all(20),
               child: Column(
@@ -307,95 +197,30 @@ class _AddPostScreenState extends State<AddPostScreen> {
                     child: Container(
                       height: 300,
                       width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).cardColor,
-                        borderRadius: BorderRadius.circular(15),
-                        border: Border.all(color: Colors.blue.shade200),
-                      ),
+                      decoration: BoxDecoration(color: Theme.of(context).cardColor, borderRadius: BorderRadius.circular(15), border: Border.all(color: Colors.blue.shade200)),
                       child: _selectedVideo != null
-                          ? const Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.check_circle,
-                                  size: 60,
-                                  color: Colors.green,
-                                ),
-                                SizedBox(height: 10),
-                                Text(
-                                  "Video Selected! Ready to upload.",
-                                  style: TextStyle(
-                                    color: Colors.green,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            )
-                          : const Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.video_collection,
-                                  size: 50,
-                                  color: Colors.blue,
-                                ),
-                                SizedBox(height: 10),
-                                Text(
-                                  "Tap to select a video from gallery",
-                                  style: TextStyle(color: Colors.blue),
-                                ),
-                              ],
-                            ),
+                          ? const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.check_circle, size: 60, color: Colors.green), SizedBox(height: 10), Text("Video Selected! Ready to upload.", style: TextStyle(color: Colors.green, fontWeight: FontWeight.bold))])
+                          : const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.video_collection, size: 50, color: Colors.blue), SizedBox(height: 10), Text("Tap to select a video from gallery", style: TextStyle(color: Colors.blue))]),
                     ),
                   ),
                   const SizedBox(height: 20),
-                  TextField(
-                    controller: _reelCaptionController,
-                    maxLines: 3,
-                    decoration: InputDecoration(
-                      hintText: "Write a caption for your Reel...",
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      filled: true,
-                    ),
-                  ),
+                  TextField(controller: _reelCaptionController, maxLines: 3, decoration: InputDecoration(hintText: "Write a caption for your Reel...", border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)), filled: true)),
                   const SizedBox(height: 15),
-                  // 🌟 Public / Private స్విచ్
                   SwitchListTile(
                     title: const Text("Make this post Public"),
                     value: _isPostPublic,
-                    // 🌟 ఇక్కడ మార్పు చేయండి
                     activeThumbColor: Colors.white,
                     activeTrackColor: Colors.blue,
-                    onChanged: (bool value) {
-                      setState(() {
-                        _isPostPublic = value;
-                      });
-                    },
+                    onChanged: (bool value) => setState(() => _isPostPublic = value),
                   ),
                   const SizedBox(height: 20),
                   SizedBox(
                     width: double.infinity,
                     height: 50,
                     child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.pink,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                      ),
+                      style: ElevatedButton.styleFrom(backgroundColor: Colors.pink, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
                       onPressed: _isUploadingReel ? null : _uploadReel,
-                      child: _isUploadingReel
-                          ? const CircularProgressIndicator(color: Colors.white)
-                          : const Text(
-                              "Share Reel",
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
+                      child: _isUploadingReel ? const CircularProgressIndicator(color: Colors.white) : const Text("Share Reel", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
                     ),
                   ),
                 ],

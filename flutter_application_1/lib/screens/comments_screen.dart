@@ -1,3 +1,5 @@
+// ignore_for_file: curly_braces_in_flow_control_structures
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -25,7 +27,6 @@ class _CommentsScreenState extends State<CommentsScreen> {
     try {
       String uid = FirebaseAuth.instance.currentUser!.uid;
       String username = FirebaseAuth.instance.currentUser!.email!.split('@')[0];
-
       String collectionName = widget.isReel ? 'reels' : 'posts';
 
       await FirebaseFirestore.instance
@@ -43,7 +44,6 @@ class _CommentsScreenState extends State<CommentsScreen> {
           .collection(collectionName)
           .doc(widget.postId)
           .get();
-
       String ownerId = widget.isReel ? docRef['uid'] : docRef['ownerId'];
 
       if (ownerId != uid) {
@@ -63,7 +63,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
       debugPrint("🚨 Error saving comment: $e");
     }
 
-    setState(() => _isPosting = false);
+    if (mounted) setState(() => _isPosting = false);
   }
 
   @override
@@ -83,15 +83,14 @@ class _CommentsScreenState extends State<CommentsScreen> {
                   .orderBy('timestamp', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
-                if (!snapshot.hasData) {
+                if (!snapshot.hasData)
                   return const Center(child: CircularProgressIndicator());
-                }
                 var comments = snapshot.data!.docs;
-                if (comments.isEmpty) {
+                if (comments.isEmpty)
                   return const Center(
                     child: Text("No comments yet. Be the first!"),
                   );
-                }
+
                 return ListView.builder(
                   itemCount: comments.length,
                   itemBuilder: (context, index) {

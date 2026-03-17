@@ -1,3 +1,5 @@
+// ignore_for_file: curly_braces_in_flow_control_structures, empty_catches
+
 import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -29,103 +31,80 @@ class _PostWidgetState extends State<PostWidget> {
   @override
   void initState() {
     super.initState();
-    Map likes = widget.post['likes'] ?? {};
-    isLiked = likes[currentUid] == true;
-    likeCount = likes.values.where((val) => val == true).length;
-    List savedBy = widget.post['savedBy'] ?? [];
+    _syncData();
+  }
+
+  void _syncData() {
+    List likes = widget.post['likes'] is List ? widget.post['likes'] : [];
+    isLiked = likes.contains(currentUid);
+    likeCount = likes.length;
+
+    List savedBy = widget.post['savedBy'] is List ? widget.post['savedBy'] : [];
     isSaved = savedBy.contains(currentUid);
   }
 
   void _handleLike() async {
     setState(() {
       isLiked = !isLiked;
-      likeCount += isLiked ? 1 : -1;
+      isLiked ? likeCount++ : likeCount--;
     });
-
-    await FirebaseFirestore.instance
-        .collection('posts')
-        .doc(widget.post['postId'])
-        .set({
-          'likes': {currentUid: isLiked},
-        }, SetOptions(merge: true));
-
-    if (isLiked && currentUid != widget.post['ownerId']) {
-      await FirebaseFirestore.instance.collection('notifications').add({
-        'receiverId': widget.post['ownerId'],
-        'senderName': FirebaseAuth.instance.currentUser!.email!.split('@')[0],
-        'type': 'like',
-        'timestamp': FieldValue.serverTimestamp(),
-        'isRead': false,
-      });
-    }
+    try {
+      var ref = FirebaseFirestore.instance
+          .collection('posts')
+          .doc(widget.post['postId']);
+      isLiked
+          ? await ref.update({
+              'likes': FieldValue.arrayUnion([currentUid]),
+            })
+          : await ref.update({
+              'likes': FieldValue.arrayRemove([currentUid]),
+            });
+    } catch (e) {}
   }
 
   void _handleSave() async {
-    setState(() {
-      isSaved = !isSaved;
-    });
-    String postId = widget.post['postId'];
-    if (isSaved) {
-      await FirebaseFirestore.instance.collection('posts').doc(postId).update({
-        'savedBy': FieldValue.arrayUnion([currentUid]),
-      });
-    } else {
-      await FirebaseFirestore.instance.collection('posts').doc(postId).update({
-        'savedBy': FieldValue.arrayRemove([currentUid]),
-      });
-    }
+    setState(() => isSaved = !isSaved);
+    try {
+      var ref = FirebaseFirestore.instance
+          .collection('posts')
+          .doc(widget.post['postId']);
+      isSaved
+          ? await ref.update({
+              'savedBy': FieldValue.arrayUnion([currentUid]),
+            })
+          : await ref.update({
+              'savedBy': FieldValue.arrayRemove([currentUid]),
+            });
+    } catch (e) {}
   }
 
   void _shareExternally() async {
     try {
-      String base64String = widget.post['postData'] ?? "";
+      String base64String = widget.post['postData']?.toString() ?? "";
       if (base64String.isEmpty) return;
-
-      // 1. Base64 క్లీన్ చేయడం (స్పేస్‌లు, న్యూలైన్స్ తీసేయడం)
-      base64String = base64String
-          .replaceAll('\n', '')
-          .replaceAll('\r', '')
-          .trim();
-      if (base64String.contains(',')) {
+      if (base64String.contains(','))
         base64String = base64String.split(',').last;
-      }
-
-      // 2. క్యాప్షన్ ఖాళీగా ఉంటే డిఫాల్ట్ టెక్స్ట్ సెట్ చేయడం
-      String shareText = widget.post['caption'] ?? "";
-      if (shareText.trim().isEmpty) {
-        shareText = "Check out this post on MyBanjara!";
-      }
-
-      // 3. ఇమేజ్ బైట్స్ కన్వర్ట్ చేసి టెంపరరీ ఫైల్ క్రియేట్ చేయడం
-      final bytes = base64Decode(base64String);
+      final bytes = base64Decode(base64String.trim());
       final tempDir = await getTemporaryDirectory();
       final file = File(
-        '${tempDir.path}/shared_post_${DateTime.now().millisecondsSinceEpoch}.png',
+        '${tempDir.path}/post_${DateTime.now().millisecondsSinceEpoch}.png',
       );
       await file.writeAsBytes(bytes);
-
       if (await file.exists()) {
         final xFile = XFile(file.path, mimeType: 'image/png');
-
-        // 🌟 LATEST SYNTAX: ఇది మీ వార్నింగ్స్ అన్నింటినీ క్లియర్ చేస్తుంది
         await SharePlus.instance.share(
           ShareParams(
-            text: shareText,
-            files: [xFile], // ఫైల్స్‌ను లిస్ట్ లాగా పంపాలి
+            text: widget.post['caption'] ?? "Check out this post on MyBanjara!",
+            files: [xFile],
           ),
         );
       }
     } catch (e) {
-      debugPrint("🚨 SHARE ERROR: $e");
-      if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Share failed: $e")));
-      }
+      debugPrint("External share error: $e");
     }
   }
 
-  // 🌟 FIXED: context ఎర్రర్ రాకుండా జాగ్రత్త పడ్డాం
+  // 🌟 యాప్ యూజర్ కి చాట్ లో పోస్ట్ పంపడానికి
   void _sendPostInternally(BuildContext sheetContext, String receiverId) async {
     try {
       await FirebaseFirestore.instance.collection('messages').add({
@@ -149,38 +128,36 @@ class _PostWidgetState extends State<PostWidget> {
         'hasUnread_$receiverId': true,
       }, SetOptions(merge: true));
 
-      if (!sheetContext.mounted) {
-        return;
-      }
+      if (!sheetContext.mounted) return;
       Navigator.pop(sheetContext);
 
-      if (!mounted) {
-        return;
-      }
+      if (!mounted) return;
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(const SnackBar(content: Text("Sent to friend! ✅")));
+      ).showSnackBar(const SnackBar(content: Text("Sent to inbox! ✅")));
     } catch (e) {
-      debugPrint("Internal Share Error: $e");
+      debugPrint("Internal share error: $e");
     }
   }
 
+  // 🌟 ఇంటర్నల్ & ఎక్స్‌టర్నల్ షేర్ మెనూ
   void _showShareMenu() {
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (bottomSheetContext) {
-        return Column(
+      builder: (ctx) => Container(
+        height: MediaQuery.of(context).size.height * 0.6,
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Column(
           children: [
-            const Padding(
-              padding: EdgeInsets.all(15.0),
-              child: Text(
-                "Share Post",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
+            const Text(
+              "Share Post",
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
             ),
+            const SizedBox(height: 10),
             ListTile(
               leading: const CircleAvatar(
                 backgroundColor: Colors.green,
@@ -188,16 +165,22 @@ class _PostWidgetState extends State<PostWidget> {
               ),
               title: const Text("Share to WhatsApp / Others"),
               onTap: () {
-                Navigator.pop(bottomSheetContext);
+                Navigator.pop(ctx);
                 _shareExternally();
               },
             ),
             const Divider(),
             const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 15),
-              child: Text(
-                "Send to Friends",
-                style: TextStyle(color: Colors.grey, fontSize: 12),
+              padding: EdgeInsets.symmetric(horizontal: 15, vertical: 5),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  "Send to Friends",
+                  style: TextStyle(
+                    color: Colors.grey,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             ),
             Expanded(
@@ -206,9 +189,8 @@ class _PostWidgetState extends State<PostWidget> {
                     .collection('users')
                     .snapshots(),
                 builder: (context, snapshot) {
-                  if (!snapshot.hasData) {
+                  if (!snapshot.hasData)
                     return const Center(child: CircularProgressIndicator());
-                  }
                   var users = snapshot.data!.docs
                       .where((doc) => doc.id != currentUid)
                       .toList();
@@ -217,22 +199,21 @@ class _PostWidgetState extends State<PostWidget> {
                     itemCount: users.length,
                     itemBuilder: (context, index) {
                       var user = users[index].data() as Map<String, dynamic>;
+                      String uName = user['username'] ?? "User";
                       return ListTile(
                         leading: SafeProfilePic(
                           base64String: user['profilePic'],
-                          radius: 18,
-                          fallbackText: user['username']?[0] ?? "U",
+                          radius: 20,
+                          fallbackText: uName.isNotEmpty ? uName[0] : "U",
                         ),
-                        title: Text(user['username'] ?? "User"),
+                        title: Text(uName),
                         trailing: ElevatedButton(
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.blue,
                             foregroundColor: Colors.white,
                           ),
-                          onPressed: () => _sendPostInternally(
-                            bottomSheetContext,
-                            users[index].id,
-                          ),
+                          onPressed: () =>
+                              _sendPostInternally(ctx, users[index].id),
                           child: const Text("Send"),
                         ),
                       );
@@ -242,27 +223,61 @@ class _PostWidgetState extends State<PostWidget> {
               ),
             ),
           ],
-        );
-      },
+        ),
+      ),
     );
+  }
+
+  void _deletePost() async {
+    bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Delete Post?"),
+        content: const Text("Are you sure? This cannot be undone."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("Delete", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await FirebaseFirestore.instance
+          .collection('posts')
+          .doc(widget.post['postId'])
+          .delete();
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Post Deleted!")));
+    }
   }
 
   void _editPost() {
     TextEditingController editController = TextEditingController(
-      text: widget.post['caption'] ?? "",
+      text: widget.post['caption']?.toString() ?? "",
     );
     showDialog(
       context: context,
-      builder: (dialogContext) => AlertDialog(
+      builder: (ctx) => AlertDialog(
         title: const Text("Edit Caption"),
         content: TextField(
           controller: editController,
-          decoration: const InputDecoration(border: OutlineInputBorder()),
+          decoration: const InputDecoration(
+            hintText: "Enter new caption",
+            border: OutlineInputBorder(),
+          ),
           maxLines: 3,
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
+            onPressed: () => Navigator.pop(ctx),
             child: const Text("Cancel"),
           ),
           ElevatedButton(
@@ -271,11 +286,11 @@ class _PostWidgetState extends State<PostWidget> {
                   .collection('posts')
                   .doc(widget.post['postId'])
                   .update({'caption': editController.text.trim()});
-
-              if (!dialogContext.mounted) {
-                return;
-              }
-              Navigator.pop(dialogContext);
+              if (ctx.mounted) Navigator.pop(ctx);
+              if (mounted)
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Caption Updated!")),
+                );
             },
             child: const Text("Save"),
           ),
@@ -284,140 +299,61 @@ class _PostWidgetState extends State<PostWidget> {
     );
   }
 
-  void _deletePost() {
-    showDialog(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text("Delete Post"),
-        content: const Text(
-          "Are you sure you want to delete this post? This action cannot be undone.",
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text("Cancel"),
-          ),
-          TextButton(
-            onPressed: () async {
-              await FirebaseFirestore.instance
-                  .collection('posts')
-                  .doc(widget.post['postId'])
-                  .delete();
-
-              if (!dialogContext.mounted) {
-                return;
-              }
-              Navigator.pop(dialogContext);
-            },
-            child: const Text("Delete", style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showLikesList() {
-    List<String> likers = [];
-    Map likes = widget.post['likes'] ?? {};
-    likes.forEach((key, value) {
-      if (value == true) {
-        likers.add(key);
-      }
-    });
-
-    if (likers.isNotEmpty) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (context) => UserListScreen(title: "Likes", userIds: likers),
-        ),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
+    String username = widget.post['username'] ?? "User";
     String timeStr = widget.post['timestamp'] != null
         ? timeago.format((widget.post['timestamp'] as Timestamp).toDate())
         : "Just now";
-    int commentCount = widget.post['commentCount'] ?? 0;
-    bool isMyPost = widget.post['ownerId'] == currentUid;
 
     return Card(
-      margin: const EdgeInsets.symmetric(vertical: 8),
+      margin: const EdgeInsets.symmetric(vertical: 5),
       elevation: 0,
       color: Colors.white,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           ListTile(
-            onTap: () {
-              if (!isMyPost) {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) =>
-                        OtherUserProfileScreen(uid: widget.post['ownerId']),
-                  ),
-                );
-              }
-            },
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    OtherUserProfileScreen(uid: widget.post['ownerId']),
+              ),
+            ),
             leading: SafeProfilePic(
-              base64String:
-                  widget.post['profilePic'] ?? widget.post['postData'],
+              base64String: widget.post['profilePic'],
               radius: 20,
-              fallbackText: widget.post['username'] != null
-                  ? widget.post['username'][0]
-                  : "U",
+              fallbackText: username.isNotEmpty ? username[0] : "U",
             ),
             title: Text(
-              widget.post['username'] ?? "User",
+              username,
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
-            subtitle: Text(
-              timeStr,
-              style: const TextStyle(color: Colors.grey, fontSize: 12),
-            ),
-            trailing: isMyPost
+            subtitle: Text(timeStr, style: const TextStyle(fontSize: 12)),
+            trailing: widget.post['ownerId'] == currentUid
                 ? PopupMenuButton<String>(
                     onSelected: (val) {
-                      if (val == 'edit') {
-                        _editPost();
-                      }
-                      if (val == 'delete') {
-                        _deletePost();
-                      }
+                      if (val == 'edit') _editPost();
+                      if (val == 'delete') _deletePost();
                     },
-                    itemBuilder: (context) => [
-                      const PopupMenuItem(
-                        value: 'edit',
-                        child: ListTile(
-                          leading: Icon(Icons.edit),
-                          title: Text("Edit"),
-                          contentPadding: EdgeInsets.zero,
-                        ),
-                      ),
+                    itemBuilder: (ctx) => [
+                      const PopupMenuItem(value: 'edit', child: Text("Edit")),
                       const PopupMenuItem(
                         value: 'delete',
-                        child: ListTile(
-                          leading: Icon(Icons.delete, color: Colors.red),
-                          title: Text(
-                            "Delete",
-                            style: TextStyle(color: Colors.red),
-                          ),
-                          contentPadding: EdgeInsets.zero,
+                        child: Text(
+                          "Delete",
+                          style: TextStyle(color: Colors.red),
                         ),
                       ),
                     ],
                   )
                 : null,
           ),
-
           GestureDetector(
             onDoubleTap: _handleLike,
             child: SafeImage(base64String: widget.post['postData']),
           ),
-
           Row(
             children: [
               IconButton(
@@ -427,15 +363,34 @@ class _PostWidgetState extends State<PostWidget> {
                 ),
                 onPressed: _handleLike,
               ),
-              IconButton(
-                icon: const Icon(Icons.comment_outlined),
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) =>
-                        CommentsScreen(postId: widget.post['postId']),
-                  ),
-                ),
+              StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('posts')
+                    .doc(widget.post['postId'])
+                    .collection('comments')
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  int count = snapshot.hasData ? snapshot.data!.docs.length : 0;
+                  return Row(
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.comment_outlined),
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                CommentsScreen(postId: widget.post['postId']),
+                          ),
+                        ),
+                      ),
+                      if (count > 0)
+                        Text(
+                          "$count",
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        ),
+                    ],
+                  );
+                },
               ),
               IconButton(
                 icon: const Icon(Icons.send_outlined),
@@ -451,54 +406,35 @@ class _PostWidgetState extends State<PostWidget> {
               ),
             ],
           ),
-
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 15),
             child: GestureDetector(
-              onTap: _showLikesList,
+              onTap: () {
+                List<String> likers = List<String>.from(
+                  widget.post['likes'] ?? [],
+                );
+                if (likers.isNotEmpty)
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          UserListScreen(title: "Likes", userIds: likers),
+                    ),
+                  );
+              },
               child: Text(
                 "$likeCount likes",
-                style: const TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 14,
-                ),
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
             ),
           ),
-
           if (widget.post['caption'] != null &&
-              widget.post['caption'].toString().trim().isNotEmpty)
+              widget.post['caption'].toString().isNotEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 5),
-              child: RichText(
-                text: TextSpan(
-                  style: const TextStyle(color: Colors.black, fontSize: 14),
-                  children: [
-                    TextSpan(
-                      text: "${widget.post['username']} ",
-                      style: const TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    TextSpan(text: widget.post['caption']),
-                  ],
-                ),
-              ),
-            ),
-
-          if (commentCount > 0)
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 2),
-              child: GestureDetector(
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) =>
-                        CommentsScreen(postId: widget.post['postId']),
-                  ),
-                ),
-                child: Text(
-                  "View all $commentCount comments",
-                  style: const TextStyle(color: Colors.grey, fontSize: 14),
-                ),
+              child: Text(
+                widget.post['caption'].toString(),
+                style: const TextStyle(color: Colors.black, fontSize: 14),
               ),
             ),
           const SizedBox(height: 10),

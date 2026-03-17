@@ -42,9 +42,7 @@ class SafeImage extends StatelessWidget {
     try {
       String cleanString = base64String!.replaceAll(RegExp(r'\s+'), '');
       int padding = cleanString.length % 4;
-      if (padding != 0) {
-        cleanString += '=' * (4 - padding);
-      }
+      if (padding != 0) cleanString += '=' * (4 - padding);
       Uint8List bytes = base64Decode(cleanString);
 
       return Image.memory(
@@ -128,9 +126,7 @@ class SafeProfilePic extends StatelessWidget {
     try {
       String cleanString = base64String!.replaceAll(RegExp(r'\s+'), '');
       int padding = cleanString.length % 4;
-      if (padding != 0) {
-        cleanString += '=' * (4 - padding);
-      }
+      if (padding != 0) cleanString += '=' * (4 - padding);
       Uint8List bytes = base64Decode(cleanString);
 
       return CircleAvatar(

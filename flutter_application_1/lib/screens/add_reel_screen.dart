@@ -1,11 +1,11 @@
-// ignore_for_file: unused_import
+// ignore_for_file: unused_import, empty_catches, curly_braces_in_flow_control_structures
 
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
-import '../services/firestore_methods.dart'; // మనం ఇందాక క్రియేట్ చేసిన ఫైల్
+import '../services/firestore_methods.dart';
 
 class AddReelScreen extends StatefulWidget {
   const AddReelScreen({super.key});
@@ -20,21 +20,13 @@ class _AddReelScreenState extends State<AddReelScreen> {
   VideoPlayerController? _videoController;
   bool _isLoading = false;
 
-  // 🎥 గ్యాలరీ నుండి వీడియో సెలెక్ట్ చేసే ఫంక్షన్
-  // 🎥 ఫైల్ మేనేజర్ నుండి వీడియో సెలెక్ట్ చేసే ఫంక్షన్
   void _selectVideo() async {
     try {
-      // ఇక్కడ file_picker వాడుతున్నాం, ఇది పక్కాగా వీడియోలనే చూపిస్తుంది
       FilePickerResult? result = await FilePicker.platform.pickFiles(
-        type: FileType.video, // 🌟 కేవలం వీడియోలు మాత్రమే కనిపించేలా సెట్ చేశాం
+        type: FileType.video,
       );
-
       if (result != null && result.files.single.path != null) {
-        setState(() {
-          _video = File(result.files.single.path!);
-        });
-
-        // పాత ప్లేయర్ ఉంటే క్లియర్ చేసి కొత్తది పెడుతున్నాం
+        setState(() => _video = File(result.files.single.path!));
         _videoController?.dispose();
         _videoController = VideoPlayerController.file(_video!)
           ..initialize()
@@ -44,44 +36,32 @@ class _AddReelScreenState extends State<AddReelScreen> {
                 _videoController!.setLooping(true);
               })
               .catchError((e) {
-                debugPrint("🎥 Player Error: $e");
                 return null;
               });
-      } else {
-        debugPrint("❌ User canceled video selection.");
       }
     } catch (e) {
-      debugPrint("🚨 File Picker Error: $e");
+      debugPrint("Error picking video: $e");
     }
-  } // 👈 '_selectVideo' ఫంక్షన్ ఇక్కడ క్లోజ్ అవుతుంది
+  }
 
-  // 🚀 వీడియోని అప్‌లోడ్ చేసే ఫంక్షన్
   void _uploadReel() async {
     if (_video == null) return;
-
-    setState(() {
-      _isLoading = true;
-    });
-
+    setState(() => _isLoading = true);
     String res = await ReelService().postReel(_captionController.text, _video!);
-
-    setState(() {
-      _isLoading = false;
-    });
+    setState(() => _isLoading = false);
 
     if (res == "success") {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Reel Posted Successfully! 🎬")),
         );
-        Navigator.pop(context); // అప్‌లోడ్ అయ్యాక బ్యాక్ వెళ్ళిపోతుంది
+        Navigator.pop(context);
       }
     } else {
-      if (mounted) {
+      if (mounted)
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(SnackBar(content: Text("Error: $res")));
-      }
     }
   }
 
@@ -127,7 +107,6 @@ class _AddReelScreenState extends State<AddReelScreen> {
               child: Column(
                 children: [
                   const SizedBox(height: 20),
-                  // 📺 వీడియో ప్రివ్యూ లేదా వీడియో సెలెక్ట్ చేసే బటన్
                   Center(
                     child: _video == null
                         ? InkWell(
@@ -142,7 +121,6 @@ class _AddReelScreenState extends State<AddReelScreen> {
                             ),
                           )
                         : SizedBox(
-                            // 🌟 Container బదులు SizedBox వాడండి
                             height: 300,
                             width: MediaQuery.of(context).size.width * 0.8,
                             child:
@@ -159,7 +137,6 @@ class _AddReelScreenState extends State<AddReelScreen> {
                           ),
                   ),
                   const SizedBox(height: 20),
-                  // ✍️ క్యాప్షన్ బాక్స్
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 15),
                     child: TextField(

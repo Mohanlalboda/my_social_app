@@ -1,8 +1,11 @@
+// ignore_for_file: deprecated_member_use
+
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:firebase_app_check/firebase_app_check.dart';
 
 import 'firebase_options.dart';
 import 'screens/login_screen.dart';
@@ -18,7 +21,15 @@ final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.system);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 🌟 1. ముందు ఫైర్‌బేస్ స్టార్ట్ అవ్వాలి (ఇది ఇందాక మిస్ అయ్యింది)
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // 🌟 2. ఆ తర్వాత యాప్ చెక్ ఆన్ అవ్వాలి
+  await FirebaseAppCheck.instance.activate(
+    androidProvider: AndroidProvider.playIntegrity, // పాత వెర్షన్స్ కోసం
+  );
+
   runApp(const MySocialApp());
 }
 
@@ -29,8 +40,6 @@ class MySocialApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: themeNotifier,
-      // 🌟 ఫిక్స్: ఇక్కడ '__' తీసేసి కేవలం 'child' లేదా మరో '_' వాడాలి.
-      // ఒకే పేరుతో రెండు వాడకూడదు కాబట్టి 'context' మరియు 'child' అని ఇచ్చాను.
       builder: (context, ThemeMode currentMode, child) {
         return MaterialApp(
           debugShowCheckedModeBanner: false,

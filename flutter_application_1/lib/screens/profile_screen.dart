@@ -1,3 +1,5 @@
+// ignore_for_file: curly_braces_in_flow_control_structures
+
 import 'dart:io';
 import 'dart:convert';
 import 'package:flutter/material.dart';
@@ -17,7 +19,6 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
-  // 1. EDIT PROFILE DIALOG
   void _showEditDialog(String currentName, String currentBio) {
     final nameCtrl = TextEditingController(text: currentName);
     final bioCtrl = TextEditingController(text: currentBio);
@@ -46,7 +47,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           ElevatedButton(
             onPressed: () async {
-              final navigator = Navigator.of(dialogContext);
               String uid = FirebaseAuth.instance.currentUser!.uid;
               await FirebaseFirestore.instance
                   .collection('users')
@@ -55,9 +55,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     "username": nameCtrl.text.trim(),
                     "bio": bioCtrl.text.trim(),
                   });
-              if (dialogContext.mounted) {
-                navigator.pop();
-              }
+              if (dialogContext.mounted) Navigator.pop(dialogContext);
             },
             child: const Text("Save"),
           ),
@@ -66,7 +64,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // 2. UPDATE PROFILE PICTURE
   Future<void> _updateProfilePic() async {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(
@@ -82,15 +79,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
       await FirebaseFirestore.instance.collection('users').doc(uid).update({
         "profilePic": base64Image,
       });
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Profile updated! 📸")));
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Profile updated! 📸")));
     }
   }
 
-  // 3. SHOW FULL PROFILE PICTURE
   void _showFullProfilePic(String base64String, String fallbackName) {
     showDialog(
       context: context,
@@ -131,9 +126,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             .doc(uid)
             .snapshots(),
         builder: (context, userSnapshot) {
-          if (!userSnapshot.hasData) {
+          if (!userSnapshot.hasData)
             return const Center(child: CircularProgressIndicator());
-          }
 
           var userData =
               userSnapshot.data!.data() as Map<String, dynamic>? ?? {};
@@ -190,12 +184,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   child: Row(
                     children: [
                       GestureDetector(
-                        onTap: () {
-                          _showFullProfilePic(
-                            userData['profilePic'] ?? "",
-                            name,
-                          );
-                        },
+                        onTap: () => _showFullProfilePic(
+                          userData['profilePic'] ?? "",
+                          name,
+                        ),
                         child: Hero(
                           tag: 'profilePic_zoom',
                           child: SafeProfilePic(
@@ -279,29 +271,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   labelColor: Colors.red,
                   unselectedLabelColor: Colors.grey,
                   tabs: [
-                    Tab(icon: Icon(Icons.grid_on)), // My Posts
-                    Tab(icon: Icon(Icons.video_library)), // My Reels
-                    Tab(icon: Icon(Icons.bookmark_border)), // Saved
+                    Tab(icon: Icon(Icons.grid_on)),
+                    Tab(icon: Icon(Icons.video_library)),
+                    Tab(icon: Icon(Icons.bookmark_border)),
                   ],
                 ),
                 Expanded(
                   child: TabBarView(
                     children: [
-                      // 1. My Posts
                       _buildPostGrid(
                         FirebaseFirestore.instance
                             .collection('posts')
                             .where('ownerId', isEqualTo: uid)
                             .snapshots(),
                       ),
-                      // 2. My Reels
                       _buildReelsGrid(
                         FirebaseFirestore.instance
                             .collection('reels')
                             .where('uid', isEqualTo: uid)
                             .snapshots(),
                       ),
-                      // 3. Saved Tab
                       _buildSavedTab(uid, savedReels),
                     ],
                   ),
@@ -314,8 +303,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // 🌟 మూడవ ట్యాబ్ కోసం స్పెషల్ డిజైన్ (Saved Posts + Saved Reels)
-  // 🌟 మూడవ ట్యాబ్ కోసం స్పెషల్ డిజైన్ (Saved Posts + Saved Reels)
   Widget _buildSavedTab(String uid, List<dynamic> savedReelIds) {
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -343,28 +330,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
         ),
-        // 🌟 FIX (Line 345): ఇక్కడ బ్రాకెట్ లోపల ఉన్న savedReelIds ని తీసేశాను!
         _buildSavedReelsGrid(),
         const SizedBox(height: 20),
       ],
     );
   }
 
-  // 🎬 1. మీరు అప్‌లోడ్ చేసిన రీల్స్ గ్రిడ్ (Line 361 వార్నింగ్ ఇక్కడే ఉంది)
   Widget _buildReelsGrid(Stream<QuerySnapshot> stream) {
     return StreamBuilder<QuerySnapshot>(
       stream: stream,
       builder: (context, snapshot) {
-        // 🌟 FIX: 'if' కి బ్రేసెస్ { } యాడ్ చేశాను
-        if (!snapshot.hasData) {
+        if (!snapshot.hasData)
           return const Center(child: CircularProgressIndicator());
-        }
-
         var reels = snapshot.data!.docs;
-
-        if (reels.isEmpty) {
-          return const Center(child: Text("No Reels yet. 🎬"));
-        }
+        if (reels.isEmpty) return const Center(child: Text("No Reels yet. 🎬"));
 
         return GridView.builder(
           shrinkWrap: true,
@@ -378,18 +357,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
           itemCount: reels.length,
           itemBuilder: (context, i) {
             var reelData = reels[i].data() as Map<String, dynamic>;
-            // ఫైర్‌బేస్ లో ఉన్న 'reelId' ని వాడుతున్నాం
             String reelId = reelData['reelId'] ?? reels[i].id;
-
             return GestureDetector(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => SingleReelScreen(reelId: reelId),
-                  ),
-                );
-              },
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => SingleReelScreen(reelId: reelId),
+                ),
+              ),
               child: Container(
                 color: Colors.black,
                 child: const Center(
@@ -403,7 +378,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // 📌 2. సేవ్ చేసిన రీల్స్ గ్రిడ్ (Line 414 వార్నింగ్ ఇక్కడే ఉంది)
   Widget _buildSavedReelsGrid() {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
@@ -414,14 +388,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           )
           .snapshots(),
       builder: (context, snapshot) {
-        // 🌟 FIX: ఇక్కడ కూడా బ్రేసెస్ { } యాడ్ చేశాను
-        if (!snapshot.hasData) {
+        if (!snapshot.hasData)
           return const Center(child: CircularProgressIndicator());
-        }
-
         var savedReels = snapshot.data!.docs;
-
-        if (savedReels.isEmpty) {
+        if (savedReels.isEmpty)
           return const Center(
             child: Padding(
               padding: EdgeInsets.all(20),
@@ -431,7 +401,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
           );
-        }
 
         return GridView.builder(
           shrinkWrap: true,
@@ -446,16 +415,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
           itemBuilder: (context, index) {
             var reelData = savedReels[index].data() as Map<String, dynamic>;
             String reelDocId = reelData['reelId'] ?? savedReels[index].id;
-
             return GestureDetector(
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => SingleReelScreen(reelId: reelDocId),
-                  ),
-                );
-              },
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => SingleReelScreen(reelId: reelDocId),
+                ),
+              ),
               child: Container(
                 color: Colors.black,
                 child: const Icon(
@@ -471,7 +437,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // 🌟 POST GRID (Normal)
   Widget _buildPostGrid(
     Stream<QuerySnapshot> stream, {
     bool shrinkWrap = false,
@@ -480,14 +445,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return StreamBuilder<QuerySnapshot>(
       stream: stream,
       builder: (context, snapshot) {
-        if (!snapshot.hasData) {
+        if (!snapshot.hasData)
           return const Center(child: CircularProgressIndicator());
-        }
         var posts = snapshot.data!.docs;
-        if (posts.isEmpty) {
-          return const Center(child: Text("No posts found."));
-        }
+        if (posts.isEmpty) return const Center(child: Text("No posts found."));
         List<String> postIds = posts.map((doc) => doc.id).toList();
+
         return GridView.builder(
           shrinkWrap: shrinkWrap,
           physics: physics ?? const AlwaysScrollableScrollPhysics(),
@@ -498,15 +461,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           itemCount: posts.length,
           itemBuilder: (context, i) => GestureDetector(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) =>
-                      ScrollingPostsScreen(postIds: postIds, initialIndex: i),
-                ),
-              );
-            },
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) =>
+                    ScrollingPostsScreen(postIds: postIds, initialIndex: i),
+              ),
+            ),
             child: SafeImage(
               base64String: (posts[i].data() as Map)['postData'],
             ),
