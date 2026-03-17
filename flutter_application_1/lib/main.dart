@@ -13,7 +13,7 @@ import 'screens/activity_screen.dart';
 import 'screens/inbox_screen.dart';
 import 'screens/reels_screen.dart';
 
-// 🌟 థీమ్ (Day/Night) మారడాన్ని కంట్రోల్ చేసే గ్లోబల్ వేరియబుల్
+// 🌟 థీమ్ కంట్రోలర్
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.system);
 
 void main() async {
@@ -27,15 +27,15 @@ class MySocialApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // 🌟 థీమ్ మారినప్పుడు యాప్ మొత్తం అప్‌డేట్ అవ్వడానికి ఈ బిల్డర్ వాడాం
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: themeNotifier,
-      builder: (_, ThemeMode currentMode, __) {
+      // 🌟 ఫిక్స్: ఇక్కడ '__' తీసేసి కేవలం 'child' లేదా మరో '_' వాడాలి.
+      // ఒకే పేరుతో రెండు వాడకూడదు కాబట్టి 'context' మరియు 'child' అని ఇచ్చాను.
+      builder: (context, ThemeMode currentMode, child) {
         return MaterialApp(
           debugShowCheckedModeBanner: false,
           title: 'MyBanjara',
 
-          // 🌞 LIGHT MODE (Day Theme)
           theme: ThemeData(
             brightness: Brightness.light,
             primaryColor: const Color(0xFFFD1D1D),
@@ -55,7 +55,6 @@ class MySocialApp extends StatelessWidget {
             ),
           ),
 
-          // 🌜 DARK MODE (Night Theme)
           darkTheme: ThemeData(
             brightness: Brightness.dark,
             primaryColor: const Color(0xFFFD1D1D),
@@ -74,7 +73,6 @@ class MySocialApp extends StatelessWidget {
             cardColor: Colors.grey[900],
           ),
 
-          // 🌟 కరెంట్ మోడ్ ని ఇక్కడ సెట్ చేస్తున్నాం
           themeMode: currentMode,
 
           home: StreamBuilder<User?>(
@@ -107,10 +105,10 @@ class _MainNavigationState extends State<MainNavigation> {
   int _selectedIndex = 0;
 
   final List<Widget> _screens = [
-    const HomeScreen(), // Index 0
-    const SearchScreen(), // Index 1
-    const ReelsScreen(), // Index 2
-    const ProfileScreen(), // Index 3
+    const HomeScreen(),
+    const SearchScreen(),
+    const ReelsScreen(),
+    const ProfileScreen(),
   ];
 
   @override
@@ -130,17 +128,12 @@ class _MainNavigationState extends State<MainNavigation> {
                 ),
               ),
               actions: [
-                // 🌟 Day / Night Mode బటన్ ఇక్కడే యాడ్ చేశాం!
                 IconButton(
                   icon: Icon(
-                    isDarkMode
-                        ? Icons.light_mode
-                        : Icons
-                              .dark_mode, // డార్క్ లో ఉంటే సూర్యుడు, లైట్ లో ఉంటే చంద్రుడు
+                    isDarkMode ? Icons.light_mode : Icons.dark_mode,
                     color: isDarkMode ? Colors.amber : Colors.black,
                   ),
                   onPressed: () {
-                    // బటన్ నొక్కగానే థీమ్ ని ఆపోజిట్ కి మారుస్తున్నాం
                     themeNotifier.value = isDarkMode
                         ? ThemeMode.light
                         : ThemeMode.dark;

@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:uuid/uuid.dart';
 import 'package:timeago/timeago.dart' as timeago;
 
 import '../widgets/safe_elements.dart';
@@ -22,42 +24,54 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isUploading = false;
   final String currentUid = FirebaseAuth.instance.currentUser!.uid;
 
-  Future<void> _uploadStory(Map<String, dynamic> userData) async {
+  // 🌟 అప్‌లోడ్ స్టోరీ (బ్రాకెట్స్ ఫిక్స్డ్)
+  Future<void> _uploadStory(Map<String, dynamic> userData, bool isVideo) async {
     final ImagePicker picker = ImagePicker();
-    final XFile? image = await picker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 15,
-      maxWidth: 600,
-    );
+    final XFile? file = isVideo
+        ? await picker.pickVideo(source: ImageSource.gallery)
+        : await picker.pickImage(source: ImageSource.gallery, imageQuality: 50);
 
-    if (image != null) {
+    if (file != null) {
       if (!mounted) {
         return;
       }
       setState(() {
         _isUploading = true;
       });
+
       try {
-        String base64Image = base64Encode(await File(image.path).readAsBytes());
+        String storyId = const Uuid().v4();
+        Reference ref = FirebaseStorage.instance
+            .ref()
+            .child('stories')
+            .child(currentUid)
+            .child(storyId);
+
+        UploadTask uploadTask = ref.putFile(File(file.path));
+        TaskSnapshot snapshot = await uploadTask;
+        String downloadUrl = await snapshot.ref.getDownloadURL();
+
         await FirebaseFirestore.instance.collection('stories').add({
           "uid": currentUid,
           "ownerId": currentUid,
           "username": userData['username'] ?? "User",
           "profilePic": userData['profilePic'] ?? "",
-          "storyData": base64Image,
+          "storyUrl": downloadUrl,
+          "type": isVideo ? "video" : "image",
           "timestamp": FieldValue.serverTimestamp(),
+          "viewers": [],
         });
-        if (!mounted) {
-          return;
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Story Added! 🌟"),
+              backgroundColor: Colors.green,
+            ),
+          );
         }
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Story Added! 🌟"),
-            backgroundColor: Colors.green,
-          ),
-        );
       } catch (e) {
-        debugPrint(e.toString());
+        debugPrint("Story Upload Error: $e");
       } finally {
         if (mounted) {
           setState(() {
@@ -66,6 +80,45 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       }
     }
+  }
+
+  void _showStoryPicker(Map<String, dynamic> userData) {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) => SafeArea(
+        child: Wrap(
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(15.0),
+              child: Text(
+                "Add to Story",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library, color: Colors.blue),
+              title: const Text("Photo Story"),
+              onTap: () {
+                Navigator.pop(context);
+                _uploadStory(userData, false);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.video_collection, color: Colors.pink),
+              title: const Text("Video Story"),
+              onTap: () {
+                Navigator.pop(context);
+                _uploadStory(userData, true);
+              },
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -128,7 +181,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       itemBuilder: (context, index) {
                         if (index == 0) {
                           return GestureDetector(
-                            onTap: () => _uploadStory(userData),
+                            onTap: () => _showStoryPicker(userData),
                             child: Padding(
                               padding: const EdgeInsets.all(8.0),
                               child: Column(
@@ -176,15 +229,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         List viewers = userStory['viewers'] ?? [];
                         bool isSeen = viewers.contains(currentUid);
                         return GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) =>
-                                    StoryScreen(user: userStory),
-                              ),
-                            );
-                          },
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) =>
+                                  StoryScreen(user: userStory),
+                            ),
+                          ),
                           child: Padding(
                             padding: const EdgeInsets.all(8.0),
                             child: Column(
@@ -235,7 +286,16 @@ class _HomeScreenState extends State<HomeScreen> {
               const Divider(height: 1),
               Expanded(
                 child: _isUploading
-                    ? const Center(child: CircularProgressIndicator())
+                    ? const Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            CircularProgressIndicator(),
+                            SizedBox(height: 10),
+                            Text("Uploading Story... ⏳"),
+                          ],
+                        ),
+                      )
                     : StreamBuilder<QuerySnapshot>(
                         stream: FirebaseFirestore.instance
                             .collection('posts')
@@ -247,42 +307,28 @@ class _HomeScreenState extends State<HomeScreen> {
                               child: CircularProgressIndicator(),
                             );
                           }
-
                           var allPosts = snapshot.data!.docs;
-
-                          // 🌟 1. ఫిల్టర్: ఫాలో అవుతున్న వాళ్ళవి + పబ్లిక్ పోస్ట్స్ మాత్రమే
                           var visiblePosts = allPosts.where((doc) {
                             var data = doc.data() as Map<String, dynamic>;
-                            bool isFollowing = feedUserIds.contains(
-                              data['ownerId'],
-                            );
-                            bool isPublic =
-                                data['isPublic'] ??
-                                true; // పాత పోస్ట్‌లకి డీఫాల్ట్ పబ్లిక్
-                            return isFollowing || isPublic;
+                            return feedUserIds.contains(data['ownerId']) ||
+                                (data['isPublic'] ?? true);
                           }).toList();
 
-                          // 🌟 2. సార్టింగ్: ఫాలో అయ్యే వాళ్ళవి ఫస్ట్, మిగతా పబ్లిక్ పోస్ట్స్ ఆ తర్వాత
-                          // 🌟 2. సార్టింగ్: ఫాలో అయ్యే వాళ్ళవి ఫస్ట్, మిగతా పబ్లిక్ పోస్ట్స్ ఆ తర్వాత
                           visiblePosts.sort((a, b) {
                             var aData = a.data() as Map<String, dynamic>;
                             var bData = b.data() as Map<String, dynamic>;
-
                             bool aFollowing = feedUserIds.contains(
                               aData['ownerId'],
                             );
                             bool bFollowing = feedUserIds.contains(
                               bData['ownerId'],
                             );
-
                             if (aFollowing && !bFollowing) {
-                              return -1; // ఫాలో అయ్యేవి పైకి
+                              return -1;
                             }
                             if (!aFollowing && bFollowing) {
-                              return 1; // పబ్లిక్ వి కిందకి
+                              return 1;
                             }
-
-                            // ఇద్దరూ ఫాలోవర్స్ లేదా ఇద్దరూ పబ్లిక్ అయితే టైమ్ ప్రకారం చూపిస్తాం
                             Timestamp aTime =
                                 aData['timestamp'] ?? Timestamp.now();
                             Timestamp bTime =
@@ -295,7 +341,6 @@ class _HomeScreenState extends State<HomeScreen> {
                               child: Text("No posts found! 🌎"),
                             );
                           }
-
                           return ListView.builder(
                             itemCount: visiblePosts.length,
                             itemBuilder: (context, index) {
@@ -320,21 +365,17 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 }
 
-// -----------------------------------------------------------------
-// 📸 POST CARD DESIGN (Instagram Style)
-// -----------------------------------------------------------------
+// 📸 PostCard Logic (బ్రాకెట్స్ ఫిక్స్డ్)
 class PostCard extends StatefulWidget {
   final Map<String, dynamic> post;
   final String postId;
   final String currentUid;
-
   const PostCard({
     super.key,
     required this.post,
     required this.postId,
     required this.currentUid,
   });
-
   @override
   State<PostCard> createState() => _PostCardState();
 }
@@ -363,7 +404,6 @@ class _PostCardState extends State<PostCard> {
         : (likesData is Map ? likesData.keys.toList() : []);
     isLiked = likes.contains(widget.currentUid);
     likeCount = likes.length;
-
     List savedBy = widget.post['savedBy'] ?? [];
     isSaved = savedBy.contains(widget.currentUid);
   }
@@ -385,21 +425,6 @@ class _PostCardState extends State<PostCard> {
             .update({
               'likes': FieldValue.arrayUnion([widget.currentUid]),
             });
-        if (widget.currentUid != widget.post['ownerId']) {
-          var userDoc = await FirebaseFirestore.instance
-              .collection('users')
-              .doc(widget.currentUid)
-              .get();
-          await FirebaseFirestore.instance.collection('notifications').add({
-            'receiverId': widget.post['ownerId'],
-            'senderId': widget.currentUid,
-            'senderName': userDoc.data()?['username'] ?? 'User',
-            'type': 'like',
-            'postId': widget.postId,
-            'isRead': false,
-            'timestamp': FieldValue.serverTimestamp(),
-          });
-        }
       } else {
         await FirebaseFirestore.instance
             .collection('posts')
@@ -438,122 +463,6 @@ class _PostCardState extends State<PostCard> {
     }
   }
 
-  void _editCaption() {
-    TextEditingController editCtrl = TextEditingController(
-      text: widget.post['caption'] ?? '',
-    );
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text("Edit Caption"),
-        content: TextField(
-          controller: editCtrl,
-          maxLines: 3,
-          decoration: const InputDecoration(
-            hintText: "Write a new caption...",
-            border: OutlineInputBorder(),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-            },
-            child: const Text("Cancel"),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              FirebaseFirestore.instance
-                  .collection('posts')
-                  .doc(widget.postId)
-                  .update({'caption': editCtrl.text.trim()});
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text("Caption updated! ✏️")),
-              );
-            },
-            child: const Text("Save"),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showOptionsDialog() {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (widget.currentUid == widget.post['ownerId']) ...[
-                ListTile(
-                  leading: const Icon(Icons.edit, color: Colors.blue),
-                  title: const Text(
-                    "Edit Caption",
-                    style: TextStyle(
-                      color: Colors.blue,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  onTap: () {
-                    Navigator.pop(context);
-                    _editCaption();
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.delete, color: Colors.red),
-                  title: const Text(
-                    "Delete Post",
-                    style: TextStyle(
-                      color: Colors.red,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  onTap: () {
-                    Navigator.pop(context);
-                    FirebaseFirestore.instance
-                        .collection('posts')
-                        .doc(widget.postId)
-                        .delete();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text("Post deleted! 🗑️")),
-                    );
-                  },
-                ),
-              ] else ...[
-                ListTile(
-                  leading: const Icon(Icons.report, color: Colors.red),
-                  title: const Text(
-                    "Report Post",
-                    style: TextStyle(
-                      color: Colors.red,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  onTap: () {
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text(
-                          "Thanks for reporting! We will review it. 🛡️",
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ],
-            ],
-          ),
-        );
-      },
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     String timeStr = widget.post['timestamp'] != null
@@ -564,15 +473,13 @@ class _PostCardState extends State<PostCard> {
       children: [
         ListTile(
           leading: GestureDetector(
-            onTap: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) =>
-                      OtherUserProfileScreen(uid: widget.post['ownerId']),
-                ),
-              );
-            },
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    OtherUserProfileScreen(uid: widget.post['ownerId']),
+              ),
+            ),
             child: CircleAvatar(
               backgroundColor: Colors.blueAccent,
               backgroundImage:
@@ -594,10 +501,7 @@ class _PostCardState extends State<PostCard> {
             widget.post['username'],
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
-          trailing: IconButton(
-            icon: const Icon(Icons.more_vert),
-            onPressed: _showOptionsDialog,
-          ),
+          trailing: const Icon(Icons.more_vert),
         ),
         GestureDetector(
           onDoubleTap: _toggleLike,
@@ -612,45 +516,15 @@ class _PostCardState extends State<PostCard> {
               ),
               onPressed: _toggleLike,
             ),
-            Row(
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.chat_bubble_outline),
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => CommentsScreen(
-                          postId: widget.postId,
-                          isReel: false,
-                        ),
-                      ),
-                    );
-                  },
+            IconButton(
+              icon: const Icon(Icons.chat_bubble_outline),
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      CommentsScreen(postId: widget.postId, isReel: false),
                 ),
-                StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('posts')
-                      .doc(widget.postId)
-                      .collection('comments')
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    int commentCount = snapshot.hasData
-                        ? snapshot.data!.docs.length
-                        : 0;
-                    if (commentCount == 0) {
-                      return const SizedBox();
-                    }
-                    return Text(
-                      "$commentCount",
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                      ),
-                    );
-                  },
-                ),
-              ],
+              ),
             ),
             const Spacer(),
             IconButton(

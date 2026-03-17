@@ -1,10 +1,8 @@
-import 'dart:async'; // 🌟 టైమర్ వాడటానికి ఇది ముఖ్యం
+import 'dart:convert'; // 🌟 Base64 కోసం ఇది ముఖ్యం
 import 'package:flutter/material.dart';
+import 'package:video_player/video_player.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:timeago/timeago.dart' as timeago;
-
-import '../widgets/safe_elements.dart';
 
 class StoryScreen extends StatefulWidget {
   final Map<String, dynamic> user;
@@ -15,122 +13,127 @@ class StoryScreen extends StatefulWidget {
 }
 
 class _StoryScreenState extends State<StoryScreen> {
-  Timer? _storyTimer; // 🌟 5 సెకన్ల టైమర్ వేరియబుల్
+  VideoPlayerController? _videoController;
+  bool _isInitialized = false;
 
   @override
   void initState() {
     super.initState();
-    _markAsSeen();
-    _startStoryTimer(); // 🌟 స్టోరీ ఓపెన్ అవ్వగానే టైమర్ స్టార్ట్ అవుతుంది
-  }
-
-  void _markAsSeen() async {
-    String? storyId = widget.user['storyId'];
-    String currentUid = FirebaseAuth.instance.currentUser!.uid;
-
-    if (storyId != null) {
-      await FirebaseFirestore.instance
-          .collection('stories')
-          .doc(storyId)
-          .update({
-            'viewers': FieldValue.arrayUnion([currentUid]),
-          })
-          .catchError((e) => debugPrint("Error updating seen: $e"));
+    // 🌟 స్టోరీ వీడియో అయితే దాన్ని లోడ్ చేస్తున్నాం
+    if (widget.user['type'] == 'video' && widget.user['storyUrl'] != null) {
+      _videoController =
+          VideoPlayerController.networkUrl(Uri.parse(widget.user['storyUrl']))
+            ..initialize().then((_) {
+              if (mounted) {
+                setState(() => _isInitialized = true);
+                _videoController!.play();
+                _videoController!.setLooping(true);
+              }
+            });
     }
-  }
-
-  // 🌟 5 సెకన్ల తర్వాత ఆటోమేటిక్ గా క్లోజ్ చేసే లాజిక్
-  void _startStoryTimer() {
-    _storyTimer = Timer(const Duration(seconds: 5), () {
-      if (mounted) {
-        Navigator.pop(context); // 5 సెకన్ల తర్వాత స్టోరీ క్లోజ్ అవుతుంది
-      }
-    });
   }
 
   @override
   void dispose() {
-    _storyTimer
-        ?.cancel(); // 🌟 ఒకవేళ యూజర్ ముందే క్లోజ్ చేసేస్తే టైమర్ ఆగిపోవాలి
+    _videoController?.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    String timeStr = "";
-    if (widget.user['timestamp'] != null) {
-      timeStr = timeago.format(
-        (widget.user['timestamp'] as Timestamp).toDate(),
-      );
+    String timeStr = widget.user['timestamp'] != null
+        ? timeago.format((widget.user['timestamp'] as Timestamp).toDate())
+        : "";
+
+    // 🌟 ప్రొఫైల్ పిక్ బేస్64 డేటా అయితే దాన్ని డీకోడ్ చేయడం
+    ImageProvider? profileImage;
+    if (widget.user['profilePic'] != null &&
+        widget.user['profilePic'].toString().isNotEmpty) {
+      try {
+        profileImage = MemoryImage(base64Decode(widget.user['profilePic']));
+      } catch (e) {
+        debugPrint("Profile Pic Error: $e");
+      }
     }
 
     return Scaffold(
       backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            // స్టోరీ ఫోటో మధ్యలో కనిపిస్తుంది
-            Center(child: SafeImage(base64String: widget.user['storyData'])),
-
-            // పైన ప్రొఫైల్ పేరు, ఫోటో, టైమ్ మరియు X బటన్
-            Positioned(
-              top: 15,
-              left: 10,
-              right: 10,
-              child: Row(
-                children: [
-                  SafeProfilePic(
-                    base64String: widget.user['profilePic'],
-                    radius: 20,
-                    fallbackText:
-                        (widget.user['username'] != null &&
-                            widget.user['username']
-                                .toString()
-                                .trim()
-                                .isNotEmpty)
-                        ? widget.user['username'][0].toUpperCase()
-                        : "U",
-                  ),
-                  const SizedBox(width: 10),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        widget.user['username'] ?? "User",
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                      Text(
-                        timeStr,
-                        style: const TextStyle(
-                          color: Colors.white70,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const Spacer(),
-                  // 🌟 ముందే క్లోజ్ చేసుకోవడానికి X బటన్ (ఇది ఎప్పటిలాగే పనిచేస్తుంది)
-                  IconButton(
-                    icon: const Icon(
-                      Icons.close,
+      body: Stack(
+        children: [
+          // 1. మెయిన్ కంటెంట్ (Image or Video)
+          Center(
+            child: widget.user['type'] == 'video'
+                ? (_isInitialized
+                      ? AspectRatio(
+                          aspectRatio: _videoController!.value.aspectRatio,
+                          child: VideoPlayer(_videoController!),
+                        )
+                      : const CircularProgressIndicator(color: Colors.white))
+                : Image.network(
+                    widget.user['storyUrl'] ?? "",
+                    fit: BoxFit.contain,
+                    width: double.infinity,
+                    errorBuilder: (context, error, stackTrace) => const Icon(
+                      Icons.broken_image,
                       color: Colors.white,
-                      size: 30,
+                      size: 50,
                     ),
-                    onPressed: () {
-                      _storyTimer
-                          ?.cancel(); // X నొక్కితే టైమర్ ఆగిపోయి క్లోజ్ అవుతుంది
-                      Navigator.pop(context);
+                    loadingBuilder: (context, child, loadingProgress) {
+                      if (loadingProgress == null) return child;
+                      return const Center(
+                        child: CircularProgressIndicator(color: Colors.white),
+                      );
                     },
                   ),
-                ],
-              ),
+          ),
+
+          // 2. టాప్ బార్ (User Info & Close Button)
+          Positioned(
+            top: 50,
+            left: 15,
+            right: 15,
+            child: Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: Colors.blueAccent,
+                  backgroundImage: profileImage,
+                  child: profileImage == null
+                      ? Text(
+                          widget.user['username'][0].toUpperCase(),
+                          style: const TextStyle(color: Colors.white),
+                        )
+                      : null,
+                ),
+                const SizedBox(width: 10),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.user['username'] ?? "User",
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
+                    ),
+                    Text(
+                      timeStr,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                  onPressed: () => Navigator.pop(context),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

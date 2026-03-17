@@ -258,17 +258,11 @@ class _AddPostScreenState extends State<AddPostScreen> {
                   const SizedBox(height: 15),
                   // 🌟 Public / Private స్విచ్
                   SwitchListTile(
-                    title: const Text(
-                      "Make this post Public",
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    subtitle: Text(
-                      _isPostPublic
-                          ? "Anyone can see this post"
-                          : "Only your followers can see this",
-                    ),
+                    title: const Text("Make this post Public"),
                     value: _isPostPublic,
-                    activeColor: Colors.blue,
+                    // 🌟 ఇక్కడ మార్పు చేయండి
+                    activeThumbColor: Colors.white,
+                    activeTrackColor: Colors.blue,
                     onChanged: (bool value) {
                       setState(() {
                         _isPostPublic = value;
@@ -369,20 +363,14 @@ class _AddPostScreenState extends State<AddPostScreen> {
                   const SizedBox(height: 15),
                   // 🌟 Public / Private స్విచ్
                   SwitchListTile(
-                    title: const Text(
-                      "Make this reel Public",
-                      style: TextStyle(fontWeight: FontWeight.bold),
-                    ),
-                    subtitle: Text(
-                      _isReelPublic
-                          ? "Anyone can see this reel"
-                          : "Only your followers can see this",
-                    ),
-                    value: _isReelPublic,
-                    activeColor: Colors.pink,
+                    title: const Text("Make this post Public"),
+                    value: _isPostPublic,
+                    // 🌟 ఇక్కడ మార్పు చేయండి
+                    activeThumbColor: Colors.white,
+                    activeTrackColor: Colors.blue,
                     onChanged: (bool value) {
                       setState(() {
-                        _isReelPublic = value;
+                        _isPostPublic = value;
                       });
                     },
                   ),
