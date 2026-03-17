@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-
+import 'single_reel_screen.dart';
 import 'scrolling_posts_screen.dart';
 import '../widgets/safe_elements.dart';
 import 'user_list_screen.dart';
@@ -315,6 +315,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   // 🌟 మూడవ ట్యాబ్ కోసం స్పెషల్ డిజైన్ (Saved Posts + Saved Reels)
+  // 🌟 మూడవ ట్యాబ్ కోసం స్పెషల్ డిజైన్ (Saved Posts + Saved Reels)
   Widget _buildSavedTab(String uid, List<dynamic> savedReelIds) {
     return ListView(
       physics: const AlwaysScrollableScrollPhysics(),
@@ -342,39 +343,92 @@ class _ProfileScreenState extends State<ProfileScreen> {
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
           ),
         ),
-        _buildSavedReelsGrid(savedReelIds),
+        // 🌟 FIX (Line 345): ఇక్కడ బ్రాకెట్ లోపల ఉన్న savedReelIds ని తీసేశాను!
+        _buildSavedReelsGrid(),
         const SizedBox(height: 20),
       ],
     );
   }
 
-  // 🌟 సేవ్ చేసిన రీల్స్ ని చూపించే గ్రిడ్
-  Widget _buildSavedReelsGrid(List<dynamic> savedReelsIds) {
-    if (savedReelsIds.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(20),
-          child: Text("No saved reels.", style: TextStyle(color: Colors.grey)),
-        ),
-      );
-    }
-
+  // 🎬 1. మీరు అప్‌లోడ్ చేసిన రీల్స్ గ్రిడ్ (Line 361 వార్నింగ్ ఇక్కడే ఉంది)
+  Widget _buildReelsGrid(Stream<QuerySnapshot> stream) {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('reels').snapshots(),
+      stream: stream,
       builder: (context, snapshot) {
+        // 🌟 FIX: 'if' కి బ్రేసెస్ { } యాడ్ చేశాను
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
 
-        var reels = snapshot.data!.docs
-            .where((doc) => savedReelsIds.contains(doc.id))
-            .toList();
+        var reels = snapshot.data!.docs;
 
         if (reels.isEmpty) {
+          return const Center(child: Text("No Reels yet. 🎬"));
+        }
+
+        return GridView.builder(
+          shrinkWrap: true,
+          physics: const AlwaysScrollableScrollPhysics(),
+          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: 3,
+            childAspectRatio: 0.7,
+            crossAxisSpacing: 2,
+            mainAxisSpacing: 2,
+          ),
+          itemCount: reels.length,
+          itemBuilder: (context, i) {
+            var reelData = reels[i].data() as Map<String, dynamic>;
+            // ఫైర్‌బేస్ లో ఉన్న 'reelId' ని వాడుతున్నాం
+            String reelId = reelData['reelId'] ?? reels[i].id;
+
+            return GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => SingleReelScreen(reelId: reelId),
+                  ),
+                );
+              },
+              child: Container(
+                color: Colors.black,
+                child: const Center(
+                  child: Icon(Icons.play_arrow, color: Colors.white, size: 40),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // 📌 2. సేవ్ చేసిన రీల్స్ గ్రిడ్ (Line 414 వార్నింగ్ ఇక్కడే ఉంది)
+  Widget _buildSavedReelsGrid() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('reels')
+          .where(
+            'savedBy',
+            arrayContains: FirebaseAuth.instance.currentUser!.uid,
+          )
+          .snapshots(),
+      builder: (context, snapshot) {
+        // 🌟 FIX: ఇక్కడ కూడా బ్రేసెస్ { } యాడ్ చేశాను
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+
+        var savedReels = snapshot.data!.docs;
+
+        if (savedReels.isEmpty) {
           return const Center(
-            child: Text(
-              "No saved reels found.",
-              style: TextStyle(color: Colors.grey),
+            child: Padding(
+              padding: EdgeInsets.all(20),
+              child: Text(
+                "No saved reels yet. 🎬\n(Try saving a reel first!)",
+                textAlign: TextAlign.center,
+              ),
             ),
           );
         }
@@ -384,74 +438,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
           physics: const NeverScrollableScrollPhysics(),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 3,
+            childAspectRatio: 0.7,
             crossAxisSpacing: 2,
             mainAxisSpacing: 2,
-            childAspectRatio: 0.7,
           ),
-          itemCount: reels.length,
-          itemBuilder: (context, i) {
-            return Container(
-              color: Colors.black87,
-              child: const Stack(
-                fit: StackFit.expand,
-                children: [
-                  Center(
-                    child: Icon(
-                      Icons.play_circle_fill,
-                      color: Colors.white54,
-                      size: 40,
-                    ),
+          itemCount: savedReels.length,
+          itemBuilder: (context, index) {
+            var reelData = savedReels[index].data() as Map<String, dynamic>;
+            String reelDocId = reelData['reelId'] ?? savedReels[index].id;
+
+            return GestureDetector(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => SingleReelScreen(reelId: reelDocId),
                   ),
-                  Positioned(
-                    top: 5,
-                    right: 5,
-                    child: Icon(Icons.bookmark, color: Colors.white, size: 16),
-                  ),
-                ],
+                );
+              },
+              child: Container(
+                color: Colors.black,
+                child: const Icon(
+                  Icons.bookmark,
+                  color: Colors.white24,
+                  size: 30,
+                ),
               ),
             );
           },
-        );
-      },
-    );
-  }
-
-  // 🌟 REELS GRID (Normal)
-  Widget _buildReelsGrid(
-    Stream<QuerySnapshot> stream, {
-    bool shrinkWrap = false,
-    ScrollPhysics? physics,
-  }) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: stream,
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        var reels = snapshot.data!.docs;
-        if (reels.isEmpty) {
-          return const Center(child: Text("No Reels yet."));
-        }
-        return GridView.builder(
-          shrinkWrap: shrinkWrap,
-          physics: physics ?? const AlwaysScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            crossAxisSpacing: 2,
-            mainAxisSpacing: 2,
-            childAspectRatio: 0.7,
-          ),
-          itemCount: reels.length,
-          itemBuilder: (context, i) => Container(
-            color: Colors.black87,
-            child: const Center(
-              child: Icon(
-                Icons.play_arrow_rounded,
-                color: Colors.white54,
-                size: 40,
-              ),
-            ),
-          ),
         );
       },
     );

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart'; // 🌟 Added for Red Dots
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import 'firebase_options.dart';
@@ -11,7 +11,10 @@ import 'screens/search_screen.dart';
 import 'screens/profile_screen.dart';
 import 'screens/activity_screen.dart';
 import 'screens/inbox_screen.dart';
-import 'screens/reels_screen.dart'; // 🌟 మన రీల్స్ స్క్రీన్ ఇక్కడ ఇంపోర్ట్ చేశాం!
+import 'screens/reels_screen.dart';
+
+// 🌟 థీమ్ (Day/Night) మారడాన్ని కంట్రోల్ చేసే గ్లోబల్ వేరియబుల్
+final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.system);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,27 +27,72 @@ class MySocialApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'MyBanjara',
-      theme: ThemeData(
-        primaryColor: const Color(0xFFFD1D1D),
-        textTheme: GoogleFonts.poppinsTextTheme(),
-      ),
-      home: StreamBuilder<User?>(
-        stream: FirebaseAuth.instance.authStateChanges(),
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
-            );
-          }
-          if (snapshot.hasData) {
-            return const MainNavigation();
-          }
-          return const LoginScreen();
-        },
-      ),
+    // 🌟 థీమ్ మారినప్పుడు యాప్ మొత్తం అప్‌డేట్ అవ్వడానికి ఈ బిల్డర్ వాడాం
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: themeNotifier,
+      builder: (_, ThemeMode currentMode, __) {
+        return MaterialApp(
+          debugShowCheckedModeBanner: false,
+          title: 'MyBanjara',
+
+          // 🌞 LIGHT MODE (Day Theme)
+          theme: ThemeData(
+            brightness: Brightness.light,
+            primaryColor: const Color(0xFFFD1D1D),
+            scaffoldBackgroundColor: Colors.white,
+            appBarTheme: const AppBarTheme(
+              backgroundColor: Colors.white,
+              foregroundColor: Colors.black,
+              elevation: 0.5,
+            ),
+            bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+              backgroundColor: Colors.white,
+              selectedItemColor: Color(0xFFFD1D1D),
+              unselectedItemColor: Colors.grey,
+            ),
+            textTheme: GoogleFonts.poppinsTextTheme(
+              ThemeData.light().textTheme,
+            ),
+          ),
+
+          // 🌜 DARK MODE (Night Theme)
+          darkTheme: ThemeData(
+            brightness: Brightness.dark,
+            primaryColor: const Color(0xFFFD1D1D),
+            scaffoldBackgroundColor: Colors.black,
+            appBarTheme: const AppBarTheme(
+              backgroundColor: Colors.black,
+              foregroundColor: Colors.white,
+              elevation: 0.5,
+            ),
+            bottomNavigationBarTheme: const BottomNavigationBarThemeData(
+              backgroundColor: Colors.black,
+              selectedItemColor: Color(0xFFFD1D1D),
+              unselectedItemColor: Colors.white54,
+            ),
+            textTheme: GoogleFonts.poppinsTextTheme(ThemeData.dark().textTheme),
+            cardColor: Colors.grey[900],
+          ),
+
+          // 🌟 కరెంట్ మోడ్ ని ఇక్కడ సెట్ చేస్తున్నాం
+          themeMode: currentMode,
+
+          home: StreamBuilder<User?>(
+            stream: FirebaseAuth.instance.authStateChanges(),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Scaffold(
+                  body: Center(child: CircularProgressIndicator()),
+                );
+              }
+              if (snapshot.hasData) {
+                return const MainNavigation();
+              }
+              return const LoginScreen();
+            },
+          ),
+        );
+      },
     );
   }
 }
@@ -58,27 +106,22 @@ class MainNavigation extends StatefulWidget {
 class _MainNavigationState extends State<MainNavigation> {
   int _selectedIndex = 0;
 
-  // 🌟 దొంగ దొరికాడు! ఇక్కడ పాత డమ్మీ టెక్స్ట్ తీసేసి, మన ReelsScreen() పెట్టేశాం
   final List<Widget> _screens = [
-    const HomeScreen(),
-    const SearchScreen(),
-    const ReelsScreen(), // 🎬 ఇక్కడే మ్యాజిక్ జరుగుతుంది
-    const ProfileScreen(),
+    const HomeScreen(), // Index 0
+    const SearchScreen(), // Index 1
+    const ReelsScreen(), // Index 2
+    const ProfileScreen(), // Index 3
   ];
 
   @override
   Widget build(BuildContext context) {
     final currentUser = FirebaseAuth.instance.currentUser;
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      appBar:
-          _selectedIndex == 3 ||
-              _selectedIndex ==
-                  2 // 🌟 రీల్స్ స్క్రీన్ లో కూడా పైనున్న యాప్ బార్ వద్దు అనుకుంటే ఇలా పెట్టాలి (Instagram లాగా)
+      appBar: _selectedIndex == 2 || _selectedIndex == 3
           ? null
           : AppBar(
-              elevation: 0.5,
-              backgroundColor: Colors.white,
               title: Text(
                 "MyBanjara",
                 style: GoogleFonts.lobster(
@@ -87,7 +130,22 @@ class _MainNavigationState extends State<MainNavigation> {
                 ),
               ),
               actions: [
-                // 🌟 FIX 6: Activity (Heart) Red Dot
+                // 🌟 Day / Night Mode బటన్ ఇక్కడే యాడ్ చేశాం!
+                IconButton(
+                  icon: Icon(
+                    isDarkMode
+                        ? Icons.light_mode
+                        : Icons
+                              .dark_mode, // డార్క్ లో ఉంటే సూర్యుడు, లైట్ లో ఉంటే చంద్రుడు
+                    color: isDarkMode ? Colors.amber : Colors.black,
+                  ),
+                  onPressed: () {
+                    // బటన్ నొక్కగానే థీమ్ ని ఆపోజిట్ కి మారుస్తున్నాం
+                    themeNotifier.value = isDarkMode
+                        ? ThemeMode.light
+                        : ThemeMode.dark;
+                  },
+                ),
                 StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
                       .collection('notifications')
@@ -102,9 +160,9 @@ class _MainNavigationState extends State<MainNavigation> {
                       isLabelVisible: unreadCount > 0,
                       label: Text(unreadCount.toString()),
                       child: IconButton(
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.favorite_border,
-                          color: Colors.black,
+                          color: isDarkMode ? Colors.white : Colors.black,
                         ),
                         onPressed: () => Navigator.push(
                           context,
@@ -116,8 +174,7 @@ class _MainNavigationState extends State<MainNavigation> {
                     );
                   },
                 ),
-                const SizedBox(width: 10),
-                // 🌟 FIX 6: Messages (Inbox) Red Dot
+                const SizedBox(width: 5),
                 StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
                       .collection('messages')
@@ -134,9 +191,9 @@ class _MainNavigationState extends State<MainNavigation> {
                         isLabelVisible: unreadCount > 0,
                         label: Text(unreadCount.toString()),
                         child: IconButton(
-                          icon: const Icon(
+                          icon: Icon(
                             Icons.send_outlined,
-                            color: Colors.black,
+                            color: isDarkMode ? Colors.white : Colors.black,
                           ),
                           onPressed: () => Navigator.push(
                             context,
@@ -155,11 +212,9 @@ class _MainNavigationState extends State<MainNavigation> {
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (i) => setState(() => _selectedIndex = i),
-        selectedItemColor: const Color(0xFFFD1D1D),
-        unselectedItemColor: Colors.grey,
+        type: BottomNavigationBarType.fixed,
         showSelectedLabels: false,
         showUnselectedLabels: false,
-        type: BottomNavigationBarType.fixed,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: "Home"),
           BottomNavigationBarItem(icon: Icon(Icons.search), label: "Search"),

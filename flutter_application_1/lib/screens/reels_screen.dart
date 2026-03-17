@@ -50,7 +50,11 @@ class ReelsScreen extends StatelessWidget {
             itemCount: reels.length,
             itemBuilder: (context, index) {
               var reelData = reels[index].data() as Map<String, dynamic>;
-              return ReelItem(reelData: reelData);
+              // 🌟 మ్యాజిక్ ఇక్కడ ఉంది: డాక్యుమెంట్ ఐడీని లాగుతున్నాం
+              String reelId = reels[index].id;
+
+              // 🌟 ఫిక్స్: ReelItem కి reel మరియు reelId పక్కాగా పంపుతున్నాం
+              return ReelItem(reel: reelData, reelId: reelId);
             },
           );
         },
