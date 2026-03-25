@@ -1,6 +1,5 @@
 // ignore_for_file: curly_braces_in_flow_control_structures
 
-import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -16,16 +15,25 @@ class StoryScreen extends StatefulWidget {
   State<StoryScreen> createState() => _StoryScreenState();
 }
 
-class _StoryScreenState extends State<StoryScreen> {
+class _StoryScreenState extends State<StoryScreen>
+    with SingleTickerProviderStateMixin {
   VideoPlayerController? _videoController;
+  late AnimationController
+  _animationController; // 🌟 టైమ్ బార్ స్మూత్ యానిమేషన్ కోసం
   int _currentIndex = 0;
   List<DocumentSnapshot> _userStories = [];
-  Timer? _timer;
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
+    // 🌟 యానిమేషన్ సెటప్
+    _animationController = AnimationController(vsync: this);
+    _animationController.addStatusListener((status) {
+      if (status == AnimationStatus.completed) {
+        _nextStory(); // టైమ్ అయిపోగానే ఆటోమేటిక్ గా నెక్స్ట్ స్టోరీకి వెళ్తుంది
+      }
+    });
     _loadAllStoriesOfUser();
   }
 
@@ -54,7 +62,8 @@ class _StoryScreenState extends State<StoryScreen> {
   }
 
   void _showStory() {
-    _timer?.cancel();
+    _animationController.stop();
+    _animationController.reset();
     _videoController?.dispose();
     _videoController = null;
 
@@ -70,12 +79,10 @@ class _StoryScreenState extends State<StoryScreen> {
               if (mounted) {
                 setState(() {});
                 _videoController!.play();
-                _videoController!.addListener(() {
-                  if (_videoController!.value.position ==
-                      _videoController!.value.duration) {
-                    _nextStory();
-                  }
-                });
+                // వీడియో ఉంటే దాని సమయం బట్టి టైమ్ బార్ నిండుతుంది
+                _animationController.duration =
+                    _videoController!.value.duration;
+                _animationController.forward();
               }
             })
             .catchError((e) {
@@ -83,12 +90,16 @@ class _StoryScreenState extends State<StoryScreen> {
               return null;
             });
     } else {
-      _timer = Timer(const Duration(seconds: 5), () => _nextStory());
+      // 🌟 ఫోటో అయితే 60 సెకన్ల పాటు టైమ్ బార్ నిండుతుంది!
+      _animationController.duration = const Duration(seconds: 60);
+      _animationController.forward();
     }
     if (mounted) setState(() {});
   }
 
   void _nextStory() {
+    _animationController.stop();
+    _animationController.reset();
     if (_currentIndex < _userStories.length - 1) {
       setState(() => _currentIndex++);
       _showStory();
@@ -99,7 +110,7 @@ class _StoryScreenState extends State<StoryScreen> {
 
   @override
   void dispose() {
-    _timer?.cancel();
+    _animationController.dispose();
     _videoController?.dispose();
     super.dispose();
   }
@@ -118,7 +129,6 @@ class _StoryScreenState extends State<StoryScreen> {
     String profilePic = currentStory['profilePic']?.toString() ?? "";
     String username = currentStory['username']?.toString() ?? "User";
 
-    // 🌟 సేఫ్ టైమ్ స్టాంప్ చెక్
     String postedTime = "Just now";
     if (currentStory['timestamp'] != null &&
         currentStory['timestamp'] is Timestamp) {
@@ -135,6 +145,8 @@ class _StoryScreenState extends State<StoryScreen> {
           if (details.globalPosition.dx <
               MediaQuery.of(context).size.width / 3) {
             if (_currentIndex > 0) {
+              _animationController.stop();
+              _animationController.reset();
               setState(() => _currentIndex--);
               _showStory();
             }
@@ -173,14 +185,24 @@ class _StoryScreenState extends State<StoryScreen> {
                   return Expanded(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 2),
-                      child: LinearProgressIndicator(
-                        value: index == _currentIndex
-                            ? null
-                            : (index < _currentIndex ? 1.0 : 0.0),
-                        backgroundColor: Colors.white24,
-                        valueColor: const AlwaysStoppedAnimation<Color>(
-                          Colors.white,
-                        ),
+                      // 🌟 ఇక్కడ టైమ్ బార్ ఆటోమేటిక్ గా నిండేలా యానిమేషన్ సెట్ చేసాం
+                      child: AnimatedBuilder(
+                        animation: _animationController,
+                        builder: (context, child) {
+                          double progress = 0.0;
+                          if (index < _currentIndex) {
+                            progress = 1.0;
+                          } else if (index == _currentIndex) {
+                            progress = _animationController.value;
+                          }
+                          return LinearProgressIndicator(
+                            value: progress,
+                            backgroundColor: Colors.white24,
+                            valueColor: const AlwaysStoppedAnimation<Color>(
+                              Colors.white,
+                            ),
+                          );
+                        },
                       ),
                     ),
                   );
@@ -193,7 +215,6 @@ class _StoryScreenState extends State<StoryScreen> {
               right: 15,
               child: Row(
                 children: [
-                  // 🌟 క్రాష్ అవ్వకుండా SafeProfilePic వాడాం
                   SafeProfilePic(
                     base64String: profilePic,
                     radius: 18,

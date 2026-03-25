@@ -22,51 +22,88 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   bool _isUploading = false;
   final String currentUid = FirebaseAuth.instance.currentUser!.uid;
-
   Future<void> _uploadStory(Map<String, dynamic> userData, bool isVideo) async {
     final ImagePicker picker = ImagePicker();
-    final XFile? file = isVideo
-        ? await picker.pickVideo(source: ImageSource.gallery)
-        : await picker.pickImage(source: ImageSource.gallery, imageQuality: 50);
 
-    if (file != null) {
-      if (!mounted) return;
-      setState(() => _isUploading = true);
+    if (isVideo) {
+      // 🌟 వీడియో కోసం
+      final XFile? file = await picker.pickVideo(source: ImageSource.gallery);
+      if (file != null) {
+        if (!mounted) return;
+        setState(() => _isUploading = true);
+        try {
+          String storyId = const Uuid().v4();
+          Reference ref = FirebaseStorage.instance
+              .ref()
+              .child('stories')
+              .child(currentUid)
+              .child(storyId);
+          UploadTask uploadTask = ref.putFile(File(file.path));
+          TaskSnapshot snapshot = await uploadTask;
+          String downloadUrl = await snapshot.ref.getDownloadURL();
 
-      try {
-        String storyId = const Uuid().v4();
-        Reference ref = FirebaseStorage.instance
-            .ref()
-            .child('stories')
-            .child(currentUid)
-            .child(storyId);
-        UploadTask uploadTask = ref.putFile(File(file.path));
-        TaskSnapshot snapshot = await uploadTask;
-        String downloadUrl = await snapshot.ref.getDownloadURL();
-
-        await FirebaseFirestore.instance.collection('stories').add({
-          "uid": currentUid,
-          "ownerId": currentUid,
-          "username": userData['username'] ?? "User",
-          "profilePic": userData['profilePic'] ?? "",
-          "storyUrl": downloadUrl,
-          "type": isVideo ? "video" : "image",
-          "timestamp": FieldValue.serverTimestamp(),
-          "viewers": [],
-        });
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Story Added! 🌟"),
-              backgroundColor: Colors.green,
-            ),
-          );
+          await FirebaseFirestore.instance.collection('stories').add({
+            "uid": currentUid,
+            "ownerId": currentUid,
+            "username": userData['username'] ?? "User",
+            "profilePic": userData['profilePic'] ?? "",
+            "storyUrl": downloadUrl,
+            "type": "video",
+            "timestamp": FieldValue.serverTimestamp(),
+            "viewers": [],
+          });
+        } catch (e) {
+          debugPrint("Video Story Upload Error: $e");
+        } finally {
+          if (mounted) setState(() => _isUploading = false);
         }
-      } catch (e) {
-        debugPrint("Story Upload Error: $e");
-      } finally {
-        if (mounted) setState(() => _isUploading = false);
+      }
+    } else {
+      // 🌟 మల్టిపుల్ ఫోటోల కోసం (ఒకేసారి ఎన్ని ఫోటోలు అయినా సెలెక్ట్ చేయొచ్చు)
+      final List<XFile> files = await picker.pickMultiImage(imageQuality: 50);
+
+      if (files.isNotEmpty) {
+        if (!mounted) return;
+        setState(() => _isUploading = true);
+
+        try {
+          // లూప్ వాడి ప్రతి ఫోటోని వరుసగా అప్‌లోడ్ చేస్తాం
+          for (var file in files) {
+            String storyId = const Uuid().v4();
+            Reference ref = FirebaseStorage.instance
+                .ref()
+                .child('stories')
+                .child(currentUid)
+                .child(storyId);
+            UploadTask uploadTask = ref.putFile(File(file.path));
+            TaskSnapshot snapshot = await uploadTask;
+            String downloadUrl = await snapshot.ref.getDownloadURL();
+
+            await FirebaseFirestore.instance.collection('stories').add({
+              "uid": currentUid,
+              "ownerId": currentUid,
+              "username": userData['username'] ?? "User",
+              "profilePic": userData['profilePic'] ?? "",
+              "storyUrl": downloadUrl,
+              "type": "image",
+              "timestamp": FieldValue.serverTimestamp(),
+              "viewers": [],
+            });
+          }
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("Stories Added Successfully! 🌟"),
+                backgroundColor: Colors.green,
+              ),
+            );
+          }
+        } catch (e) {
+          debugPrint("Story Upload Error: $e");
+        } finally {
+          if (mounted) setState(() => _isUploading = false);
+        }
       }
     }
   }
