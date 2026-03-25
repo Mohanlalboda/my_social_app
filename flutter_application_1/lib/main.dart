@@ -22,12 +22,10 @@ final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.system);
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 🌟 1. ముందు ఫైర్‌బేస్ స్టార్ట్ అవ్వాలి (ఇది ఇందాక మిస్ అయ్యింది)
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // 🌟 2. ఆ తర్వాత యాప్ చెక్ ఆన్ అవ్వాలి
   await FirebaseAppCheck.instance.activate(
-    androidProvider: AndroidProvider.playIntegrity, // పాత వెర్షన్స్ కోసం
+    androidProvider: AndroidProvider.playIntegrity,
   );
 
   runApp(const MySocialApp());
@@ -137,17 +135,7 @@ class _MainNavigationState extends State<MainNavigation> {
                 ),
               ),
               actions: [
-                IconButton(
-                  icon: Icon(
-                    isDarkMode ? Icons.light_mode : Icons.dark_mode,
-                    color: isDarkMode ? Colors.amber : Colors.black,
-                  ),
-                  onPressed: () {
-                    themeNotifier.value = isDarkMode
-                        ? ThemeMode.light
-                        : ThemeMode.dark;
-                  },
-                ),
+                // 🌟 డే/నైట్ మోడ్ బటన్ ఇక్కడ నుండి తీసేశాను!
                 StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
                       .collection('notifications')
