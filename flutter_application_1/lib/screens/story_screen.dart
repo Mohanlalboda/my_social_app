@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:timeago/timeago.dart' as timeago;
-
+import 'package:cached_network_image/cached_network_image.dart';
 import '../widgets/safe_elements.dart'; // 🌟 క్రాష్ అవ్వకుండా ఉండటానికి ఇది యాడ్ చేశాం
 
 class StoryScreen extends StatefulWidget {
@@ -165,14 +165,21 @@ class _StoryScreenState extends State<StoryScreen>
                             child: VideoPlayer(_videoController!),
                           )
                         : const CircularProgressIndicator(color: Colors.white))
-                  : Image.network(
-                      storyUrl,
-                      fit: BoxFit.contain,
-                      width: double.infinity,
-                      errorBuilder: (c, e, s) => const Icon(
-                        Icons.broken_image,
-                        color: Colors.white,
-                        size: 50,
+                  : CachedNetworkImage(
+                      imageUrl: storyUrl, // ✅ ఇలా మార్చండి
+                      fit: BoxFit.cover,
+                      placeholder: (context, url) => const Center(
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 3,
+                        ),
+                      ),
+                      errorWidget: (context, url, error) => const Center(
+                        child: Icon(
+                          Icons.broken_image,
+                          color: Colors.grey,
+                          size: 50,
+                        ),
                       ),
                     ),
             ),

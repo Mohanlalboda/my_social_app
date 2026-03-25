@@ -8,6 +8,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:cached_network_image/cached_network_image.dart'; // 🚀 TRICK 1 STEP 3: Cached Image Import
 
 import 'safe_elements.dart';
 import '../screens/comments_screen.dart';
@@ -33,7 +34,7 @@ class _PostWidgetState extends State<PostWidget> {
   void initState() {
     super.initState();
     _syncData();
-    _markPostAsSeen(); // 🌟 పోస్ట్ స్క్రీన్ మీదకి రాగానే "చూసేశాడు" అని మార్క్ చేస్తాం
+    _markPostAsSeen();
   }
 
   void _syncData() {
@@ -45,7 +46,6 @@ class _PostWidgetState extends State<PostWidget> {
     isSaved = savedBy.contains(currentUid);
   }
 
-  // 🌟 Seen Logic
   void _markPostAsSeen() async {
     List viewedBy = widget.post['viewedBy'] ?? [];
     if (!viewedBy.contains(currentUid)) {
@@ -167,9 +167,7 @@ class _PostWidgetState extends State<PostWidget> {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text("Sent to inbox! ✅")));
-    } catch (e) {
-      debugPrint("Internal share error: $e");
-    }
+    } catch (e) {}
   }
 
   void _showShareMenu() {
@@ -397,9 +395,7 @@ class _PostWidgetState extends State<PostWidget> {
               alignment: Alignment.topRight,
               children: [
                 Container(
-                  color: isDark
-                      ? Colors.grey[900]
-                      : Colors.grey[100], // 🌟 ఫోటో వెనకాల బ్యాక్‌గ్రౌండ్ కలర్
+                  color: isDark ? Colors.grey[900] : Colors.grey[100],
                   child: AspectRatio(
                     aspectRatio: 1.0,
                     child: PageView.builder(
@@ -411,23 +407,21 @@ class _PostWidgetState extends State<PostWidget> {
                         return GestureDetector(
                           onDoubleTap: _handleLike,
                           child: imgData.startsWith('http')
-                              ? Image.network(
-                                  imgData,
-                                  // 🌟 FIX: ఇక్కడ BoxFit.contain వాడాం (జూమ్ అవ్వదు, కట్ అవ్వదు)
+                              ? CachedNetworkImage(
+                                  // 🚀 TRICK 1 STEP 3: క్యాష్ అయ్యే ఇమేజ్ విడ్జెట్
+                                  imageUrl: imgData,
                                   fit: BoxFit.contain,
-                                  errorBuilder: (c, e, s) => const Center(
-                                    child: Icon(
-                                      Icons.broken_image,
-                                      size: 50,
-                                      color: Colors.grey,
-                                    ),
+                                  placeholder: (context, url) => const Center(
+                                    child: CircularProgressIndicator(),
                                   ),
-                                  loadingBuilder: (c, child, progress) =>
-                                      progress == null
-                                      ? child
-                                      : const Center(
-                                          child: CircularProgressIndicator(),
+                                  errorWidget: (context, url, error) =>
+                                      const Center(
+                                        child: Icon(
+                                          Icons.broken_image,
+                                          size: 50,
+                                          color: Colors.grey,
                                         ),
+                                      ),
                                 )
                               : SafeImage(base64String: imgData),
                         );

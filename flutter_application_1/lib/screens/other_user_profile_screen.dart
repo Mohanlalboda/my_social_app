@@ -7,6 +7,7 @@ import '../widgets/safe_elements.dart';
 import 'post_details_screen.dart';
 import 'chat_screen.dart';
 import 'user_list_screen.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class OtherUserProfileScreen extends StatefulWidget {
   final String uid;
@@ -207,8 +208,35 @@ class _OtherUserProfileScreenState extends State<OtherUserProfileScreen> {
                                 PostDetailsScreen(postId: posts[i].id),
                           ),
                         ),
-                        child: SafeImage(
-                          base64String: (posts[i].data() as Map)['postData'],
+                        child: Builder(
+                          builder: (context) {
+                            var postMap =
+                                posts[i].data() as Map<String, dynamic>;
+                            var postData = postMap['postData'];
+                            String thumbnail = "";
+
+                            // 🌟 ఫోటోలు List లాగా ఉంటే అందులో మొదటి ఫోటోను మాత్రమే గ్రిడ్ లో చూపిస్తాం
+                            if (postData is List && postData.isNotEmpty) {
+                              thumbnail = postData[0].toString();
+                            } else {
+                              thumbnail = postData?.toString() ?? "";
+                            }
+
+                            // 🌟 అది URL అయితే Cached Image వాడతాం, పాత Base64 అయితే SafeImage వాడతాం
+                            return thumbnail.startsWith('http')
+                                ? CachedNetworkImage(
+                                    imageUrl: thumbnail,
+                                    fit: BoxFit.cover,
+                                    placeholder: (context, url) =>
+                                        Container(color: Colors.grey[200]),
+                                    errorWidget: (context, url, error) =>
+                                        const Icon(
+                                          Icons.broken_image,
+                                          color: Colors.grey,
+                                        ),
+                                  )
+                                : SafeImage(base64String: thumbnail);
+                          },
                         ),
                       ),
                     );
