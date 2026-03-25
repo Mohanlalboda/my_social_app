@@ -1,7 +1,8 @@
 // ignore_for_file: empty_catches, curly_braces_in_flow_control_structures
 
 import 'package:flutter/material.dart';
-import 'package:video_player/video_player.dart';
+import 'package:cached_video_player_plus/cached_video_player_plus.dart';
+import 'package:video_player/video_player.dart'; // 🌟 1. కొత్త వర్షన్ కి ఇది కచ్చితంగా కావాలి!
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:share_plus/share_plus.dart';
@@ -19,7 +20,8 @@ class ReelItem extends StatefulWidget {
 }
 
 class _ReelItemState extends State<ReelItem> {
-  late VideoPlayerController _controller;
+  // 🌟 2. క్లాస్ పేరు మారింది
+  late CachedVideoPlayerPlus _player;
   bool _isInitialized = false;
   bool _isLiked = false;
   int _likeCount = 0;
@@ -29,15 +31,17 @@ class _ReelItemState extends State<ReelItem> {
   void initState() {
     super.initState();
     _syncData();
-    _controller =
-        VideoPlayerController.networkUrl(Uri.parse(widget.reel['videoUrl']))
-          ..initialize().then((_) {
-            if (mounted) {
-              setState(() => _isInitialized = true);
-              _controller.setLooping(true);
-              _controller.play();
-            }
-          });
+    // 🌟 3. ఇనిషియలైజేషన్ పద్ధతి మారింది
+    _player = CachedVideoPlayerPlus.networkUrl(
+      Uri.parse(widget.reel['videoUrl']),
+    );
+    _player.initialize().then((_) {
+      if (mounted) {
+        setState(() => _isInitialized = true);
+        _player.controller.setLooping(true);
+        _player.controller.play();
+      }
+    });
   }
 
   void _syncData() {
@@ -61,7 +65,6 @@ class _ReelItemState extends State<ReelItem> {
           });
   }
 
-  // 🌟 యాప్ యూజర్ కి చాట్ లో రీల్ పంపడానికి
   void _sendReelInternally(BuildContext sheetContext, String receiverId) async {
     try {
       await FirebaseFirestore.instance.collection('messages').add({
@@ -93,7 +96,6 @@ class _ReelItemState extends State<ReelItem> {
     } catch (e) {}
   }
 
-  // 🌟 రీల్స్ షేర్ మెనూ (ఎర్రర్ ఫిక్స్డ్)
   void _showShareMenu() {
     showModalBottomSheet(
       context: context,
@@ -119,7 +121,6 @@ class _ReelItemState extends State<ReelItem> {
               title: const Text("Share Link Externally"),
               onTap: () {
                 Navigator.pop(ctx);
-                // 🌟 FIX: ఇక్కడ ShareParams వాడాము
                 SharePlus.instance.share(
                   ShareParams(
                     text:
@@ -259,7 +260,7 @@ class _ReelItemState extends State<ReelItem> {
 
   @override
   void dispose() {
-    _controller.dispose();
+    _player.dispose(); // 🌟 4. dispose మార్చాం
     super.dispose();
   }
 
@@ -273,14 +274,16 @@ class _ReelItemState extends State<ReelItem> {
       children: [
         _isInitialized
             ? GestureDetector(
-                onTap: () => _controller.value.isPlaying
-                    ? _controller.pause()
-                    : _controller.play(),
+                // 🌟 5. ప్రతిచోటా _player.controller అని వాడాలి
+                onTap: () => _player.controller.value.isPlaying
+                    ? _player.controller.pause()
+                    : _player.controller.play(),
                 onDoubleTap: _toggleLike,
                 child: Center(
                   child: AspectRatio(
-                    aspectRatio: _controller.value.aspectRatio,
-                    child: VideoPlayer(_controller),
+                    aspectRatio: _player.controller.value.aspectRatio,
+                    // 🌟 6. ఇక్కడ నార్మల్ VideoPlayer వస్తుంది, లోపల మన క్యాష్ కంట్రోలర్ ఉంటుంది!
+                    child: VideoPlayer(_player.controller),
                   ),
                 ),
               )

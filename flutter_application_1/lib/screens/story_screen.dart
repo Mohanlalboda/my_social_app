@@ -5,7 +5,7 @@ import 'package:video_player/video_player.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:cached_network_image/cached_network_image.dart';
-import '../widgets/safe_elements.dart'; // 🌟 క్రాష్ అవ్వకుండా ఉండటానికి ఇది యాడ్ చేశాం
+import '../widgets/safe_elements.dart';
 
 class StoryScreen extends StatefulWidget {
   final Map<String, dynamic> user;
@@ -18,8 +18,7 @@ class StoryScreen extends StatefulWidget {
 class _StoryScreenState extends State<StoryScreen>
     with SingleTickerProviderStateMixin {
   VideoPlayerController? _videoController;
-  late AnimationController
-  _animationController; // 🌟 టైమ్ బార్ స్మూత్ యానిమేషన్ కోసం
+  late AnimationController _animationController;
   int _currentIndex = 0;
   List<DocumentSnapshot> _userStories = [];
   bool _isLoading = true;
@@ -27,11 +26,10 @@ class _StoryScreenState extends State<StoryScreen>
   @override
   void initState() {
     super.initState();
-    // 🌟 యానిమేషన్ సెటప్
     _animationController = AnimationController(vsync: this);
     _animationController.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
-        _nextStory(); // టైమ్ అయిపోగానే ఆటోమేటిక్ గా నెక్స్ట్ స్టోరీకి వెళ్తుంది
+        _nextStory();
       }
     });
     _loadAllStoriesOfUser();
@@ -54,10 +52,28 @@ class _StoryScreenState extends State<StoryScreen>
           _userStories = snapshot.docs;
           _isLoading = false;
         });
+
+        // 🌟 TRICK: ఇక్కడ మనం ఇమేజెస్ ని ముందే లోడ్ చేస్తున్నాం!
+        _preloadImages();
+
         _showStory();
       }
     } else {
       if (mounted) Navigator.pop(context);
+    }
+  }
+
+  // 🌟 బ్యాక్‌గ్రౌండ్ లో ఫోటోలు ఫాస్ట్ గా డౌన్‌లోడ్ చేసి పెట్టుకునే ఫంక్షన్
+  void _preloadImages() {
+    for (var doc in _userStories) {
+      var data = doc.data() as Map<String, dynamic>;
+      if (data['type'] != 'video') {
+        // వీడియోస్ కాకుండా కేవలం ఇమేజెస్ ని మాత్రమే
+        String url = data['storyUrl']?.toString() ?? "";
+        if (url.isNotEmpty && url.startsWith('http')) {
+          precacheImage(CachedNetworkImageProvider(url), context);
+        }
+      }
     }
   }
 
@@ -79,7 +95,6 @@ class _StoryScreenState extends State<StoryScreen>
               if (mounted) {
                 setState(() {});
                 _videoController!.play();
-                // వీడియో ఉంటే దాని సమయం బట్టి టైమ్ బార్ నిండుతుంది
                 _animationController.duration =
                     _videoController!.value.duration;
                 _animationController.forward();
@@ -90,7 +105,7 @@ class _StoryScreenState extends State<StoryScreen>
               return null;
             });
     } else {
-      // 🌟 ఫోటో అయితే 60 సెకన్ల పాటు టైమ్ బార్ నిండుతుంది!
+      // ఫోటో అయితే 60 సెకన్ల పాటు టైమ్ బార్ నిండుతుంది!
       _animationController.duration = const Duration(seconds: 60);
       _animationController.forward();
     }
@@ -166,8 +181,9 @@ class _StoryScreenState extends State<StoryScreen>
                           )
                         : const CircularProgressIndicator(color: Colors.white))
                   : CachedNetworkImage(
-                      imageUrl: storyUrl, // ✅ ఇలా మార్చండి
-                      fit: BoxFit.cover,
+                      imageUrl: storyUrl,
+                      fit: BoxFit
+                          .contain, // 🌟 ఫోటోలు కట్ అవ్వకుండా ఉండటానికి 'contain' వాడాం
                       placeholder: (context, url) => const Center(
                         child: CircularProgressIndicator(
                           color: Colors.white,
@@ -192,7 +208,6 @@ class _StoryScreenState extends State<StoryScreen>
                   return Expanded(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 2),
-                      // 🌟 ఇక్కడ టైమ్ బార్ ఆటోమేటిక్ గా నిండేలా యానిమేషన్ సెట్ చేసాం
                       child: AnimatedBuilder(
                         animation: _animationController,
                         builder: (context, child) {
