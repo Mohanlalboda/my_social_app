@@ -104,7 +104,6 @@ class _PostWidgetState extends State<PostWidget> {
     }
   }
 
-  // 🌟 యాప్ యూజర్ కి చాట్ లో పోస్ట్ పంపడానికి
   void _sendPostInternally(BuildContext sheetContext, String receiverId) async {
     try {
       await FirebaseFirestore.instance.collection('messages').add({
@@ -140,7 +139,6 @@ class _PostWidgetState extends State<PostWidget> {
     }
   }
 
-  // 🌟 ఇంటర్నల్ & ఎక్స్‌టర్నల్ షేర్ మెనూ
   void _showShareMenu() {
     showModalBottomSheet(
       context: context,
@@ -148,83 +146,85 @@ class _PostWidgetState extends State<PostWidget> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) => Container(
-        height: MediaQuery.of(context).size.height * 0.6,
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        child: Column(
-          children: [
-            const Text(
-              "Share Post",
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
-            ),
-            const SizedBox(height: 10),
-            ListTile(
-              leading: const CircleAvatar(
-                backgroundColor: Colors.green,
-                child: Icon(Icons.share, color: Colors.white),
+      builder: (ctx) {
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.6,
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          child: Column(
+            children: [
+              const Text(
+                "Share Post",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
               ),
-              title: const Text("Share to WhatsApp / Others"),
-              onTap: () {
-                Navigator.pop(ctx);
-                _shareExternally();
-              },
-            ),
-            const Divider(),
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 15, vertical: 5),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: Text(
-                  "Send to Friends",
-                  style: TextStyle(
-                    color: Colors.grey,
-                    fontWeight: FontWeight.bold,
+              const SizedBox(height: 10),
+              ListTile(
+                leading: const CircleAvatar(
+                  backgroundColor: Colors.green,
+                  child: Icon(Icons.share, color: Colors.white),
+                ),
+                title: const Text("Share to WhatsApp / Others"),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _shareExternally();
+                },
+              ),
+              const Divider(),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 15, vertical: 5),
+                child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    "Send to Friends",
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
-            ),
-            Expanded(
-              child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('users')
-                    .snapshots(),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData)
-                    return const Center(child: CircularProgressIndicator());
-                  var users = snapshot.data!.docs
-                      .where((doc) => doc.id != currentUid)
-                      .toList();
+              Expanded(
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('users')
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData)
+                      return const Center(child: CircularProgressIndicator());
+                    var users = snapshot.data!.docs
+                        .where((doc) => doc.id != currentUid)
+                        .toList();
 
-                  return ListView.builder(
-                    itemCount: users.length,
-                    itemBuilder: (context, index) {
-                      var user = users[index].data() as Map<String, dynamic>;
-                      String uName = user['username'] ?? "User";
-                      return ListTile(
-                        leading: SafeProfilePic(
-                          base64String: user['profilePic'],
-                          radius: 20,
-                          fallbackText: uName.isNotEmpty ? uName[0] : "U",
-                        ),
-                        title: Text(uName),
-                        trailing: ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.blue,
-                            foregroundColor: Colors.white,
+                    return ListView.builder(
+                      itemCount: users.length,
+                      itemBuilder: (context, index) {
+                        var user = users[index].data() as Map<String, dynamic>;
+                        String uName = user['username'] ?? "User";
+                        return ListTile(
+                          leading: SafeProfilePic(
+                            base64String: user['profilePic'],
+                            radius: 20,
+                            fallbackText: uName.isNotEmpty ? uName[0] : "U",
                           ),
-                          onPressed: () =>
-                              _sendPostInternally(ctx, users[index].id),
-                          child: const Text("Send"),
-                        ),
-                      );
-                    },
-                  );
-                },
+                          title: Text(uName),
+                          trailing: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.blue,
+                              foregroundColor: Colors.white,
+                            ),
+                            onPressed: () =>
+                                _sendPostInternally(ctx, users[index].id),
+                            child: const Text("Send"),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
               ),
-            ),
-          ],
-        ),
-      ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -301,6 +301,9 @@ class _PostWidgetState extends State<PostWidget> {
 
   @override
   Widget build(BuildContext context) {
+    // 🌟 ఫోన్ డార్క్ మోడ్ థీమ్ వాల్యూ ఇక్కడ తెచ్చుకుంటున్నాం
+    bool isDark = Theme.of(context).brightness == Brightness.dark;
+
     String username = widget.post['username'] ?? "User";
     String timeStr = widget.post['timestamp'] != null
         ? timeago.format((widget.post['timestamp'] as Timestamp).toDate())
@@ -309,7 +312,8 @@ class _PostWidgetState extends State<PostWidget> {
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 5),
       elevation: 0,
-      color: Colors.white,
+      // 🌟 కార్డ్ కలర్ ఆటోమేటిక్ గా మారేలా సెట్ చేశాం
+      color: isDark ? Colors.black : Colors.white,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -359,7 +363,10 @@ class _PostWidgetState extends State<PostWidget> {
               IconButton(
                 icon: Icon(
                   isLiked ? Icons.favorite : Icons.favorite_border,
-                  color: isLiked ? Colors.red : Colors.black,
+                  // 🌟 ఐకాన్ కలర్ థీమ్ బట్టి అడ్జస్ట్ అవుతుంది
+                  color: isLiked
+                      ? Colors.red
+                      : (isDark ? Colors.white : Colors.black),
                 ),
                 onPressed: _handleLike,
               ),
@@ -374,7 +381,11 @@ class _PostWidgetState extends State<PostWidget> {
                   return Row(
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.comment_outlined),
+                        // 🌟 కామెంట్ ఐకాన్
+                        icon: Icon(
+                          Icons.comment_outlined,
+                          color: isDark ? Colors.white : Colors.black,
+                        ),
                         onPressed: () => Navigator.push(
                           context,
                           MaterialPageRoute(
@@ -393,14 +404,19 @@ class _PostWidgetState extends State<PostWidget> {
                 },
               ),
               IconButton(
-                icon: const Icon(Icons.send_outlined),
+                // 🌟 షేర్ ఐకాన్
+                icon: Icon(
+                  Icons.send_outlined,
+                  color: isDark ? Colors.white : Colors.black,
+                ),
                 onPressed: _showShareMenu,
               ),
               const Spacer(),
               IconButton(
                 icon: Icon(
                   isSaved ? Icons.bookmark : Icons.bookmark_border,
-                  color: Colors.black,
+                  // 🌟 సేవ్ ఐకాన్
+                  color: isDark ? Colors.white : Colors.black,
                 ),
                 onPressed: _handleSave,
               ),
@@ -434,7 +450,11 @@ class _PostWidgetState extends State<PostWidget> {
               padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 5),
               child: Text(
                 widget.post['caption'].toString(),
-                style: const TextStyle(color: Colors.black, fontSize: 14),
+                // 🌟 కాప్షన్ టెక్స్ట్ కలర్
+                style: TextStyle(
+                  color: isDark ? Colors.white : Colors.black,
+                  fontSize: 14,
+                ),
               ),
             ),
           const SizedBox(height: 10),

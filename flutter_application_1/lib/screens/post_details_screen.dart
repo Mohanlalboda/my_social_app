@@ -10,13 +10,19 @@ class PostDetailsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // 🌟 ఫోన్ డార్క్ మోడ్‌లో ఉందా అని చెక్ చేస్తున్నాం
+    bool isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: Colors.white,
+      // 🌟 బ్యాక్‌గ్రౌండ్ కలర్ తీసేశాం, ఆటోమేటిక్ గా బ్లాక్/వైట్ వస్తుంది
       appBar: AppBar(
-        title: const Text("Post", style: TextStyle(color: Colors.black)),
-        backgroundColor: Colors.white,
-        iconTheme: const IconThemeData(color: Colors.black),
+        title: Text(
+          "Post",
+          style: TextStyle(color: isDark ? Colors.white : Colors.black),
+        ),
+        iconTheme: IconThemeData(color: isDark ? Colors.white : Colors.black),
         elevation: 0,
+        backgroundColor: Colors.transparent, // 🌟 థీమ్ బట్టి అడ్జస్ట్ అవుతుంది
       ),
       body: StreamBuilder<DocumentSnapshot>(
         stream: FirebaseFirestore.instance

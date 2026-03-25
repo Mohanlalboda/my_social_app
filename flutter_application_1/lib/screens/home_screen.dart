@@ -111,8 +111,11 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // 🌟 ఫోన్ డార్క్ మోడ్ లో ఉందా లేదా అని చెక్ చేయడానికి లాజిక్
+    bool isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: Colors.grey[100],
+      // 🌟 బ్యాక్‌గ్రౌండ్ కలర్ తీసేశాను, ఆటోమేటిక్ గా సిస్టమ్ థీమ్ (బ్లాక్/వైట్) తీసుకుంటుంది
       floatingActionButton: FloatingActionButton(
         backgroundColor: const Color(0xFFFD1D1D),
         onPressed: () => Navigator.push(
@@ -150,7 +153,6 @@ class _HomeScreenState extends State<HomeScreen> {
                   builder: (context, snapshot) {
                     if (!snapshot.hasData) return const SizedBox();
 
-                    // 🌟 FIX: ఇక్కడ ఫాలోయింగ్ ఫిల్టర్ తీసేశాను. ఇప్పుడు యాప్‌లో ఎవరు స్టోరీ పెట్టినా ఇక్కడ కనిపిస్తుంది!
                     var validStories = snapshot.data!.docs.toList();
 
                     Map<String, Map<String, dynamic>> uniqueStoryUsers = {};
@@ -185,8 +187,11 @@ class _HomeScreenState extends State<HomeScreen> {
                                       ),
                                       Container(
                                         padding: const EdgeInsets.all(2),
-                                        decoration: const BoxDecoration(
-                                          color: Colors.white,
+                                        decoration: BoxDecoration(
+                                          // 🌟 డార్క్ మోడ్ బట్టి ప్లస్ ఐకాన్ బ్యాక్‌గ్రౌండ్ మారుతుంది
+                                          color: isDark
+                                              ? Colors.black
+                                              : Colors.white,
                                           shape: BoxShape.circle,
                                         ),
                                         child: Container(
@@ -204,11 +209,15 @@ class _HomeScreenState extends State<HomeScreen> {
                                     ],
                                   ),
                                   const SizedBox(height: 4),
-                                  const Text(
-                                    "Your Story",
+                                  AutoScrollText(
+                                    text: "Your Story",
                                     style: TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w500,
+                                      // 🌟 డార్క్ మోడ్ లో అక్షరాలు తెలుపు రంగులోకి మారుతాయి
+                                      color: isDark
+                                          ? Colors.white
+                                          : Colors.black,
                                     ),
                                   ),
                                 ],
@@ -263,9 +272,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                   child: Container(
                                     padding: const EdgeInsets.all(2),
-                                    decoration: const BoxDecoration(
+                                    decoration: BoxDecoration(
                                       shape: BoxShape.circle,
-                                      color: Colors.white,
+                                      // 🌟 స్టోరీ రింగ్ లోపలి కలర్ డార్క్ మోడ్ బట్టి మారుతుంది
+                                      color: isDark
+                                          ? Colors.black
+                                          : Colors.white,
                                     ),
                                     child: SafeProfilePic(
                                       base64String: userStory['profilePic'],
@@ -278,11 +290,16 @@ class _HomeScreenState extends State<HomeScreen> {
                                   ),
                                 ),
                                 const SizedBox(height: 4),
-                                Text(
-                                  userStory['username'] ?? "User",
+                                AutoScrollText(
+                                  text: userStory['username'] ?? "User",
                                   style: TextStyle(
                                     fontSize: 11,
-                                    color: isSeen ? Colors.grey : Colors.black,
+                                    // 🌟 డార్క్ మోడ్ చెక్ చేసి రంగు ఇస్తున్నాం
+                                    color: isSeen
+                                        ? Colors.grey
+                                        : (isDark
+                                              ? Colors.white
+                                              : Colors.black),
                                     fontWeight: isSeen
                                         ? FontWeight.normal
                                         : FontWeight.bold,
@@ -334,6 +351,78 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           );
         },
+      ),
+    );
+  }
+}
+
+// 🌟 ఆటోమాటిక్ గా స్క్రోల్ అయ్యే మ్యాజిక్ విడ్జెట్
+class AutoScrollText extends StatefulWidget {
+  final String text;
+  final TextStyle style;
+  const AutoScrollText({super.key, required this.text, required this.style});
+
+  @override
+  State<AutoScrollText> createState() => _AutoScrollTextState();
+}
+
+class _AutoScrollTextState extends State<AutoScrollText> {
+  final ScrollController _scrollController = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _startScrolling();
+  }
+
+  void _startScrolling() async {
+    await Future.delayed(const Duration(seconds: 2));
+    if (!mounted) return;
+
+    while (mounted) {
+      if (_scrollController.hasClients) {
+        double maxScroll = _scrollController.position.maxScrollExtent;
+        if (maxScroll > 0) {
+          // కుడి వైపుకు స్క్రోల్
+          await _scrollController.animateTo(
+            maxScroll,
+            duration: const Duration(seconds: 2),
+            curve: Curves.linear,
+          );
+          await Future.delayed(const Duration(seconds: 1));
+          if (!mounted) break;
+          // మళ్లీ ఎడమ వైపుకు (స్టార్టింగ్ కి) స్క్రోల్
+          await _scrollController.animateTo(
+            0,
+            duration: const Duration(seconds: 2),
+            curve: Curves.linear,
+          );
+          await Future.delayed(const Duration(seconds: 1));
+        } else {
+          await Future.delayed(const Duration(seconds: 2));
+        }
+      } else {
+        await Future.delayed(const Duration(seconds: 1));
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 70, // కచ్చితంగా సర్కిల్ వెడల్పు దాటి వెళ్ళదు
+      child: SingleChildScrollView(
+        physics:
+            const NeverScrollableScrollPhysics(), // యూజర్ ఫింగర్ తో స్క్రోల్ చేయలేరు
+        controller: _scrollController,
+        scrollDirection: Axis.horizontal,
+        child: Text(widget.text, style: widget.style),
       ),
     );
   }
