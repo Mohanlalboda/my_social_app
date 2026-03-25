@@ -1,12 +1,9 @@
 // ignore_for_file: curly_braces_in_flow_control_structures, deprecated_member_use, unused_import
 
-import 'dart:io';
+import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'package:uuid/uuid.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 import '../widgets/safe_elements.dart';
 import '../widgets/post_widget.dart';
@@ -20,139 +17,20 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
-  bool _isUploading = false;
   final String currentUid = FirebaseAuth.instance.currentUser!.uid;
-  Future<void> _uploadStory(Map<String, dynamic> userData, bool isVideo) async {
-    final ImagePicker picker = ImagePicker();
 
-    if (isVideo) {
-      // 🌟 వీడియో కోసం
-      final XFile? file = await picker.pickVideo(source: ImageSource.gallery);
-      if (file != null) {
-        if (!mounted) return;
-        setState(() => _isUploading = true);
-        try {
-          String storyId = const Uuid().v4();
-          Reference ref = FirebaseStorage.instance
-              .ref()
-              .child('stories')
-              .child(currentUid)
-              .child(storyId);
-          UploadTask uploadTask = ref.putFile(File(file.path));
-          TaskSnapshot snapshot = await uploadTask;
-          String downloadUrl = await snapshot.ref.getDownloadURL();
-
-          await FirebaseFirestore.instance.collection('stories').add({
-            "uid": currentUid,
-            "ownerId": currentUid,
-            "username": userData['username'] ?? "User",
-            "profilePic": userData['profilePic'] ?? "",
-            "storyUrl": downloadUrl,
-            "type": "video",
-            "timestamp": FieldValue.serverTimestamp(),
-            "viewers": [],
-          });
-        } catch (e) {
-          debugPrint("Video Story Upload Error: $e");
-        } finally {
-          if (mounted) setState(() => _isUploading = false);
-        }
-      }
-    } else {
-      // 🌟 మల్టిపుల్ ఫోటోల కోసం (ఒకేసారి ఎన్ని ఫోటోలు అయినా సెలెక్ట్ చేయొచ్చు)
-      final List<XFile> files = await picker.pickMultiImage(imageQuality: 50);
-
-      if (files.isNotEmpty) {
-        if (!mounted) return;
-        setState(() => _isUploading = true);
-
-        try {
-          // లూప్ వాడి ప్రతి ఫోటోని వరుసగా అప్‌లోడ్ చేస్తాం
-          for (var file in files) {
-            String storyId = const Uuid().v4();
-            Reference ref = FirebaseStorage.instance
-                .ref()
-                .child('stories')
-                .child(currentUid)
-                .child(storyId);
-            UploadTask uploadTask = ref.putFile(File(file.path));
-            TaskSnapshot snapshot = await uploadTask;
-            String downloadUrl = await snapshot.ref.getDownloadURL();
-
-            await FirebaseFirestore.instance.collection('stories').add({
-              "uid": currentUid,
-              "ownerId": currentUid,
-              "username": userData['username'] ?? "User",
-              "profilePic": userData['profilePic'] ?? "",
-              "storyUrl": downloadUrl,
-              "type": "image",
-              "timestamp": FieldValue.serverTimestamp(),
-              "viewers": [],
-            });
-          }
-
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text("Stories Added Successfully! 🌟"),
-                backgroundColor: Colors.green,
-              ),
-            );
-          }
-        } catch (e) {
-          debugPrint("Story Upload Error: $e");
-        } finally {
-          if (mounted) setState(() => _isUploading = false);
-        }
-      }
-    }
-  }
-
-  void _showStoryPicker(Map<String, dynamic> userData) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (context) => SafeArea(
-        child: Wrap(
-          children: [
-            const Padding(
-              padding: EdgeInsets.all(15.0),
-              child: Text(
-                "Add to Story",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(Icons.photo_library, color: Colors.blue),
-              title: const Text("Photo Story"),
-              onTap: () {
-                Navigator.pop(context);
-                _uploadStory(userData, false);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.video_collection, color: Colors.pink),
-              title: const Text("Video Story"),
-              onTap: () {
-                Navigator.pop(context);
-                _uploadStory(userData, true);
-              },
-            ),
-          ],
-        ),
-      ),
-    );
+  // 🌟 Pull to Refresh కోసం ఫంక్షన్
+  Future<void> _refreshFeed() async {
+    // ఫైర్‌బేస్ ఆటోమేటిక్ గా రియల్-టైమ్ అప్‌డేట్ అవుతుంది, కాబట్టి జస్ట్ చిన్న డిలే ఇస్తున్నాం స్మూత్ ఫీల్ కోసం
+    await Future.delayed(const Duration(seconds: 1));
+    setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
-    // 🌟 ఫోన్ డార్క్ మోడ్ లో ఉందా లేదా అని చెక్ చేయడానికి లాజిక్
     bool isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      // 🌟 బ్యాక్‌గ్రౌండ్ కలర్ తీసేశాను, ఆటోమేటిక్ గా సిస్టమ్ థీమ్ (బ్లాక్/వైట్) తీసుకుంటుంది
       floatingActionButton: FloatingActionButton(
         backgroundColor: const Color(0xFFFD1D1D),
         onPressed: () => Navigator.push(
@@ -169,6 +47,7 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (context, userSnapshot) {
           if (!userSnapshot.hasData)
             return const Center(child: CircularProgressIndicator());
+
           var userData =
               userSnapshot.data!.data() as Map<String, dynamic>? ?? {};
           List feedUserIds = List.from(userData['following'] ?? [])
@@ -177,215 +56,261 @@ class _HomeScreenState extends State<HomeScreen> {
             const Duration(hours: 24),
           );
 
-          return Column(
-            children: [
-              // 🌟 స్టోరీ కార్డ్ సెక్షన్
-              SizedBox(
-                height: 110,
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('stories')
-                      .where('timestamp', isGreaterThanOrEqualTo: yesterday)
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    if (!snapshot.hasData) return const SizedBox();
+          return RefreshIndicator(
+            // 🌟 Pull to Refresh ఇక్కడే యాడ్ చేశాం!
+            onRefresh: _refreshFeed,
+            color: const Color(0xFFFD1D1D),
+            child: CustomScrollView(
+              physics:
+                  const AlwaysScrollableScrollPhysics(), // కిందకి లాగడానికి
+              slivers: [
+                SliverToBoxAdapter(
+                  child: Column(
+                    children: [
+                      // 🌟 స్టోరీస్ సెక్షన్
+                      SizedBox(
+                        height: 110,
+                        child: StreamBuilder<QuerySnapshot>(
+                          stream: FirebaseFirestore.instance
+                              .collection('stories')
+                              .where(
+                                'timestamp',
+                                isGreaterThanOrEqualTo: yesterday,
+                              )
+                              .snapshots(),
+                          builder: (context, snapshot) {
+                            if (!snapshot.hasData) return const SizedBox();
 
-                    var validStories = snapshot.data!.docs.toList();
+                            var validStories = snapshot.data!.docs.toList();
+                            Map<String, Map<String, dynamic>> uniqueStoryUsers =
+                                {};
+                            for (var doc in validStories) {
+                              var data = doc.data() as Map<String, dynamic>;
+                              data['storyId'] = doc.id;
+                              uniqueStoryUsers[data['ownerId']] = data;
+                            }
+                            var storyList = uniqueStoryUsers.values.toList();
 
-                    Map<String, Map<String, dynamic>> uniqueStoryUsers = {};
-                    for (var doc in validStories) {
-                      var data = doc.data() as Map<String, dynamic>;
-                      data['storyId'] = doc.id;
-                      uniqueStoryUsers[data['ownerId']] = data;
-                    }
-                    var storyList = uniqueStoryUsers.values.toList();
-
-                    return ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: storyList.length + 1,
-                      itemBuilder: (context, index) {
-                        if (index == 0) {
-                          return GestureDetector(
-                            onTap: () => _showStoryPicker(userData),
-                            child: Padding(
-                              padding: const EdgeInsets.all(8.0),
-                              child: Column(
-                                children: [
-                                  Stack(
-                                    alignment: Alignment.bottomRight,
-                                    children: [
-                                      SafeProfilePic(
-                                        base64String: userData['profilePic'],
-                                        radius: 32,
-                                        fallbackText:
-                                            userData['username'] != null
-                                            ? userData['username'][0]
-                                            : "U",
-                                      ),
-                                      Container(
-                                        padding: const EdgeInsets.all(2),
-                                        decoration: BoxDecoration(
-                                          // 🌟 డార్క్ మోడ్ బట్టి ప్లస్ ఐకాన్ బ్యాక్‌గ్రౌండ్ మారుతుంది
-                                          color: isDark
-                                              ? Colors.black
-                                              : Colors.white,
-                                          shape: BoxShape.circle,
+                            return ListView.builder(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: storyList.length + 1,
+                              itemBuilder: (context, index) {
+                                if (index == 0) {
+                                  return Padding(
+                                    padding: const EdgeInsets.all(8.0),
+                                    child: Column(
+                                      children: [
+                                        Stack(
+                                          alignment: Alignment.bottomRight,
+                                          children: [
+                                            SafeProfilePic(
+                                              base64String:
+                                                  userData['profilePic'],
+                                              radius: 32,
+                                              fallbackText:
+                                                  userData['username'] != null
+                                                  ? userData['username'][0]
+                                                  : "U",
+                                            ),
+                                            Container(
+                                              padding: const EdgeInsets.all(2),
+                                              decoration: BoxDecoration(
+                                                color: isDark
+                                                    ? Colors.black
+                                                    : Colors.white,
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: Container(
+                                                decoration: const BoxDecoration(
+                                                  color: Colors.blue,
+                                                  shape: BoxShape.circle,
+                                                ),
+                                                child: const Icon(
+                                                  Icons.add,
+                                                  color: Colors.white,
+                                                  size: 16,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
                                         ),
-                                        child: Container(
-                                          decoration: const BoxDecoration(
-                                            color: Colors.blue,
+                                        const SizedBox(height: 4),
+                                        AutoScrollText(
+                                          text: "Your Story",
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w500,
+                                            color: isDark
+                                                ? Colors.white
+                                                : Colors.black,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                }
+
+                                var userStory = storyList[index - 1];
+                                List viewers = userStory['viewers'] ?? [];
+                                bool isSeen = viewers.contains(currentUid);
+
+                                return GestureDetector(
+                                  onTap: () async {
+                                    await FirebaseFirestore.instance
+                                        .collection('stories')
+                                        .doc(userStory['storyId'])
+                                        .update({
+                                          'viewers': FieldValue.arrayUnion([
+                                            currentUid,
+                                          ]),
+                                        });
+                                    if (!context.mounted) return;
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) =>
+                                            StoryScreen(user: userStory),
+                                      ),
+                                    );
+                                  },
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(8.0),
+                                    child: Column(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(3),
+                                          decoration: BoxDecoration(
                                             shape: BoxShape.circle,
+                                            gradient: isSeen
+                                                ? const LinearGradient(
+                                                    colors: [
+                                                      Colors.grey,
+                                                      Colors.grey,
+                                                    ],
+                                                  )
+                                                : const LinearGradient(
+                                                    colors: [
+                                                      Color(0xFF833AB4),
+                                                      Color(0xFFFD1D1D),
+                                                      Color(0xFFFCAF45),
+                                                    ],
+                                                  ),
                                           ),
-                                          child: const Icon(
-                                            Icons.add,
-                                            color: Colors.white,
-                                            size: 16,
+                                          child: Container(
+                                            padding: const EdgeInsets.all(2),
+                                            decoration: BoxDecoration(
+                                              shape: BoxShape.circle,
+                                              color: isDark
+                                                  ? Colors.black
+                                                  : Colors.white,
+                                            ),
+                                            child: SafeProfilePic(
+                                              base64String:
+                                                  userStory['profilePic'],
+                                              radius: 28,
+                                              fallbackText:
+                                                  userStory['username'] != null
+                                                  ? userStory['username'][0]
+                                                  : "U",
+                                            ),
                                           ),
                                         ),
-                                      ),
-                                    ],
-                                  ),
-                                  const SizedBox(height: 4),
-                                  AutoScrollText(
-                                    text: "Your Story",
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.w500,
-                                      // 🌟 డార్క్ మోడ్ లో అక్షరాలు తెలుపు రంగులోకి మారుతాయి
-                                      color: isDark
-                                          ? Colors.white
-                                          : Colors.black,
+                                        const SizedBox(height: 4),
+                                        AutoScrollText(
+                                          text: userStory['username'] ?? "User",
+                                          style: TextStyle(
+                                            fontSize: 11,
+                                            color: isSeen
+                                                ? Colors.grey
+                                                : (isDark
+                                                      ? Colors.white
+                                                      : Colors.black),
+                                            fontWeight: isSeen
+                                                ? FontWeight.normal
+                                                : FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                                   ),
-                                ],
-                              ),
-                            ),
-                          );
-                        }
-
-                        var userStory = storyList[index - 1];
-                        List viewers = userStory['viewers'] ?? [];
-                        bool isSeen = viewers.contains(currentUid);
-
-                        return GestureDetector(
-                          onTap: () async {
-                            await FirebaseFirestore.instance
-                                .collection('stories')
-                                .doc(userStory['storyId'])
-                                .update({
-                                  'viewers': FieldValue.arrayUnion([
-                                    currentUid,
-                                  ]),
-                                });
-
-                            if (!context.mounted) return;
-
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) => StoryScreen(user: userStory),
-                              ),
+                                );
+                              },
                             );
                           },
+                        ),
+                      ),
+                      const Divider(height: 1),
+                    ],
+                  ),
+                ),
+                // 🌟 పోస్ట్ ఫీడ్ సెక్షన్
+                StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('posts')
+                      .orderBy('timestamp', descending: true)
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData)
+                      return const SliverToBoxAdapter(
+                        child: Center(
                           child: Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: Column(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(3),
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    gradient: isSeen
-                                        ? const LinearGradient(
-                                            colors: [Colors.grey, Colors.grey],
-                                          )
-                                        : const LinearGradient(
-                                            colors: [
-                                              Color(0xFF833AB4),
-                                              Color(0xFFFD1D1D),
-                                              Color(0xFFFCAF45),
-                                            ],
-                                          ),
-                                  ),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(2),
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      // 🌟 స్టోరీ రింగ్ లోపలి కలర్ డార్క్ మోడ్ బట్టి మారుతుంది
-                                      color: isDark
-                                          ? Colors.black
-                                          : Colors.white,
-                                    ),
-                                    child: SafeProfilePic(
-                                      base64String: userStory['profilePic'],
-                                      radius: 28,
-                                      fallbackText:
-                                          userStory['username'] != null
-                                          ? userStory['username'][0]
-                                          : "U",
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                AutoScrollText(
-                                  text: userStory['username'] ?? "User",
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    // 🌟 డార్క్ మోడ్ చెక్ చేసి రంగు ఇస్తున్నాం
-                                    color: isSeen
-                                        ? Colors.grey
-                                        : (isDark
-                                              ? Colors.white
-                                              : Colors.black),
-                                    fontWeight: isSeen
-                                        ? FontWeight.normal
-                                        : FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
+                            padding: EdgeInsets.all(20.0),
+                            child: CircularProgressIndicator(),
                           ),
-                        );
-                      },
+                        ),
+                      );
+
+                    // 1. Privacy Logic (పబ్లిక్ అయితే అందరికీ, ప్రైవేట్ అయితే ఫాలోవర్స్ కి)
+                    var validPosts = snapshot.data!.docs.where((doc) {
+                      var data = doc.data() as Map<String, dynamic>;
+                      bool isPublic = data['isPublic'] ?? true;
+                      bool isFollowing = feedUserIds.contains(data['ownerId']);
+                      return isPublic || isFollowing;
+                    }).toList();
+
+                    // 2. Seen / Unseen Logic
+                    List<DocumentSnapshot> unseenPosts = [];
+                    List<DocumentSnapshot> seenPosts = [];
+
+                    for (var doc in validPosts) {
+                      var data = doc.data() as Map<String, dynamic>;
+                      List viewedBy = data['viewedBy'] ?? [];
+                      if (viewedBy.contains(currentUid)) {
+                        seenPosts.add(doc);
+                      } else {
+                        unseenPosts.add(doc);
+                      }
+                    }
+
+                    // 3. చూడని పోస్ట్‌లను రాండమ్ గా మిక్స్ చేస్తున్నాం
+                    unseenPosts.shuffle();
+
+                    // 4. ముందు చూడనివి, ఆ తర్వాత చూసినవి (చూసినవి లేటెస్ట్ టైమ్ బట్టి)
+                    var finalFeed = [...unseenPosts, ...seenPosts];
+
+                    if (finalFeed.isEmpty) {
+                      return const SliverToBoxAdapter(
+                        child: Center(
+                          child: Padding(
+                            padding: EdgeInsets.all(50.0),
+                            child: Text("No posts yet!"),
+                          ),
+                        ),
+                      );
+                    }
+
+                    return SliverList(
+                      delegate: SliverChildBuilderDelegate((context, index) {
+                        var post =
+                            finalFeed[index].data() as Map<String, dynamic>;
+                        post['postId'] = finalFeed[index].id;
+                        return PostWidget(post: post);
+                      }, childCount: finalFeed.length),
                     );
                   },
                 ),
-              ),
-              const Divider(height: 1),
-              // పోస్ట్ ఫీడ్
-              Expanded(
-                child: _isUploading
-                    ? const Center(child: Text("Uploading Story... ⏳"))
-                    : StreamBuilder<QuerySnapshot>(
-                        stream: FirebaseFirestore.instance
-                            .collection('posts')
-                            .orderBy('timestamp', descending: true)
-                            .snapshots(),
-                        builder: (context, snapshot) {
-                          if (!snapshot.hasData)
-                            return const Center(
-                              child: CircularProgressIndicator(),
-                            );
-                          var visiblePosts = snapshot.data!.docs.where((doc) {
-                            var data = doc.data() as Map<String, dynamic>;
-                            return feedUserIds.contains(data['ownerId']) ||
-                                (data['isPublic'] ?? true);
-                          }).toList();
-
-                          return ListView.builder(
-                            itemCount: visiblePosts.length,
-                            itemBuilder: (context, index) {
-                              var post =
-                                  visiblePosts[index].data()
-                                      as Map<String, dynamic>;
-                              post['postId'] = visiblePosts[index].id;
-                              return PostWidget(post: post);
-                            },
-                          );
-                        },
-                      ),
-              ),
-            ],
+              ],
+            ),
           );
         },
       ),
@@ -420,7 +345,6 @@ class _AutoScrollTextState extends State<AutoScrollText> {
       if (_scrollController.hasClients) {
         double maxScroll = _scrollController.position.maxScrollExtent;
         if (maxScroll > 0) {
-          // కుడి వైపుకు స్క్రోల్
           await _scrollController.animateTo(
             maxScroll,
             duration: const Duration(seconds: 2),
@@ -428,7 +352,6 @@ class _AutoScrollTextState extends State<AutoScrollText> {
           );
           await Future.delayed(const Duration(seconds: 1));
           if (!mounted) break;
-          // మళ్లీ ఎడమ వైపుకు (స్టార్టింగ్ కి) స్క్రోల్
           await _scrollController.animateTo(
             0,
             duration: const Duration(seconds: 2),
@@ -453,10 +376,9 @@ class _AutoScrollTextState extends State<AutoScrollText> {
   @override
   Widget build(BuildContext context) {
     return SizedBox(
-      width: 70, // కచ్చితంగా సర్కిల్ వెడల్పు దాటి వెళ్ళదు
+      width: 70,
       child: SingleChildScrollView(
-        physics:
-            const NeverScrollableScrollPhysics(), // యూజర్ ఫింగర్ తో స్క్రోల్ చేయలేరు
+        physics: const NeverScrollableScrollPhysics(),
         controller: _scrollController,
         scrollDirection: Axis.horizontal,
         child: Text(widget.text, style: widget.style),

@@ -28,9 +28,12 @@ class _SearchScreenState extends State<SearchScreen> {
           .get();
       for (var doc in postsSnap.docs) {
         var data = doc.data();
-        data['item_type'] = 'post';
-        data['id'] = doc.id;
-        allContent.add(data);
+        // 🌟 పబ్లిక్ పోస్ట్‌లు మాత్రమే ఎక్స్‌ప్లోర్ లో రావాలి కదా?
+        if (data['isPublic'] == true || data['isPublic'] == null) {
+          data['item_type'] = 'post';
+          data['id'] = doc.id;
+          allContent.add(data);
+        }
       }
 
       var reelsSnap = await FirebaseFirestore.instance
@@ -39,9 +42,11 @@ class _SearchScreenState extends State<SearchScreen> {
           .get();
       for (var doc in reelsSnap.docs) {
         var data = doc.data();
-        data['item_type'] = 'reel';
-        data['id'] = doc.id;
-        allContent.add(data);
+        if (data['isPublic'] == true || data['isPublic'] == null) {
+          data['item_type'] = 'reel';
+          data['id'] = doc.id;
+          allContent.add(data);
+        }
       }
 
       allContent.shuffle();
@@ -59,14 +64,19 @@ class _SearchScreenState extends State<SearchScreen> {
 
   @override
   Widget build(BuildContext context) {
+    bool isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
+      backgroundColor: isDark ? Colors.black : Colors.white,
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: isDark ? Colors.black : Colors.white,
         elevation: 0,
         title: TextFormField(
           controller: searchController,
+          style: TextStyle(color: isDark ? Colors.white : Colors.black),
           decoration: InputDecoration(
             hintText: 'Search for a user...',
+            hintStyle: const TextStyle(color: Colors.grey),
             prefixIcon: const Icon(Icons.search, color: Colors.grey),
             suffixIcon: isShowUsers
                 ? IconButton(
@@ -78,7 +88,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   )
                 : null,
             filled: true,
-            fillColor: Colors.grey.shade200,
+            fillColor: isDark ? Colors.grey[900] : Colors.grey.shade200,
             contentPadding: const EdgeInsets.all(8),
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(10),
@@ -98,6 +108,8 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   Widget _buildUserSearchStream() {
+    bool isDark = Theme.of(context).brightness == Brightness.dark;
+
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('users')
@@ -125,24 +137,25 @@ class _SearchScreenState extends State<SearchScreen> {
             String username = userData['username'] ?? 'User';
 
             return ListTile(
-              leading: CircleAvatar(
-                backgroundColor: Colors.blueAccent,
-                child: Text(
-                  username.isNotEmpty ? username[0].toUpperCase() : 'U',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
+              leading: SafeProfilePic(
+                base64String: userData['profilePic'],
+                radius: 20,
+                fallbackText: username.isNotEmpty
+                    ? username[0].toUpperCase()
+                    : 'U',
               ),
               title: Text(
                 username,
-                style: const TextStyle(fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : Colors.black,
+                ),
               ),
               subtitle: Text(
                 userData['bio'] ?? '',
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.grey),
               ),
               onTap: () => Navigator.push(
                 context,
@@ -191,6 +204,17 @@ class _SearchScreenState extends State<SearchScreen> {
             var item = exploreData[index];
             bool isReel = item['item_type'] == 'reel';
 
+            // 🌟 FIX: ఇక్కడ List లోపల ఉన్న మొదటి ఫోటోని తీసుకునే లాజిక్ రాశాను
+            String thumbnail = "";
+            if (!isReel) {
+              if (item['postData'] is List &&
+                  (item['postData'] as List).isNotEmpty) {
+                thumbnail = item['postData'][0].toString();
+              } else {
+                thumbnail = item['postData']?.toString() ?? "";
+              }
+            }
+
             return GestureDetector(
               onTap: () {
                 if (isReel) {
@@ -219,7 +243,19 @@ class _SearchScreenState extends State<SearchScreen> {
                 children: [
                   isReel
                       ? Container(color: Colors.black87)
-                      : SafeImage(base64String: item['postData']),
+                      : (thumbnail.startsWith('http')
+                            ? Image.network(
+                                thumbnail,
+                                fit: BoxFit.cover,
+                                errorBuilder: (c, e, s) => Container(
+                                  color: Colors.grey[300],
+                                  child: const Icon(Icons.broken_image),
+                                ),
+                              )
+                            : SafeImage(
+                                base64String: thumbnail,
+                              )), // పాత Base64 సపోర్ట్ కోసం
+
                   if (isReel)
                     const Positioned(
                       top: 5,
@@ -230,6 +266,21 @@ class _SearchScreenState extends State<SearchScreen> {
                         size: 20,
                       ),
                     ),
+
+                  // 🌟 మల్టిపుల్ ఇమేజెస్ ఉన్నాయని గుర్తు కోసం కార్నర్ లో చిన్న ఐకాన్
+                  if (!isReel &&
+                      item['postData'] is List &&
+                      (item['postData'] as List).length > 1)
+                    const Positioned(
+                      top: 5,
+                      right: 5,
+                      child: Icon(
+                        Icons.layers, // మల్టిపుల్ ఫోటోల ఐకాన్
+                        color: Colors.white,
+                        size: 18,
+                      ),
+                    ),
+
                   if (isReel)
                     const Center(
                       child: Icon(

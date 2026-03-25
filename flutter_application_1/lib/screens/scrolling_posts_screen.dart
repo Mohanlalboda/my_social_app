@@ -32,8 +32,12 @@ class _ScrollingPostsScreenState extends State<ScrollingPostsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // 🌟 ఫోన్ డార్క్ మోడ్ థీమ్ వాల్యూ ఇక్కడ తెచ్చుకుంటున్నాం
+    bool isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
-      backgroundColor: Colors.black,
+      // 🌟 డార్క్ మోడ్ అయితే బ్లాక్, లైట్ మోడ్ అయితే వైట్
+      backgroundColor: isDark ? Colors.black : Colors.white,
       body: PageView.builder(
         scrollDirection: Axis.vertical,
         controller: _pageController,

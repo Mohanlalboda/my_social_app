@@ -26,12 +26,14 @@ class _PostWidgetState extends State<PostWidget> {
   bool isLiked = false;
   bool isSaved = false;
   int likeCount = 0;
+  int _currentImageIndex = 0;
   final String currentUid = FirebaseAuth.instance.currentUser!.uid;
 
   @override
   void initState() {
     super.initState();
     _syncData();
+    _markPostAsSeen(); // 🌟 పోస్ట్ స్క్రీన్ మీదకి రాగానే "చూసేశాడు" అని మార్క్ చేస్తాం
   }
 
   void _syncData() {
@@ -41,6 +43,21 @@ class _PostWidgetState extends State<PostWidget> {
 
     List savedBy = widget.post['savedBy'] is List ? widget.post['savedBy'] : [];
     isSaved = savedBy.contains(currentUid);
+  }
+
+  // 🌟 Seen Logic
+  void _markPostAsSeen() async {
+    List viewedBy = widget.post['viewedBy'] ?? [];
+    if (!viewedBy.contains(currentUid)) {
+      try {
+        await FirebaseFirestore.instance
+            .collection('posts')
+            .doc(widget.post['postId'])
+            .set({
+              'viewedBy': FieldValue.arrayUnion([currentUid]),
+            }, SetOptions(merge: true));
+      } catch (e) {}
+    }
   }
 
   void _handleLike() async {
@@ -80,24 +97,41 @@ class _PostWidgetState extends State<PostWidget> {
 
   void _shareExternally() async {
     try {
-      String base64String = widget.post['postData']?.toString() ?? "";
-      if (base64String.isEmpty) return;
-      if (base64String.contains(','))
-        base64String = base64String.split(',').last;
-      final bytes = base64Decode(base64String.trim());
-      final tempDir = await getTemporaryDirectory();
-      final file = File(
-        '${tempDir.path}/post_${DateTime.now().millisecondsSinceEpoch}.png',
-      );
-      await file.writeAsBytes(bytes);
-      if (await file.exists()) {
-        final xFile = XFile(file.path, mimeType: 'image/png');
+      String imageData = "";
+      if (widget.post['postData'] is List &&
+          (widget.post['postData'] as List).isNotEmpty) {
+        imageData = widget.post['postData'][0].toString();
+      } else {
+        imageData = widget.post['postData']?.toString() ?? "";
+      }
+
+      if (imageData.isEmpty) return;
+
+      if (imageData.startsWith('http')) {
         await SharePlus.instance.share(
           ShareParams(
-            text: widget.post['caption'] ?? "Check out this post on MyBanjara!",
-            files: [xFile],
+            text:
+                "${widget.post['caption'] ?? 'Check out this post on MyBanjara!'}\n\n$imageData",
           ),
         );
+      } else {
+        if (imageData.contains(',')) imageData = imageData.split(',').last;
+        final bytes = base64Decode(imageData.trim());
+        final tempDir = await getTemporaryDirectory();
+        final file = File(
+          '${tempDir.path}/post_${DateTime.now().millisecondsSinceEpoch}.png',
+        );
+        await file.writeAsBytes(bytes);
+        if (await file.exists()) {
+          final xFile = XFile(file.path, mimeType: 'image/png');
+          await SharePlus.instance.share(
+            ShareParams(
+              text:
+                  widget.post['caption'] ?? "Check out this post on MyBanjara!",
+              files: [xFile],
+            ),
+          );
+        }
       }
     } catch (e) {
       debugPrint("External share error: $e");
@@ -119,7 +153,6 @@ class _PostWidgetState extends State<PostWidget> {
       String roomId = currentUid.hashCode <= receiverId.hashCode
           ? "${currentUid}_$receiverId"
           : "${receiverId}_$currentUid";
-
       await FirebaseFirestore.instance.collection('chatRooms').doc(roomId).set({
         'users': [currentUid, receiverId],
         'lastMessage': "Shared a post",
@@ -193,7 +226,6 @@ class _PostWidgetState extends State<PostWidget> {
                     var users = snapshot.data!.docs
                         .where((doc) => doc.id != currentUid)
                         .toList();
-
                     return ListView.builder(
                       itemCount: users.length,
                       itemBuilder: (context, index) {
@@ -301,18 +333,23 @@ class _PostWidgetState extends State<PostWidget> {
 
   @override
   Widget build(BuildContext context) {
-    // 🌟 ఫోన్ డార్క్ మోడ్ థీమ్ వాల్యూ ఇక్కడ తెచ్చుకుంటున్నాం
     bool isDark = Theme.of(context).brightness == Brightness.dark;
-
     String username = widget.post['username'] ?? "User";
     String timeStr = widget.post['timestamp'] != null
         ? timeago.format((widget.post['timestamp'] as Timestamp).toDate())
         : "Just now";
 
+    List<String> images = [];
+    if (widget.post['postData'] is List) {
+      images = List<String>.from(widget.post['postData']);
+    } else if (widget.post['postData'] is String &&
+        widget.post['postData'].toString().isNotEmpty) {
+      images = [widget.post['postData']];
+    }
+
     return Card(
       margin: const EdgeInsets.symmetric(vertical: 5),
       elevation: 0,
-      // 🌟 కార్డ్ కలర్ ఆటోమేటిక్ గా మారేలా సెట్ చేశాం
       color: isDark ? Colors.black : Colors.white,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -354,16 +391,100 @@ class _PostWidgetState extends State<PostWidget> {
                   )
                 : null,
           ),
-          GestureDetector(
-            onDoubleTap: _handleLike,
-            child: SafeImage(base64String: widget.post['postData']),
-          ),
+
+          if (images.isNotEmpty)
+            Stack(
+              alignment: Alignment.topRight,
+              children: [
+                Container(
+                  color: isDark
+                      ? Colors.grey[900]
+                      : Colors.grey[100], // 🌟 ఫోటో వెనకాల బ్యాక్‌గ్రౌండ్ కలర్
+                  child: AspectRatio(
+                    aspectRatio: 1.0,
+                    child: PageView.builder(
+                      onPageChanged: (index) =>
+                          setState(() => _currentImageIndex = index),
+                      itemCount: images.length,
+                      itemBuilder: (context, index) {
+                        String imgData = images[index];
+                        return GestureDetector(
+                          onDoubleTap: _handleLike,
+                          child: imgData.startsWith('http')
+                              ? Image.network(
+                                  imgData,
+                                  // 🌟 FIX: ఇక్కడ BoxFit.contain వాడాం (జూమ్ అవ్వదు, కట్ అవ్వదు)
+                                  fit: BoxFit.contain,
+                                  errorBuilder: (c, e, s) => const Center(
+                                    child: Icon(
+                                      Icons.broken_image,
+                                      size: 50,
+                                      color: Colors.grey,
+                                    ),
+                                  ),
+                                  loadingBuilder: (c, child, progress) =>
+                                      progress == null
+                                      ? child
+                                      : const Center(
+                                          child: CircularProgressIndicator(),
+                                        ),
+                                )
+                              : SafeImage(base64String: imgData),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                if (images.length > 1)
+                  Positioned(
+                    top: 15,
+                    right: 15,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.7),
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      child: Text(
+                        "${_currentImageIndex + 1}/${images.length}",
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+
+          if (images.length > 1)
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(
+                images.length,
+                (index) => Container(
+                  margin: const EdgeInsets.only(top: 8, left: 3, right: 3),
+                  width: _currentImageIndex == index ? 8 : 6,
+                  height: _currentImageIndex == index ? 8 : 6,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: _currentImageIndex == index
+                        ? const Color(0xFFFD1D1D)
+                        : Colors.grey.withValues(alpha: 0.5),
+                  ),
+                ),
+              ),
+            ),
+
           Row(
             children: [
               IconButton(
                 icon: Icon(
                   isLiked ? Icons.favorite : Icons.favorite_border,
-                  // 🌟 ఐకాన్ కలర్ థీమ్ బట్టి అడ్జస్ట్ అవుతుంది
                   color: isLiked
                       ? Colors.red
                       : (isDark ? Colors.white : Colors.black),
@@ -381,7 +502,6 @@ class _PostWidgetState extends State<PostWidget> {
                   return Row(
                     children: [
                       IconButton(
-                        // 🌟 కామెంట్ ఐకాన్
                         icon: Icon(
                           Icons.comment_outlined,
                           color: isDark ? Colors.white : Colors.black,
@@ -404,7 +524,6 @@ class _PostWidgetState extends State<PostWidget> {
                 },
               ),
               IconButton(
-                // 🌟 షేర్ ఐకాన్
                 icon: Icon(
                   Icons.send_outlined,
                   color: isDark ? Colors.white : Colors.black,
@@ -415,7 +534,6 @@ class _PostWidgetState extends State<PostWidget> {
               IconButton(
                 icon: Icon(
                   isSaved ? Icons.bookmark : Icons.bookmark_border,
-                  // 🌟 సేవ్ ఐకాన్
                   color: isDark ? Colors.white : Colors.black,
                 ),
                 onPressed: _handleSave,
@@ -450,7 +568,6 @@ class _PostWidgetState extends State<PostWidget> {
               padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 5),
               child: Text(
                 widget.post['caption'].toString(),
-                // 🌟 కాప్షన్ టెక్స్ట్ కలర్
                 style: TextStyle(
                   color: isDark ? Colors.white : Colors.black,
                   fontSize: 14,

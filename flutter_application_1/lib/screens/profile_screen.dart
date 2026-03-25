@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+
 import 'single_reel_screen.dart';
 import 'scrolling_posts_screen.dart';
 import '../widgets/safe_elements.dart';
@@ -460,18 +461,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
             mainAxisSpacing: 2,
           ),
           itemCount: posts.length,
-          itemBuilder: (context, i) => GestureDetector(
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) =>
-                    ScrollingPostsScreen(postIds: postIds, initialIndex: i),
+          itemBuilder: (context, i) {
+            // 🌟 కొత్త URL ఇమేజ్ కి, పాత Base64 ఇమేజ్ కి సపోర్ట్ చేసే లాజిక్
+            var postData = posts[i].data() as Map<String, dynamic>;
+            String thumbnail = "";
+
+            if (postData['postData'] is List &&
+                (postData['postData'] as List).isNotEmpty) {
+              thumbnail = postData['postData'][0].toString();
+            } else {
+              thumbnail = postData['postData']?.toString() ?? "";
+            }
+
+            return GestureDetector(
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) =>
+                      ScrollingPostsScreen(postIds: postIds, initialIndex: i),
+                ),
               ),
-            ),
-            child: SafeImage(
-              base64String: (posts[i].data() as Map)['postData'],
-            ),
-          ),
+              child: thumbnail.startsWith('http')
+                  ? Image.network(
+                      thumbnail,
+                      fit: BoxFit.cover,
+                      errorBuilder: (c, e, s) => Container(
+                        color: Colors.grey[300],
+                        child: const Icon(Icons.broken_image),
+                      ),
+                    )
+                  : SafeImage(base64String: thumbnail),
+            );
+          },
         );
       },
     );
