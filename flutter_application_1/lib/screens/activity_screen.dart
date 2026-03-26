@@ -19,21 +19,69 @@ class ActivityScreen extends StatefulWidget {
 class _ActivityScreenState extends State<ActivityScreen> {
   final String currentUid = FirebaseAuth.instance.currentUser!.uid;
 
+  // 🌟 అన్నీ ఒకేసారి డిలీట్ చేయడానికి లాజిక్
+  void _clearAllNotifications() async {
+    bool? confirm = await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Clear All?"),
+        content: const Text(
+          "Are you sure you want to delete all notifications?",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              "Delete All",
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      var snapshot = await FirebaseFirestore.instance
+          .collection('notifications')
+          .where('receiverId', isEqualTo: currentUid)
+          .get();
+
+      for (var doc in snapshot.docs) {
+        await doc.reference.delete();
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("All notifications cleared! ✅")),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
-    // 🌟 మీ main.dart థీమ్ ని డైరెక్ట్ గా తెచ్చుకుంటున్నాం
     bool isDark = Theme.of(context).brightness == Brightness.dark;
     Color textColor =
         Theme.of(context).textTheme.bodyLarge?.color ??
         (isDark ? Colors.white : Colors.black);
 
     return Scaffold(
-      // 🌟 ఇక్కడ రంగులు తీసేశాను! ఇది ఆటోమేటిక్ గా మీ main.dart నుండి కలర్ తీసుకుంటుంది.
       appBar: AppBar(
         title: const Text(
           "Activity",
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
+        // 🌟 పైన "Clear All" ఐకాన్ యాడ్ చేశాం
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_sweep, color: Colors.redAccent),
+            onPressed: _clearAllNotifications,
+          ),
+        ],
       ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
@@ -102,90 +150,106 @@ class _ActivityScreenState extends State<ActivityScreen> {
                     actionText = "interacted with you.";
                   }
 
-                  return InkWell(
-                    onTap: () {
-                      if (type == 'follow') {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) =>
-                                OtherUserProfileScreen(uid: senderId),
-                          ),
-                        );
-                      } else if (type == 'like' || type == 'comment') {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => SinglePostScreen(postId: postId),
-                          ),
-                        );
-                      }
+                  // 🌟 ఇక్కడే మ్యాజిక్! Swipe to Delete (Dismissible) వాడాం
+                  return Dismissible(
+                    key: Key(notifications[index].id),
+                    direction: DismissDirection.endToStart,
+                    background: Container(
+                      color: Colors.red,
+                      alignment: Alignment.centerRight,
+                      padding: const EdgeInsets.only(right: 20),
+                      child: const Icon(Icons.delete, color: Colors.white),
+                    ),
+                    onDismissed: (direction) {
+                      // 🌟 పక్కకి స్వైప్ చేయగానే డేటాబేస్ నుండి డిలీట్ అవుతుంది
+                      FirebaseFirestore.instance
+                          .collection('notifications')
+                          .doc(notifications[index].id)
+                          .delete();
                     },
-                    child: Container(
-                      // 🌟 చదివిన వాటికి బ్యాక్ గ్రౌండ్ నార్మల్ గా, చదవని వాటికి హైలైట్ గా ఉంటుంది
-                      color: isRead
-                          ? Colors.transparent
-                          : (isDark
-                                ? Colors.white10
-                                : Colors.blue.withValues(alpha: 0.1)),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 15,
-                        vertical: 12,
-                      ),
-                      child: Row(
-                        children: [
-                          GestureDetector(
-                            onTap: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    OtherUserProfileScreen(uid: senderId),
-                              ),
+                    child: InkWell(
+                      onTap: () {
+                        if (type == 'follow') {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  OtherUserProfileScreen(uid: senderId),
                             ),
-                            child: SafeProfilePic(
-                              base64String: profilePic,
-                              radius: 22,
-                              fallbackText: username.isNotEmpty
-                                  ? username[0]
-                                  : 'U',
+                          );
+                        } else if (type == 'like' || type == 'comment') {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => SinglePostScreen(postId: postId),
                             ),
-                          ),
-                          const SizedBox(width: 15),
-                          Expanded(
-                            child: RichText(
-                              text: TextSpan(
-                                style: TextStyle(
-                                  color:
-                                      textColor, // 🌟 ఆటోమేటిక్ టెక్స్ట్ కలర్
-                                  fontSize: 14,
-                                  fontFamily: 'Poppins',
+                          );
+                        }
+                      },
+                      child: Container(
+                        color: isRead
+                            ? Colors.transparent
+                            : (isDark
+                                  ? Colors.white10
+                                  : Colors.blue.withValues(alpha: 0.1)),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 15,
+                          vertical: 12,
+                        ),
+                        child: Row(
+                          children: [
+                            GestureDetector(
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      OtherUserProfileScreen(uid: senderId),
                                 ),
-                                children: [
-                                  TextSpan(
-                                    text: "$username ",
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  TextSpan(text: actionText),
-                                  TextSpan(
-                                    text: "  $timeAgo",
-                                    style: const TextStyle(
-                                      color: Colors.grey,
-                                      fontSize: 12,
-                                    ),
-                                  ),
-                                ],
+                              ),
+                              child: SafeProfilePic(
+                                base64String: profilePic,
+                                radius: 22,
+                                fallbackText: username.isNotEmpty
+                                    ? username[0]
+                                    : 'U',
                               ),
                             ),
-                          ),
-                          if (type == 'like' || type == 'comment')
-                            const Icon(
-                              Icons.chevron_right,
-                              color: Colors.grey,
-                              size: 20,
+                            const SizedBox(width: 15),
+                            Expanded(
+                              child: RichText(
+                                text: TextSpan(
+                                  style: TextStyle(
+                                    color: textColor,
+                                    fontSize: 14,
+                                    fontFamily: 'Poppins',
+                                  ),
+                                  children: [
+                                    TextSpan(
+                                      text: "$username ",
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                    TextSpan(text: actionText),
+                                    TextSpan(
+                                      text: "  $timeAgo",
+                                      style: const TextStyle(
+                                        color: Colors.grey,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             ),
-                        ],
+                            if (type == 'like' || type == 'comment')
+                              const Icon(
+                                Icons.chevron_right,
+                                color: Colors.grey,
+                                size: 20,
+                              ),
+                          ],
+                        ),
                       ),
                     ),
                   );

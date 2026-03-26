@@ -8,7 +8,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:cached_network_image/cached_network_image.dart'; // 🚀 TRICK 1 STEP 3: Cached Image Import
+import 'package:cached_network_image/cached_network_image.dart';
 
 import 'safe_elements.dart';
 import '../screens/comments_screen.dart';
@@ -60,6 +60,7 @@ class _PostWidgetState extends State<PostWidget> {
     }
   }
 
+  // 🌟 ఇక్కడే మనం నోటిఫికేషన్ లాజిక్ యాడ్ చేశాం!
   void _handleLike() async {
     setState(() {
       isLiked = !isLiked;
@@ -69,14 +70,48 @@ class _PostWidgetState extends State<PostWidget> {
       var ref = FirebaseFirestore.instance
           .collection('posts')
           .doc(widget.post['postId']);
-      isLiked
-          ? await ref.update({
-              'likes': FieldValue.arrayUnion([currentUid]),
-            })
-          : await ref.update({
-              'likes': FieldValue.arrayRemove([currentUid]),
-            });
-    } catch (e) {}
+
+      if (isLiked) {
+        await ref.update({
+          'likes': FieldValue.arrayUnion([currentUid]),
+        });
+
+        // 🌟 నోటిఫికేషన్ పంపడం
+        String postOwnerId = widget.post['ownerId'];
+        if (currentUid != postOwnerId) {
+          await FirebaseFirestore.instance.collection('notifications').add({
+            'receiverId': postOwnerId,
+            'senderId': currentUid,
+            'type': 'like',
+            'postId': widget.post['postId'],
+            'timestamp': FieldValue.serverTimestamp(),
+            'isRead': false,
+          });
+        }
+      } else {
+        await ref.update({
+          'likes': FieldValue.arrayRemove([currentUid]),
+        });
+
+        // 🌟 అన్‌లైక్ చేస్తే పాత నోటిఫికేషన్ డిలీట్ చేయడం
+        String postOwnerId = widget.post['ownerId'];
+        if (currentUid != postOwnerId) {
+          var notifs = await FirebaseFirestore.instance
+              .collection('notifications')
+              .where('receiverId', isEqualTo: postOwnerId)
+              .where('senderId', isEqualTo: currentUid)
+              .where('type', isEqualTo: 'like')
+              .where('postId', isEqualTo: widget.post['postId'])
+              .get();
+
+          for (var doc in notifs.docs) {
+            await doc.reference.delete();
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Like Error: $e");
+    }
   }
 
   void _handleSave() async {
@@ -408,7 +443,6 @@ class _PostWidgetState extends State<PostWidget> {
                           onDoubleTap: _handleLike,
                           child: imgData.startsWith('http')
                               ? CachedNetworkImage(
-                                  // 🚀 TRICK 1 STEP 3: క్యాష్ అయ్యే ఇమేజ్ విడ్జెట్
                                   imageUrl: imgData,
                                   fit: BoxFit.contain,
                                   placeholder: (context, url) => const Center(
@@ -500,11 +534,15 @@ class _PostWidgetState extends State<PostWidget> {
                           Icons.comment_outlined,
                           color: isDark ? Colors.white : Colors.black,
                         ),
+                        // 🌟 కామెంట్ ఐకాన్ క్లిక్ చేసినప్పుడు మనం postOwnerId ని కూడా పంపుతున్నాం
                         onPressed: () => Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (_) =>
-                                CommentsScreen(postId: widget.post['postId']),
+                            builder: (_) => CommentsScreen(
+                              postId: widget.post['postId'],
+                              postOwnerId:
+                                  widget.post['ownerId'], // ఇది ముఖ్యం!
+                            ),
                           ),
                         ),
                       ),

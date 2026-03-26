@@ -7,9 +7,15 @@ import 'package:timeago/timeago.dart' as timeago;
 
 class CommentsScreen extends StatefulWidget {
   final String postId;
-  final bool isReel;
+  final String? postOwnerId;
+  final bool isReel; // 🌟 ఇందాక మనం మిస్ చేసిన వేరియబుల్ ఇదే!
 
-  const CommentsScreen({super.key, required this.postId, this.isReel = false});
+  const CommentsScreen({
+    super.key,
+    required this.postId,
+    this.postOwnerId,
+    this.isReel = false, // 🌟 డీఫాల్ట్ గా false పెడుతున్నాం
+  });
 
   @override
   State<CommentsScreen> createState() => _CommentsScreenState();
