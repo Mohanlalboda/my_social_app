@@ -9,7 +9,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:uuid/uuid.dart';
-
+import 'package:firebase_messaging/firebase_messaging.dart'; // 🌟 నోటిఫికేషన్ టోకెన్ కోసం
 import '../widgets/safe_elements.dart';
 import '../widgets/post_widget.dart';
 import 'story_screen.dart';
@@ -32,6 +32,36 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    updateFCMToken(); // 🌟 యాప్ ఆన్ అవ్వగానే టోకెన్ అప్‌డేట్ అవుతుంది!
+  }
+
+  // 🌟 టోకెన్ సేవ్ చేసే అసలైన ఫంక్షన్
+  // 🌟 టోకెన్ సేవ్ చేసే అసలైన ఫంక్షన్ (With Permissions)
+  Future<void> updateFCMToken() async {
+    try {
+      // 1. ముందు నోటిఫికేషన్ పర్మిషన్ అడుగుదాం
+      NotificationSettings settings = await FirebaseMessaging.instance
+          .requestPermission(alert: true, badge: true, sound: true);
+
+      // 2. యూజర్ "Allow" చేస్తేనే టోకెన్ తీసుకుందాం
+      if (settings.authorizationStatus == AuthorizationStatus.authorized) {
+        String? token = await FirebaseMessaging.instance.getToken();
+        String? uid = FirebaseAuth.instance.currentUser?.uid;
+
+        if (token != null && uid != null) {
+          await FirebaseFirestore.instance.collection('users').doc(uid).set({
+            'fcmToken': token, // 🔔 ఇదే అసలైన కీ!
+          }, SetOptions(merge: true));
+
+          // 🌟 టెర్మినల్ లో ప్రింట్ అవుతుంది చూడండి
+          debugPrint("✅ SUPER BOSS! FCM Token Updated: $token");
+        }
+      } else {
+        debugPrint("❌ యూజర్ పర్మిషన్ ఇవ్వలేదు బాస్!");
+      }
+    } catch (e) {
+      debugPrint("❌ Token Error: $e");
+    }
   }
 
   // 🌟 రిలోడ్ ఫంక్షన్
