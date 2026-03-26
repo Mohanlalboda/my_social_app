@@ -11,6 +11,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cached_video_player_plus/cached_video_player_plus.dart';
 import 'package:video_player/video_player.dart';
 
+import '../services/fcm_sender_service.dart'; // 🌟 నోటిఫికేషన్ సర్వీస్
 import '../widgets/safe_elements.dart';
 
 class ChatScreen extends StatefulWidget {
@@ -43,6 +44,7 @@ class _ChatScreenState extends State<ChatScreen> {
         : "${widget.receiverId}_$currentUid";
   }
 
+  // 🌟 టెక్స్ట్ మెసేజ్ పంపడం + నోటిఫికేషన్
   void _sendMessage() async {
     if (_msgController.text.trim().isEmpty) return;
     String msg = _msgController.text.trim();
@@ -51,6 +53,7 @@ class _ChatScreenState extends State<ChatScreen> {
     FirebaseFirestore.instance.collection('chatRooms').doc(roomId).set({
       'typing_$currentUid': false,
     }, SetOptions(merge: true));
+
     var timestamp = FieldValue.serverTimestamp();
 
     await FirebaseFirestore.instance
@@ -66,16 +69,85 @@ class _ChatScreenState extends State<ChatScreen> {
           'timestamp': timestamp,
         });
 
-    // 🌟 FIX: ప్రతిసారి users లిస్ట్ ని పక్కాగా సేవ్ చేస్తున్నాం & కౌంట్ ని ఆటోమేటిక్ గా పెంచుతున్నాం
     await FirebaseFirestore.instance.collection('chatRooms').doc(roomId).set({
       'users': [currentUid, widget.receiverId],
       'lastMessage': msg,
       'timestamp': timestamp,
-      'unread_${widget.receiverId}': FieldValue.increment(
-        1,
-      ), // ఇది కౌంట్ ని ఆటోమేటిక్ గా +1 చేస్తుంది
+      'unread_${widget.receiverId}': FieldValue.increment(1),
     }, SetOptions(merge: true));
+
+    // 🔔 నోటిఫికేషన్ పంపడం
+    _sendPushNotification(msg);
   }
+
+  // 🌟 మీడియా (Photo/Video) అప్‌లోడ్ లాజిక్ + నోటిఫికేషన్
+  Future<void> _uploadFileLogic(File file, String type) async {
+    try {
+      String ext = type == 'video' ? 'mp4' : 'jpg';
+      String fileName = "${DateTime.now().millisecondsSinceEpoch}.$ext";
+      Reference ref = FirebaseStorage.instance.ref().child(
+        'chat_media/$roomId/$fileName',
+      );
+
+      UploadTask uploadTask = ref.putFile(file);
+      TaskSnapshot snap = await uploadTask;
+      String fileUrl = await snap.ref.getDownloadURL();
+
+      var timestamp = FieldValue.serverTimestamp();
+      String msgText = type == 'image' ? '📷 Photo' : '🎥 Video';
+
+      await FirebaseFirestore.instance
+          .collection('chatRooms')
+          .doc(roomId)
+          .collection('messages')
+          .add({
+            'senderId': currentUid,
+            'receiverId': widget.receiverId,
+            'text': msgText,
+            'mediaUrl': fileUrl,
+            'type': type,
+            'isRead': false,
+            'timestamp': timestamp,
+          });
+
+      await FirebaseFirestore.instance.collection('chatRooms').doc(roomId).set({
+        'users': [currentUid, widget.receiverId],
+        'lastMessage': msgText,
+        'timestamp': timestamp,
+        'unread_${widget.receiverId}': FieldValue.increment(1),
+      }, SetOptions(merge: true));
+
+      // 🔔 మీడియా నోటిఫికేషన్ పంపడం
+      _sendPushNotification(msgText);
+    } catch (e) {
+      if (mounted)
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text("Failed: $e")));
+    }
+  }
+
+  // 🌟 పుష్ నోటిఫికేషన్ సెండ్ చేసే కామన్ ఫంక్షన్
+  void _sendPushNotification(String content) async {
+    try {
+      var senderSnap = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUid)
+          .get();
+      String senderName =
+          (senderSnap.data() as Map<String, dynamic>)['username'] ?? 'Someone';
+
+      await FcmSenderService.sendNotification(
+        receiverId: widget.receiverId,
+        title: senderName,
+        body: content,
+      );
+    } catch (e) {
+      debugPrint("Notification Error: $e");
+    }
+  }
+
+  // --- మిగతా పికింగ్ లాజిక్ (మార్పు లేదు) ---
 
   Future<void> _pickSingleMedia(ImageSource source, bool isVideo) async {
     final picker = ImagePicker();
@@ -110,50 +182,6 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  Future<void> _uploadFileLogic(File file, String type) async {
-    try {
-      String ext = type == 'video' ? 'mp4' : 'jpg';
-      String fileName = "${DateTime.now().millisecondsSinceEpoch}.$ext";
-      Reference ref = FirebaseStorage.instance.ref().child(
-        'chat_media/$roomId/$fileName',
-      );
-
-      UploadTask uploadTask = ref.putFile(file);
-      TaskSnapshot snap = await uploadTask;
-      String fileUrl = await snap.ref.getDownloadURL();
-
-      var timestamp = FieldValue.serverTimestamp();
-      String msgText = type == 'image' ? '📷 Photo' : '🎥 Video';
-
-      await FirebaseFirestore.instance
-          .collection('chatRooms')
-          .doc(roomId)
-          .collection('messages')
-          .add({
-            'senderId': currentUid,
-            'receiverId': widget.receiverId,
-            'text': msgText,
-            'mediaUrl': fileUrl,
-            'type': type,
-            'isRead': false,
-            'timestamp': timestamp,
-          });
-
-      // 🌟 FIX: ఇక్కడ కూడా users లిస్ట్ అండ్ కౌంట్ పెంచడం యాడ్ చేశాం
-      await FirebaseFirestore.instance.collection('chatRooms').doc(roomId).set({
-        'users': [currentUid, widget.receiverId],
-        'lastMessage': msgText,
-        'timestamp': timestamp,
-        'unread_${widget.receiverId}': FieldValue.increment(1),
-      }, SetOptions(merge: true));
-    } catch (e) {
-      if (mounted)
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text("Failed: $e")));
-    }
-  }
-
   void _showAttachmentOptions() {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
     showModalBottomSheet(
@@ -173,7 +201,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 child: Icon(Icons.photo_library, color: Colors.white),
               ),
               title: Text(
-                "Gallery Photos (Select Multiple)",
+                "Gallery Photos",
                 style: TextStyle(color: isDark ? Colors.white : Colors.black),
               ),
               onTap: () {
@@ -279,7 +307,10 @@ class _ChatScreenState extends State<ChatScreen> {
                               false;
                         return Text(
                           isOnline ? "Active now" : "Offline",
-                          style: const TextStyle(color: Colors.white70, fontSize: 12),
+                          style: const TextStyle(
+                            color: Colors.white70,
+                            fontSize: 12,
+                          ),
                         );
                       },
                     );
@@ -520,7 +551,6 @@ class _ChatScreenState extends State<ChatScreen> {
                         horizontal: 10,
                         vertical: 10,
                       ),
-
                       prefixIcon: IconButton(
                         icon: const Icon(
                           Icons.emoji_emotions_outlined,
@@ -534,7 +564,6 @@ class _ChatScreenState extends State<ChatScreen> {
                           );
                         },
                       ),
-
                       suffixIcon: Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
@@ -576,6 +605,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
+// FullScreenImageViewer & FullScreenVideoViewer క్లాసులు కూడా ఇక్కడే ఉంచండి... (గతంలో ఇచ్చినట్లే)
 class FullScreenImageViewer extends StatelessWidget {
   final String imageUrl;
   const FullScreenImageViewer({super.key, required this.imageUrl});
@@ -595,8 +625,6 @@ class FullScreenImageViewer extends StatelessWidget {
             imageUrl: imageUrl,
             placeholder: (context, url) =>
                 const CircularProgressIndicator(color: Colors.white),
-            errorWidget: (context, url, error) =>
-                const Icon(Icons.broken_image, color: Colors.white, size: 50),
           ),
         ),
       ),
@@ -607,7 +635,6 @@ class FullScreenImageViewer extends StatelessWidget {
 class FullScreenVideoViewer extends StatefulWidget {
   final String videoUrl;
   const FullScreenVideoViewer({super.key, required this.videoUrl});
-
   @override
   State<FullScreenVideoViewer> createState() => _FullScreenVideoViewerState();
 }
@@ -615,7 +642,6 @@ class FullScreenVideoViewer extends StatefulWidget {
 class _FullScreenVideoViewerState extends State<FullScreenVideoViewer> {
   late CachedVideoPlayerPlus _player;
   bool _isInitialized = false;
-
   @override
   void initState() {
     super.initState();
