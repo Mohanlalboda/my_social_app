@@ -135,7 +135,7 @@ class _MainNavigationState extends State<MainNavigation> {
                 ),
               ),
               actions: [
-                // 🌟 డే/నైట్ మోడ్ బటన్ ఇక్కడ నుండి తీసేశాను!
+                // 🌟 యాక్టివిటీ (లైక్స్) నోటిఫికేషన్స్ ఐకాన్
                 StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
                       .collection('notifications')
@@ -165,36 +165,25 @@ class _MainNavigationState extends State<MainNavigation> {
                   },
                 ),
                 const SizedBox(width: 5),
-                StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('messages')
-                      .where('receiverId', isEqualTo: currentUser?.uid)
-                      .where('isRead', isEqualTo: false)
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    int unreadCount = snapshot.hasData
-                        ? snapshot.data!.docs.length
-                        : 0;
-                    return Padding(
-                      padding: const EdgeInsets.only(right: 10),
-                      child: Badge(
-                        isLabelVisible: unreadCount > 0,
-                        label: Text(unreadCount.toString()),
-                        child: IconButton(
-                          icon: Icon(
-                            Icons.send_outlined,
-                            color: isDarkMode ? Colors.white : Colors.black,
-                          ),
-                          onPressed: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const InboxScreen(),
-                            ),
-                          ),
+
+                // 🌟 ఇక్కడ మనం మెసేజ్ ఐకాన్ కి 'UnreadChatBadge' ని లింక్ చేశాం!
+                Padding(
+                  padding: const EdgeInsets.only(right: 15),
+                  child: UnreadChatBadge(
+                    child: IconButton(
+                      icon: Icon(
+                        Icons.send_outlined,
+                        color: isDarkMode ? Colors.white : Colors.black,
+                        size: 26,
+                      ),
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const InboxScreen(),
                         ),
                       ),
-                    );
-                  },
+                    ),
+                  ),
                 ),
               ],
             ),
@@ -218,6 +207,63 @@ class _MainNavigationState extends State<MainNavigation> {
           ),
         ],
       ),
+    );
+  }
+}
+
+// 🌟 మెసేజెస్ కౌంట్ చూపించే కిరాక్ విడ్జెట్
+class UnreadChatBadge extends StatelessWidget {
+  final Widget child;
+  const UnreadChatBadge({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    final currentUid = FirebaseAuth.instance.currentUser?.uid;
+    if (currentUid == null) return child;
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('chatRooms')
+          .where('users', arrayContains: currentUid)
+          .snapshots(),
+      builder: (context, snapshot) {
+        int totalUnread = 0;
+        if (snapshot.hasData) {
+          for (var doc in snapshot.data!.docs) {
+            var data = doc.data() as Map<String, dynamic>;
+            // మనకు వచ్చిన అన్‌రీడ్ మెసేజెస్ ని కౌంట్ చేస్తున్నాం
+            totalUnread += (data['unread_$currentUid'] as int?) ?? 0;
+          }
+        }
+
+        return Stack(
+          clipBehavior: Clip.none,
+          alignment: Alignment.center,
+          children: [
+            child, // ఇది మీ నార్మల్ సెండ్ ఐకాన్
+            if (totalUnread > 0)
+              Positioned(
+                right: 0,
+                top: 5, // ఐకాన్ కి కరెక్ట్ గా సెట్ అయ్యేలా పొజిషన్ మార్చాను
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(
+                    color: Colors.red,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Text(
+                    totalUnread > 9 ? '9+' : totalUnread.toString(),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }

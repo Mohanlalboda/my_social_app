@@ -32,6 +32,7 @@ class _OtherUserProfileScreenState extends State<OtherUserProfileScreen> {
           return const Scaffold(
             body: Center(child: CircularProgressIndicator()),
           );
+        // 🌟 యూజర్ డేటా ని 'u' అనే పేరుతో తీసుకుంటున్నాం
         var u = s.data!.data() as Map<String, dynamic>? ?? {};
 
         List followers = u['followers'] ?? [];
@@ -172,10 +173,13 @@ class _OtherUserProfileScreenState extends State<OtherUserProfileScreen> {
                       MaterialPageRoute(
                         builder: (context) => ChatScreen(
                           receiverId: widget.uid,
-                          receiverName: u['username'] ?? "User",
+                          // 🌟 ఇక్కడ 'userData' బదులు పైన వాడిన 'u' వాడుతున్నాం
+                          receiverName: u['username'] ?? 'User',
+                          receiverPic: u['profilePic'] ?? '',
                         ),
                       ),
                     ),
+                    // 🌟 బటన్ కి పేరు పెట్టాం!
                     child: const Text("Message"),
                   ),
                 ],
@@ -215,14 +219,12 @@ class _OtherUserProfileScreenState extends State<OtherUserProfileScreen> {
                             var postData = postMap['postData'];
                             String thumbnail = "";
 
-                            // 🌟 ఫోటోలు List లాగా ఉంటే అందులో మొదటి ఫోటోను మాత్రమే గ్రిడ్ లో చూపిస్తాం
                             if (postData is List && postData.isNotEmpty) {
                               thumbnail = postData[0].toString();
                             } else {
                               thumbnail = postData?.toString() ?? "";
                             }
 
-                            // 🌟 అది URL అయితే Cached Image వాడతాం, పాత Base64 అయితే SafeImage వాడతాం
                             return thumbnail.startsWith('http')
                                 ? CachedNetworkImage(
                                     imageUrl: thumbnail,

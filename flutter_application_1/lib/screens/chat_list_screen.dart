@@ -6,18 +6,19 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:timeago/timeago.dart' as timeago;
 
 import '../widgets/safe_elements.dart';
-import 'chat_screen.dart';
+import 'chat_screen.dart'; // కింద మనం చేయబోయే స్క్రీన్
 
-class InboxScreen extends StatefulWidget {
-  const InboxScreen({super.key});
+class ChatListScreen extends StatefulWidget {
+  const ChatListScreen({super.key});
 
   @override
-  State<InboxScreen> createState() => _InboxScreenState();
+  State<ChatListScreen> createState() => _ChatListScreenState();
 }
 
-class _InboxScreenState extends State<InboxScreen> {
+class _ChatListScreenState extends State<ChatListScreen> {
   final String currentUid = FirebaseAuth.instance.currentUser!.uid;
 
+  // 🌟 కొత్త చాట్ కోసం ఫాలోవర్స్ ని చూపించే ఫంక్షన్ (WhatsApp Style Contacts)
   void _showFollowersToChat() async {
     showModalBottomSheet(
       context: context,
@@ -93,9 +94,8 @@ class _InboxScreenState extends State<InboxScreen> {
                                 MaterialPageRoute(
                                   builder: (_) => ChatScreen(
                                     receiverId: following[index],
-                                    receiverName:
-                                        userData['username'] ?? 'User',
-                                    receiverPic: userData['profilePic'] ?? '',
+                                    receiverName: userData['username'],
+                                    receiverPic: userData['profilePic'],
                                   ),
                                 ),
                               );
@@ -127,15 +127,18 @@ class _InboxScreenState extends State<InboxScreen> {
         ),
         backgroundColor: isDark ? Colors.black : Colors.white,
       ),
+      // 🌟 కొత్త చాట్ బటన్
       floatingActionButton: FloatingActionButton(
         onPressed: _showFollowersToChat,
-        backgroundColor: const Color(0xFF007AFF),
+        backgroundColor: const Color(0xFFFD1D1D),
         child: const Icon(Icons.message, color: Colors.white),
       ),
+      // 🌟 లేటెస్ట్ మెసేజెస్ పైన వచ్చేలా StreamBuilder
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('chatRooms')
             .where('users', arrayContains: currentUid)
+            .orderBy('timestamp', descending: true) // లేటెస్ట్ వి పైన వస్తాయి
             .snapshots(),
         builder: (context, snapshot) {
           if (snapshot.hasError)
@@ -143,8 +146,7 @@ class _InboxScreenState extends State<InboxScreen> {
           if (snapshot.connectionState == ConnectionState.waiting)
             return const Center(child: CircularProgressIndicator());
 
-          var chatRooms = snapshot.data!.docs.toList();
-
+          var chatRooms = snapshot.data!.docs;
           if (chatRooms.isEmpty)
             return const Center(
               child: Text(
@@ -153,33 +155,14 @@ class _InboxScreenState extends State<InboxScreen> {
               ),
             );
 
-          // సార్టింగ్ (లేటెస్ట్ మెసేజెస్ పైన రావడానికి)
-          chatRooms.sort((a, b) {
-            var aData = a.data() as Map<String, dynamic>;
-            var bData = b.data() as Map<String, dynamic>;
-            Timestamp? t1 = aData['timestamp'] as Timestamp?;
-            Timestamp? t2 = bData['timestamp'] as Timestamp?;
-            if (t1 == null && t2 == null) return 0;
-            if (t1 == null) return 1;
-            if (t2 == null) return -1;
-            return t2.compareTo(t1);
-          });
-
           return ListView.builder(
             itemCount: chatRooms.length,
             itemBuilder: (context, index) {
               var roomData = chatRooms[index].data() as Map<String, dynamic>;
               List users = roomData['users'];
+              String otherUserId = users.firstWhere((id) => id != currentUid);
 
-              // 🌟 ఎదుటివాళ్ళ ఐడీని సేఫ్ గా తీసుకోవడం
-              String otherUserId = users.firstWhere(
-                (id) => id != currentUid,
-                orElse: () => "",
-              );
-              if (otherUserId.isEmpty) return const SizedBox();
-
-              int unreadCount = roomData['unread_$currentUid'] ?? 0;
-              bool hasUnread = unreadCount > 0;
+              bool hasUnread = roomData['hasUnread_$currentUid'] ?? false;
               String lastMsg = roomData['lastMessage'] ?? '';
               DateTime time =
                   (roomData['timestamp'] as Timestamp?)?.toDate() ??
@@ -191,43 +174,7 @@ class _InboxScreenState extends State<InboxScreen> {
                     .doc(otherUserId)
                     .get(),
                 builder: (context, userSnap) {
-                  // 🌟 FIX: స్లో గా లోడ్ అవుతున్నప్పుడు బ్లాంక్ గా కాకుండా "Loading..." అని చూపిస్తాం!
-                  if (userSnap.connectionState == ConnectionState.waiting) {
-                    return ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: Colors.grey[300],
-                        radius: 25,
-                      ),
-                      title: Container(
-                        height: 15,
-                        width: 100,
-                        color: Colors.grey[300],
-                      ),
-                      subtitle: Container(
-                        height: 10,
-                        width: 200,
-                        color: Colors.grey[200],
-                      ),
-                    );
-                  }
-
-                  // 🌟 FIX: ఫాలో అవ్వని వాళ్ళ ప్రొఫైల్ లేకపోయినా డీఫాల్ట్ గా చూపించడానికి
-                  if (!userSnap.hasData || !userSnap.data!.exists) {
-                    return ListTile(
-                      leading: const CircleAvatar(
-                        backgroundColor: Colors.grey,
-                        radius: 25,
-                        child: Icon(Icons.person, color: Colors.white),
-                      ),
-                      title: const Text(
-                        "Unknown User",
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      subtitle: Text(lastMsg, maxLines: 1),
-                      onTap: () {},
-                    );
-                  }
-
+                  if (!userSnap.hasData) return const SizedBox();
                   var userData =
                       userSnap.data!.data() as Map<String, dynamic>? ?? {};
                   String name = userData['username'] ?? 'User';
@@ -246,6 +193,7 @@ class _InboxScreenState extends State<InboxScreen> {
                           radius: 25,
                           fallbackText: name.isNotEmpty ? name[0] : 'U',
                         ),
+                        // 🌟 ఆన్‌లైన్ గ్రీన్ డాట్
                         if (isOnline)
                           Positioned(
                             bottom: 0,
@@ -309,28 +257,21 @@ class _InboxScreenState extends State<InboxScreen> {
                         const SizedBox(height: 5),
                         if (hasUnread)
                           Container(
-                            padding: const EdgeInsets.all(5),
+                            width: 10,
+                            height: 10,
                             decoration: const BoxDecoration(
-                              color: Colors.red,
+                              color: Colors.blue,
                               shape: BoxShape.circle,
-                            ),
-                            child: Text(
-                              unreadCount > 9 ? "9+" : unreadCount.toString(),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                              ),
                             ),
                           ),
                       ],
                     ),
                     onTap: () {
+                      // అన్‌రీడ్ మార్క్ తీసేయడం
                       FirebaseFirestore.instance
                           .collection('chatRooms')
                           .doc(chatRooms[index].id)
-                          .update({'unread_$currentUid': 0});
-
+                          .update({'hasUnread_$currentUid': false});
                       Navigator.push(
                         context,
                         MaterialPageRoute(
