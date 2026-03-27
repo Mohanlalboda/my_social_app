@@ -2,14 +2,14 @@
 
 import 'dart:io';
 import 'dart:async';
-import 'dart:math'; // 🌟 TRICK: రాండమ్ గా షఫుల్ చేయడానికి ఇది యాడ్ చేశాం
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:uuid/uuid.dart';
-import 'package:firebase_messaging/firebase_messaging.dart'; // 🌟 నోటిఫికేషన్ టోకెన్ కోసం
+import 'package:firebase_messaging/firebase_messaging.dart';
 import '../widgets/safe_elements.dart';
 import '../widgets/post_widget.dart';
 import 'story_screen.dart';
@@ -25,35 +25,28 @@ class _HomeScreenState extends State<HomeScreen> {
   final String currentUid = FirebaseAuth.instance.currentUser!.uid;
   bool _isUploading = false;
   Key _refreshKey = UniqueKey();
-
-  // 🌟 TRICK: పోస్ట్‌లను రాండమ్ గా కలపడానికి వాడే సీడ్
   int _randomSeed = DateTime.now().millisecondsSinceEpoch;
 
   @override
   void initState() {
     super.initState();
-    updateFCMToken(); // 🌟 యాప్ ఆన్ అవ్వగానే టోకెన్ అప్‌డేట్ అవుతుంది!
+    updateFCMToken();
   }
 
-  // 🌟 టోకెన్ సేవ్ చేసే అసలైన ఫంక్షన్
-  // 🌟 టోకెన్ సేవ్ చేసే అసలైన ఫంక్షన్ (With Permissions)
   Future<void> updateFCMToken() async {
     try {
-      // 1. ముందు నోటిఫికేషన్ పర్మిషన్ అడుగుదాం
       NotificationSettings settings = await FirebaseMessaging.instance
           .requestPermission(alert: true, badge: true, sound: true);
 
-      // 2. యూజర్ "Allow" చేస్తేనే టోకెన్ తీసుకుందాం
       if (settings.authorizationStatus == AuthorizationStatus.authorized) {
         String? token = await FirebaseMessaging.instance.getToken();
         String? uid = FirebaseAuth.instance.currentUser?.uid;
 
         if (token != null && uid != null) {
           await FirebaseFirestore.instance.collection('users').doc(uid).set({
-            'fcmToken': token, // 🔔 ఇదే అసలైన కీ!
+            'fcmToken': token,
           }, SetOptions(merge: true));
 
-          // 🌟 టెర్మినల్ లో ప్రింట్ అవుతుంది చూడండి
           debugPrint("✅ SUPER BOSS! FCM Token Updated: $token");
         }
       } else {
@@ -64,19 +57,16 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // 🌟 రిలోడ్ ఫంక్షన్
   Future<void> _refreshFeed() async {
     await Future.delayed(const Duration(milliseconds: 800));
     if (mounted) {
       setState(() {
         _refreshKey = UniqueKey();
-        // 🌟 రిఫ్రెష్ చేసిన ప్రతిసారీ సీడ్ మారుతుంది, కాబట్టి పోస్ట్‌లు కొత్తగా షఫుల్ అవుతాయి!
         _randomSeed = DateTime.now().millisecondsSinceEpoch;
       });
     }
   }
 
-  // 🌟 స్టోరీ అప్‌లోడ్ లాజిక్
   Future<void> _uploadStory(Map<String, dynamic> userData, bool isVideo) async {
     final ImagePicker picker = ImagePicker();
     if (isVideo) {
@@ -390,12 +380,15 @@ class _HomeScreenState extends State<HomeScreen> {
                       onRefresh: _refreshFeed,
                       color: const Color(0xFFFD1D1D),
                       child: StreamBuilder<QuerySnapshot>(
+                        // 🌟 మ్యాజిక్ ఇక్కడే జరిగింది!
                         stream: FirebaseFirestore.instance
                             .collection('posts')
+                            .where(
+                              'type',
+                              isEqualTo: 'image',
+                            ) // 👈 రీల్స్ హోమ్ ఫీడ్ లోకి రాకుండా ఆపేశాం!
                             .orderBy('timestamp', descending: true)
-                            .limit(
-                              30,
-                            ) // 🌟 ఎక్కువ పోస్ట్‌లు తెచ్చుకుని షఫుల్ చేద్దాం
+                            .limit(30)
                             .snapshots(),
                         builder: (context, snapshot) {
                           if (snapshot.hasError) {
@@ -438,7 +431,6 @@ class _HomeScreenState extends State<HomeScreen> {
                             return isPublic || isFollowing;
                           }).toList();
 
-                          // 🌟 TRICK: ఇక్కడ పోస్ట్‌లన్నింటినీ రాండమ్ గా తారుమారు చేస్తున్నాం!
                           allPosts.shuffle(Random(_randomSeed));
 
                           if (allPosts.isEmpty) {

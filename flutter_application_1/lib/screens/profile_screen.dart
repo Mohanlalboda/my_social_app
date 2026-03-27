@@ -5,7 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_storage/firebase_storage.dart'; // 🌟 స్టోరేజ్ ఇంపోర్ట్
+import 'package:firebase_storage/firebase_storage.dart';
 
 import 'single_reel_screen.dart';
 import 'scrolling_posts_screen.dart';
@@ -65,16 +65,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // 🌟 ప్రొఫైల్ పిక్ అప్‌డేట్ (Firebase Storage & HD Quality)
   Future<void> _updateProfilePic() async {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(
       source: ImageSource.gallery,
-      imageQuality: 85, // HD క్వాలిటీ
+      imageQuality: 85,
     );
 
     if (image != null) {
-      // 🌟 Async Gap వార్నింగ్ రాకుండా ఈ కండిషన్ యాడ్ చేశాం!
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -309,10 +307,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 Expanded(
                   child: TabBarView(
                     children: [
+                      // 🌟 మ్యాజిక్ ఇక్కడే జరిగింది (type = image మాత్రమే వస్తుంది)
                       _buildPostGrid(
                         FirebaseFirestore.instance
                             .collection('posts')
                             .where('ownerId', isEqualTo: uid)
+                            .where(
+                              'type',
+                              isEqualTo: 'image',
+                            ) // 👈 బ్రోకెన్ రీల్స్ రాకుండా కాపాడే లైన్
                             .snapshots(),
                       ),
                       _buildReelsGrid(

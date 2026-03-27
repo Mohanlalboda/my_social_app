@@ -1,8 +1,9 @@
-// ignore_for_file: curly_braces_in_flow_control_structures
+// ignore_for_file: curly_braces_in_flow_control_structures, use_build_context_synchronously
 
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // 🌟 ఓనర్ ఎవరో తెలుసుకోవడానికి
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:cached_network_image/cached_network_image.dart';
 import '../widgets/safe_elements.dart';
@@ -20,7 +21,9 @@ class _StoryScreenState extends State<StoryScreen>
   VideoPlayerController? _videoController;
   late AnimationController _animationController;
   int _currentIndex = 0;
-  List<DocumentSnapshot> _userStories = [];
+
+  // 🌟 డాక్యుమెంట్ స్నాప్‌షాట్స్ కాకుండా డైరెక్ట్ మ్యాప్ వాడుతున్నాం, ఎడిట్ చేయడానికి ఈజీగా ఉంటుంది
+  List<Map<String, dynamic>> _userStories = [];
   bool _isLoading = true;
 
   @override
@@ -36,7 +39,10 @@ class _StoryScreenState extends State<StoryScreen>
   }
 
   void _loadAllStoriesOfUser() async {
-    String ownerId = widget.user['ownerId']?.toString() ?? "";
+    String ownerId =
+        widget.user['uid']?.toString() ??
+        widget.user['ownerId']?.toString() ??
+        "";
     DateTime yesterday = DateTime.now().subtract(const Duration(hours: 24));
 
     var snapshot = await FirebaseFirestore.instance
@@ -49,13 +55,16 @@ class _StoryScreenState extends State<StoryScreen>
     if (snapshot.docs.isNotEmpty) {
       if (mounted) {
         setState(() {
-          _userStories = snapshot.docs;
+          // 🌟 స్టోరీ ఐడీ (storyId) ని కూడా డేటాలోకి కలుపుతున్నాం
+          _userStories = snapshot.docs.map((doc) {
+            var data = doc.data();
+            data['storyId'] = doc.id;
+            return data;
+          }).toList();
           _isLoading = false;
         });
 
-        // 🌟 TRICK: ఇక్కడ మనం ఇమేజెస్ ని ముందే లోడ్ చేస్తున్నాం!
         _preloadImages();
-
         _showStory();
       }
     } else {
@@ -63,12 +72,9 @@ class _StoryScreenState extends State<StoryScreen>
     }
   }
 
-  // 🌟 బ్యాక్‌గ్రౌండ్ లో ఫోటోలు ఫాస్ట్ గా డౌన్‌లోడ్ చేసి పెట్టుకునే ఫంక్షన్
   void _preloadImages() {
-    for (var doc in _userStories) {
-      var data = doc.data() as Map<String, dynamic>;
+    for (var data in _userStories) {
       if (data['type'] != 'video') {
-        // వీడియోస్ కాకుండా కేవలం ఇమేజెస్ ని మాత్రమే
         String url = data['storyUrl']?.toString() ?? "";
         if (url.isNotEmpty && url.startsWith('http')) {
           precacheImage(CachedNetworkImageProvider(url), context);
@@ -84,8 +90,7 @@ class _StoryScreenState extends State<StoryScreen>
     _videoController = null;
 
     if (_userStories.isEmpty) return;
-    var currentStory =
-        _userStories[_currentIndex].data() as Map<String, dynamic>;
+    var currentStory = _userStories[_currentIndex];
     String storyUrl = currentStory['storyUrl']?.toString() ?? "";
 
     if (currentStory['type'] == 'video' && storyUrl.isNotEmpty) {
@@ -105,8 +110,7 @@ class _StoryScreenState extends State<StoryScreen>
               return null;
             });
     } else {
-      // ఫోటో అయితే 60 సెకన్ల పాటు టైమ్ బార్ నిండుతుంది!
-      _animationController.duration = const Duration(seconds: 60);
+      _animationController.duration = const Duration(seconds: 30);
       _animationController.forward();
     }
     if (mounted) setState(() {});
@@ -123,6 +127,107 @@ class _StoryScreenState extends State<StoryScreen>
     }
   }
 
+  // 🌟 ఎడిట్ ఫంక్షన్
+  void _editStory(String storyId, String currentCaption) {
+    // డైలాగ్ వచ్చినప్పుడు స్టోరీ ఆగిపోవాలి
+    _animationController.stop();
+    _videoController?.pause();
+
+    TextEditingController captionCtrl = TextEditingController(
+      text: currentCaption,
+    );
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Edit Caption"),
+        content: TextField(
+          controller: captionCtrl,
+          decoration: const InputDecoration(hintText: "Enter new caption"),
+          maxLines: 2,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _animationController.forward(); // మళ్ళీ ప్లే
+              _videoController?.play();
+            },
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              await FirebaseFirestore.instance
+                  .collection('stories')
+                  .doc(storyId)
+                  .update({'caption': captionCtrl.text.trim()});
+              if (mounted) {
+                setState(() {
+                  _userStories[_currentIndex]['caption'] = captionCtrl.text
+                      .trim();
+                });
+                Navigator.pop(ctx);
+                _animationController.forward(); // మళ్ళీ ప్లే
+                _videoController?.play();
+              }
+            },
+            child: const Text("Save"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 🌟 డిలీట్ ఫంక్షన్
+  void _deleteStory(String storyId) {
+    _animationController.stop();
+    _videoController?.pause();
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Delete Story?"),
+        content: const Text("Are you sure you want to delete this story?"),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _animationController.forward();
+              _videoController?.play();
+            },
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () async {
+              await FirebaseFirestore.instance
+                  .collection('stories')
+                  .doc(storyId)
+                  .delete();
+              if (mounted) {
+                Navigator.pop(ctx);
+                setState(() {
+                  _userStories.removeAt(
+                    _currentIndex,
+                  ); // లిస్ట్ లోంచి తీసేస్తున్నాం
+                  if (_userStories.isEmpty) {
+                    Navigator.pop(context); // అన్నీ అయిపోతే స్క్రీన్ క్లోజ్
+                  } else {
+                    if (_currentIndex >= _userStories.length) {
+                      _currentIndex = _userStories.length - 1;
+                    }
+                    _showStory(); // నెక్స్ట్ దానికి వెళ్తుంది
+                  }
+                });
+              }
+            },
+            child: const Text("Delete", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   void dispose() {
     _animationController.dispose();
@@ -132,17 +237,25 @@ class _StoryScreenState extends State<StoryScreen>
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading)
+    if (_isLoading) {
       return const Scaffold(
         backgroundColor: Colors.black,
         body: Center(child: CircularProgressIndicator(color: Colors.white)),
       );
+    }
 
-    var currentStory =
-        _userStories[_currentIndex].data() as Map<String, dynamic>;
+    var currentStory = _userStories[_currentIndex];
+    String storyId = currentStory['storyId']?.toString() ?? "";
     String storyUrl = currentStory['storyUrl']?.toString() ?? "";
-    String profilePic = currentStory['profilePic']?.toString() ?? "";
-    String username = currentStory['username']?.toString() ?? "User";
+    String caption = currentStory['caption']?.toString() ?? "";
+
+    String profilePic = widget.user['profilePic']?.toString() ?? "";
+    String username = widget.user['username']?.toString() ?? "User";
+    String ownerId = currentStory['ownerId']?.toString() ?? "";
+
+    // 🌟 మీ సొంత స్టోరీనా కాదా అని చెక్ చేయడం
+    String currentUid = FirebaseAuth.instance.currentUser?.uid ?? "";
+    bool isOwner = ownerId == currentUid;
 
     String postedTime = "Just now";
     if (currentStory['timestamp'] != null &&
@@ -169,6 +282,14 @@ class _StoryScreenState extends State<StoryScreen>
             _nextStory();
           }
         },
+        onLongPress: () {
+          _animationController.stop();
+          _videoController?.pause();
+        },
+        onLongPressUp: () {
+          _animationController.forward();
+          _videoController?.play();
+        },
         child: Stack(
           children: [
             Center(
@@ -182,8 +303,7 @@ class _StoryScreenState extends State<StoryScreen>
                         : const CircularProgressIndicator(color: Colors.white))
                   : CachedNetworkImage(
                       imageUrl: storyUrl,
-                      fit: BoxFit
-                          .contain, // 🌟 ఫోటోలు కట్ అవ్వకుండా ఉండటానికి 'contain' వాడాం
+                      fit: BoxFit.contain,
                       placeholder: (context, url) => const Center(
                         child: CircularProgressIndicator(
                           color: Colors.white,
@@ -199,6 +319,8 @@ class _StoryScreenState extends State<StoryScreen>
                       ),
                     ),
             ),
+
+            // 🌟 టైమ్ బార్
             Positioned(
               top: 50,
               left: 10,
@@ -231,10 +353,12 @@ class _StoryScreenState extends State<StoryScreen>
                 }),
               ),
             ),
+
+            // 🌟 టాప్ బార్: ప్రొఫైల్ + ఆప్షన్స్
             Positioned(
               top: 70,
               left: 15,
-              right: 15,
+              right: 10,
               child: Row(
                 children: [
                   SafeProfilePic(
@@ -248,14 +372,48 @@ class _StoryScreenState extends State<StoryScreen>
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      shadows: [Shadow(color: Colors.black54, blurRadius: 3)],
                     ),
                   ),
                   const SizedBox(width: 10),
                   Text(
                     postedTime,
-                    style: const TextStyle(color: Colors.white70, fontSize: 12),
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                      shadows: [Shadow(color: Colors.black54, blurRadius: 3)],
+                    ),
                   ),
                   const Spacer(),
+
+                  // 🌟 మీ సొంత స్టోరీ అయితే ఇక్కడ ఎడిట్/డిలీట్ 3-Dots వస్తాయి
+                  if (isOwner)
+                    PopupMenuButton<String>(
+                      icon: const Icon(Icons.more_vert, color: Colors.white),
+                      color: Colors.grey[900],
+                      onSelected: (value) {
+                        if (value == 'edit') _editStory(storyId, caption);
+                        if (value == 'delete') _deleteStory(storyId);
+                      },
+                      itemBuilder: (context) => [
+                        const PopupMenuItem(
+                          value: 'edit',
+                          child: Text(
+                            "Edit Caption",
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        ),
+                        const PopupMenuItem(
+                          value: 'delete',
+                          child: Text(
+                            "Delete Story",
+                            style: TextStyle(color: Colors.redAccent),
+                          ),
+                        ),
+                      ],
+                    ),
+
                   IconButton(
                     icon: const Icon(
                       Icons.close,
@@ -267,6 +425,29 @@ class _StoryScreenState extends State<StoryScreen>
                 ],
               ),
             ),
+
+            // 🌟 కింద క్యాప్షన్ చూపిస్తున్నాం
+            if (caption.isNotEmpty)
+              Positioned(
+                bottom: 40,
+                left: 20,
+                right: 20,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 15,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black54, // టెక్స్ట్ క్లియర్ గా కనబడటానికి
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Text(
+                    caption,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white, fontSize: 16),
+                  ),
+                ),
+              ),
           ],
         ),
       ),
