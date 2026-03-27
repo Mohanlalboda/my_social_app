@@ -381,7 +381,7 @@ class _PostWidgetState extends State<PostWidget> {
     }
 
     return Card(
-      margin: const EdgeInsets.symmetric(vertical: 5),
+      margin: const EdgeInsets.only(bottom: 15),
       elevation: 0,
       color: isDark ? Colors.black : Colors.white,
       child: Column(
@@ -444,7 +444,7 @@ class _PostWidgetState extends State<PostWidget> {
                           child: imgData.startsWith('http')
                               ? CachedNetworkImage(
                                   imageUrl: imgData,
-                                  fit: BoxFit.contain,
+                                  fit: BoxFit.cover,
                                   placeholder: (context, url) => const Center(
                                     child: CircularProgressIndicator(),
                                   ),
