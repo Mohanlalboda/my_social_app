@@ -10,7 +10,7 @@ import 'package:video_player/video_player.dart';
 import '../widgets/safe_elements.dart';
 import 'other_user_profile_screen.dart';
 import 'scrolling_posts_screen.dart';
-import 'scrolling_reels_screen.dart'; // 🌟 1. కొత్తగా చేసిన ఫైల్ ఇంపోర్ట్
+import 'scrolling_reels_screen.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -71,14 +71,10 @@ class _SearchScreenState extends State<SearchScreen> {
           },
         ),
       ),
-      // 🌟 2. సెర్చ్ చేస్తుంటే రిజల్ట్స్, లేదంటే ఎక్స్‌ప్లోర్ (Suggestions + Tabs)
       body: isShowUsers ? _buildUserSearchStream() : _buildExploreSection(),
     );
   }
 
-  // ----------------------------------------------------
-  // 🔍 USER SEARCH STREAM
-  // ----------------------------------------------------
   Widget _buildUserSearchStream() {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
     String searchText = searchController.text.trim().toLowerCase();
@@ -144,9 +140,6 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  // ----------------------------------------------------
-  // 🌟 NEW: EXPLORE SECTION (Suggestions + Tabs)
-  // ----------------------------------------------------
   Widget _buildExploreSection() {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -155,12 +148,9 @@ class _SearchScreenState extends State<SearchScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 🤝 ఫాలో అవ్వడానికి సజెస్టెడ్ ఫ్రెండ్స్
           _buildSuggestedFriends(),
-
-          // 🌟 పోస్ట్స్ మరియు రీల్స్ కోసం సపరేట్ టాబ్స్
           TabBar(
-            indicatorColor: const Color(0xFFFD1D1D), // Instagram Red
+            indicatorColor: const Color(0xFFFD1D1D),
             labelColor: isDark ? Colors.white : Colors.black,
             unselectedLabelColor: Colors.grey,
             tabs: const [
@@ -168,8 +158,6 @@ class _SearchScreenState extends State<SearchScreen> {
               Tab(icon: Icon(Icons.video_library), text: "Reels"),
             ],
           ),
-
-          // 🌟 టాబ్స్ లోపల గ్రిడ్స్
           Expanded(
             child: TabBarView(children: [_buildPostsGrid(), _buildReelsGrid()]),
           ),
@@ -178,9 +166,6 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  // ----------------------------------------------------
-  // 🤝 SUGGESTED FRIENDS (కొత్త వాళ్లని పట్టుకోవడానికి)
-  // ----------------------------------------------------
   Widget _buildSuggestedFriends() {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -201,8 +186,6 @@ class _SearchScreenState extends State<SearchScreen> {
               .snapshots(),
           builder: (context, snapshot) {
             if (!snapshot.hasData) return const SizedBox();
-
-            // 🌟 నేను ఫాలో అవ్వని వాళ్ళని మాత్రమే ఫిల్టర్ చేస్తున్నాం
             var suggestedUsers = snapshot.data!.docs
                 .where(
                   (doc) =>
@@ -307,12 +290,16 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   // ----------------------------------------------------
-  // 📸 1. POSTS GRID
+  // 📸 POSTS GRID (Filtering Videos Out)
   // ----------------------------------------------------
   Widget _buildPostsGrid() {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('posts')
+          .where(
+            'type',
+            isEqualTo: 'image',
+          ) // 🌟 FIXED: Broken image problem solved!
           .orderBy('timestamp', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
@@ -404,19 +391,22 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   // ----------------------------------------------------
-  // 🎬 2. REELS GRID (ఇప్పుడు స్క్రోల్ అవుతాయి!)
+  // 🎬 REELS GRID (Fetching from 'posts' collection now)
   // ----------------------------------------------------
   Widget _buildReelsGrid() {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
-          .collection('reels')
+          .collection('posts') // 🌟 FIXED: Reels are now in 'posts' collection
+          .where(
+            'type',
+            isEqualTo: 'video',
+          ) // 🌟 FIXED: Only fetching video types
           .orderBy('timestamp', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData)
           return const Center(child: CircularProgressIndicator());
         var reels = snapshot.data!.docs;
-        // 🌟 ఇక్కడ మనం లిస్ట్ ఆఫ్ రీల్ ఐడీలు తీసుకుంటున్నాం
         List<String> reelIds = reels.map((r) => r.id).toList();
 
         if (reels.isEmpty)
@@ -434,14 +424,20 @@ class _SearchScreenState extends State<SearchScreen> {
             crossAxisCount: 3,
             crossAxisSpacing: 2,
             mainAxisSpacing: 2,
-            childAspectRatio: 1,
+            childAspectRatio: 0.65, // రీల్స్ కాబట్టి కొంచెం నిలువుగా బాగుంటుంది
           ),
           itemCount: reels.length,
           itemBuilder: (context, index) {
             var data = reels[index].data() as Map<String, dynamic>;
 
+            // రీల్స్ కి థంబ్ నెయిల్ లింక్ తీసుకోవడం
+            String videoUrl =
+                (data['postData'] is List &&
+                    (data['postData'] as List).isNotEmpty)
+                ? data['postData'][0].toString()
+                : (data['storyUrl'] ?? "");
+
             return GestureDetector(
-              // 🌟 TRICK: ఇక్కడ పాత SingleReel స్క్రీన్ కాకుండా కొత్తగా చేసిన ScrollingReels స్క్రీన్ కి పంపుతున్నాం!
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -456,9 +452,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    Positioned.fill(
-                      child: ReelGridPreview(videoUrl: data['videoUrl'] ?? ''),
-                    ),
+                    Positioned.fill(child: ReelGridPreview(videoUrl: videoUrl)),
                     const Positioned(
                       top: 5,
                       right: 5,
@@ -479,7 +473,6 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 }
 
-// 🌟 REELS PREVIEW WIDGET
 class ReelGridPreview extends StatefulWidget {
   final String videoUrl;
   const ReelGridPreview({super.key, required this.videoUrl});
@@ -514,14 +507,12 @@ class _ReelGridPreviewState extends State<ReelGridPreview> {
       return Container(color: Colors.grey[900]);
     return _isInitialized
         ? SizedBox.expand(
-            child: ClipRect(
-              child: FittedBox(
-                fit: BoxFit.cover,
-                child: SizedBox(
-                  width: _player.controller.value.size.width,
-                  height: _player.controller.value.size.height,
-                  child: VideoPlayer(_player.controller),
-                ),
+            child: FittedBox(
+              fit: BoxFit.cover,
+              child: SizedBox(
+                width: _player.controller.value.size.width,
+                height: _player.controller.value.size.height,
+                child: VideoPlayer(_player.controller),
               ),
             ),
           )
