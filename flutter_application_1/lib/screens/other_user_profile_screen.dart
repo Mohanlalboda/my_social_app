@@ -248,42 +248,46 @@ class _OtherUserProfileScreenState extends State<OtherUserProfileScreen> {
                               ],
                               const SizedBox(height: 15),
 
+                              // 🌟 Follow & Message Buttons (మ్యాజిక్ ఇక్కడే జరిగింది!)
                               Row(
                                 children: [
-                                  Expanded(
-                                    child: ElevatedButton(
-                                      onPressed: () =>
-                                          _toggleFollow(isFollowing),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: isFollowing
-                                            ? (isDark
-                                                  ? Colors.grey[900]
-                                                  : Colors.grey[200])
-                                            : Colors.blue,
-                                        foregroundColor: isFollowing
-                                            ? (isDark
-                                                  ? Colors.white
-                                                  : Colors.black)
-                                            : Colors.white,
-                                        elevation: 0,
-                                        shape: RoundedRectangleBorder(
-                                          borderRadius: BorderRadius.circular(
-                                            8,
+                                  // 🌟 అకౌంట్ పబ్లిక్ అయినా, లేదా మీరు ఇప్పటికే వాళ్లని ఫాలో అవుతున్నా సరే... ఈ బటన్ కనిపిస్తుంది.
+                                  if (!isPrivate || isFollowing) ...[
+                                    Expanded(
+                                      child: ElevatedButton(
+                                        onPressed: () =>
+                                            _toggleFollow(isFollowing),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: isFollowing
+                                              ? (isDark
+                                                    ? Colors.grey[900]
+                                                    : Colors.grey[200])
+                                              : Colors.blue,
+                                          foregroundColor: isFollowing
+                                              ? (isDark
+                                                    ? Colors.white
+                                                    : Colors.black)
+                                              : Colors.white,
+                                          elevation: 0,
+                                          shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(
+                                              8,
+                                            ),
+                                          ),
+                                        ),
+                                        child: Text(
+                                          isFollowing ? "Following" : "Follow",
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
                                           ),
                                         ),
                                       ),
-                                      child: Text(
-                                        isFollowing ? "Following" : "Follow",
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 8),
+                                    const SizedBox(width: 8),
+                                  ],
+
                                   Expanded(
                                     child: ElevatedButton(
-                                      // 🌟 మ్యాజిక్: ఇక్కడ కరెక్ట్ వేరియబుల్స్ (receiverId) వాడాం!
                                       onPressed: () => Navigator.push(
                                         context,
                                         MaterialPageRoute(
@@ -359,7 +363,7 @@ class _OtherUserProfileScreenState extends State<OtherUserProfileScreen> {
                             ),
                             const SizedBox(height: 5),
                             Text(
-                              "Follow to see their photos and videos.",
+                              "Send a message request to connect.",
                               style: TextStyle(
                                 color: isDark
                                     ? Colors.white54
