@@ -1,4 +1,4 @@
-// ignore_for_file: curly_braces_in_flow_control_structures, deprecated_member_use, unused_import
+// ignore_for_file: curly_braces_in_flow_control_structures, deprecated_member_use
 
 import 'dart:io';
 import 'dart:async';
@@ -10,9 +10,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:uuid/uuid.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+
 import '../widgets/safe_elements.dart';
 import '../widgets/post_widget.dart';
-import 'story_screen.dart';
+import 'story_view_screen.dart';
 import 'add_post_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -25,7 +26,6 @@ class _HomeScreenState extends State<HomeScreen> {
   final String currentUid = FirebaseAuth.instance.currentUser!.uid;
   bool _isUploading = false;
   Key _refreshKey = UniqueKey();
-  int _randomSeed = DateTime.now().millisecondsSinceEpoch;
 
   @override
   void initState() {
@@ -40,17 +40,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
       if (settings.authorizationStatus == AuthorizationStatus.authorized) {
         String? token = await FirebaseMessaging.instance.getToken();
-        String? uid = FirebaseAuth.instance.currentUser?.uid;
-
-        if (token != null && uid != null) {
-          await FirebaseFirestore.instance.collection('users').doc(uid).set({
-            'fcmToken': token,
-          }, SetOptions(merge: true));
-
-          debugPrint("✅ SUPER BOSS! FCM Token Updated: $token");
+        if (token != null) {
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(currentUid)
+              .set({'fcmToken': token}, SetOptions(merge: true));
         }
-      } else {
-        debugPrint("❌ యూజర్ పర్మిషన్ ఇవ్వలేదు బాస్!");
       }
     } catch (e) {
       debugPrint("❌ Token Error: $e");
@@ -62,78 +57,104 @@ class _HomeScreenState extends State<HomeScreen> {
     if (mounted) {
       setState(() {
         _refreshKey = UniqueKey();
-        _randomSeed = DateTime.now().millisecondsSinceEpoch;
       });
     }
   }
 
+  // 🌟 మ్యాజిక్ ఇక్కడే: స్టోరీ సెలెక్ట్ చేశాక క్యాప్షన్ అడిగే పాప్-అప్
+  Future<String?> _askForCaption() async {
+    TextEditingController captionCtrl = TextEditingController();
+    return showDialog<String>(
+      context: context,
+      barrierDismissible: false, // బయట నొక్కితే క్లోజ్ అవ్వదు
+      builder: (ctx) => AlertDialog(
+        title: const Text("Add Caption"),
+        content: TextField(
+          controller: captionCtrl,
+          decoration: const InputDecoration(
+            hintText: "Write a caption for your story...",
+            border: OutlineInputBorder(),
+          ),
+          maxLines: 3,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () =>
+                Navigator.pop(ctx, null), // Cancel నొక్కితే null వెళ్తుంది
+            child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(
+              ctx,
+              captionCtrl.text.trim(),
+            ), // Upload నొక్కితే టెక్స్ట్ వెళ్తుంది
+            child: const Text("Upload Story"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 🌟 STORY UPLOAD LOGIC (With Caption)
   Future<void> _uploadStory(Map<String, dynamic> userData, bool isVideo) async {
     final ImagePicker picker = ImagePicker();
+
+    // 1. ఫైల్ సెలెక్ట్ చేసుకోవడం
+    XFile? file;
     if (isVideo) {
-      final XFile? file = await picker.pickVideo(source: ImageSource.gallery);
-      if (file != null) {
-        if (!mounted) return;
-        setState(() => _isUploading = true);
-        try {
-          String storyId = const Uuid().v4();
-          Reference ref = FirebaseStorage.instance
-              .ref()
-              .child('stories')
-              .child(currentUid)
-              .child(storyId);
-          UploadTask uploadTask = ref.putFile(File(file.path));
-          TaskSnapshot snapshot = await uploadTask;
-          String downloadUrl = await snapshot.ref.getDownloadURL();
-
-          await FirebaseFirestore.instance.collection('stories').add({
-            "uid": currentUid,
-            "ownerId": currentUid,
-            "username": userData['username'] ?? "User",
-            "profilePic": userData['profilePic'] ?? "",
-            "storyUrl": downloadUrl,
-            "type": "video",
-            "timestamp": FieldValue.serverTimestamp(),
-            "viewers": [],
-          });
-        } catch (e) {
-          debugPrint("Video Upload Error: $e");
-        } finally {
-          if (mounted) setState(() => _isUploading = false);
-        }
-      }
+      file = await picker.pickVideo(source: ImageSource.gallery);
     } else {
-      final List<XFile> files = await picker.pickMultiImage(imageQuality: 50);
-      if (files.isNotEmpty) {
-        if (!mounted) return;
-        setState(() => _isUploading = true);
-        try {
-          for (var file in files) {
-            String storyId = const Uuid().v4();
-            Reference ref = FirebaseStorage.instance
-                .ref()
-                .child('stories')
-                .child(currentUid)
-                .child(storyId);
-            UploadTask uploadTask = ref.putFile(File(file.path));
-            TaskSnapshot snapshot = await uploadTask;
-            String downloadUrl = await snapshot.ref.getDownloadURL();
+      // స్టోరీకి సింగిల్ ఇమేజ్ బెస్ట్, కాబట్టి pickImage వాడాను (క్వాలిటీ 60)
+      file = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 60,
+      );
+    }
 
-            await FirebaseFirestore.instance.collection('stories').add({
-              "uid": currentUid,
-              "ownerId": currentUid,
-              "username": userData['username'] ?? "User",
-              "profilePic": userData['profilePic'] ?? "",
-              "storyUrl": downloadUrl,
-              "type": "image",
-              "timestamp": FieldValue.serverTimestamp(),
-              "viewers": [],
-            });
-          }
-        } catch (e) {
-          debugPrint("Photo Upload Error: $e");
-        } finally {
-          if (mounted) setState(() => _isUploading = false);
+    if (file != null) {
+      // 2. ఫైల్ వచ్చాక క్యాప్షన్ అడగడం
+      String? caption = await _askForCaption();
+
+      // ఒకవేళ యూజర్ Cancel నొక్కితే ఇక్కడే ఆగిపోతుంది
+      if (caption == null) return;
+
+      setState(() => _isUploading = true);
+      try {
+        String storyId = const Uuid().v4();
+        Reference ref = FirebaseStorage.instance
+            .ref()
+            .child('stories')
+            .child(currentUid)
+            .child('$storyId${isVideo ? ".mp4" : ".jpg"}');
+
+        await ref.putFile(File(file.path));
+        String downloadUrl = await ref.getDownloadURL();
+
+        // 3. క్యాప్షన్ తో పాటు డేటాబేస్ లో సేవ్ చేయడం
+        await FirebaseFirestore.instance.collection('stories').add({
+          "uid": currentUid,
+          "ownerId": currentUid,
+          "username": userData['username'] ?? "User",
+          "profilePic": userData['profilePic'] ?? "",
+          "storyUrl": downloadUrl,
+          "type": isVideo ? "video" : "image",
+          "caption": caption, // 🌟 క్యాప్షన్ ఇక్కడ యాడ్ అవుతుంది
+          "timestamp": FieldValue.serverTimestamp(),
+          "viewers": [],
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Story Uploaded Successfully! ✅"),
+              backgroundColor: Colors.green,
+            ),
+          );
         }
+      } catch (e) {
+        debugPrint("Upload Error: $e");
+      } finally {
+        if (mounted) setState(() => _isUploading = false);
       }
     }
   }
@@ -176,6 +197,157 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  Widget _buildStoriesSection(Map<String, dynamic> currentUserData) {
+    DateTime yesterday = DateTime.now().subtract(const Duration(hours: 24));
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('stories')
+          .where('timestamp', isGreaterThanOrEqualTo: yesterday)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const SizedBox(height: 110);
+
+        Map<String, Map<String, dynamic>> usersMap = {};
+        for (var doc in snapshot.data!.docs) {
+          var data = doc.data() as Map<String, dynamic>;
+          String uid = data['uid'];
+          List viewers = data['viewers'] ?? [];
+          bool seen = viewers.contains(currentUid);
+
+          if (!usersMap.containsKey(uid)) {
+            usersMap[uid] = {
+              'uid': uid,
+              'username': data['username'],
+              'profilePic': data['profilePic'],
+              'allSeen': seen,
+            };
+          } else {
+            if (!seen) usersMap[uid]!['allSeen'] = false;
+          }
+        }
+
+        var storyList = usersMap.values.toList();
+        storyList.sort((a, b) {
+          if (a['allSeen'] == b['allSeen']) return 0;
+          return a['allSeen'] ? 1 : -1;
+        });
+
+        return SizedBox(
+          height: 110,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: storyList.length + 1,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            itemBuilder: (context, index) {
+              if (index == 0) {
+                return _buildMyStoryBubble(currentUserData);
+              }
+
+              var userData = storyList[index - 1];
+              bool isAllSeen = userData['allSeen'] ?? false;
+
+              return GestureDetector(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => StoryViewScreen(
+                        usersWithStories: storyList,
+                        initialUserIndex: index - 1,
+                      ),
+                    ),
+                  );
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 10,
+                  ),
+                  child: Column(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(3),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: isAllSeen
+                              ? const LinearGradient(
+                                  colors: [Colors.grey, Colors.grey],
+                                )
+                              : const LinearGradient(
+                                  colors: [
+                                    Color(0xFFf9ce34),
+                                    Color(0xFFee2a7b),
+                                    Color(0xFF6228d7),
+                                  ],
+                                ),
+                        ),
+                        child: Container(
+                          padding: const EdgeInsets.all(2),
+                          decoration: const BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: Colors.black,
+                          ),
+                          child: SafeProfilePic(
+                            base64String: userData['profilePic'],
+                            radius: 30,
+                            fallbackText: userData['username'][0],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      SizedBox(
+                        width: 70,
+                        child: Text(
+                          userData['username'],
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildMyStoryBubble(Map<String, dynamic> userData) {
+    return GestureDetector(
+      onTap: () => _showStoryPicker(userData),
+      child: Padding(
+        padding: const EdgeInsets.all(10.0),
+        child: Column(
+          children: [
+            Stack(
+              alignment: Alignment.bottomRight,
+              children: [
+                SafeProfilePic(
+                  base64String: userData['profilePic'],
+                  radius: 32,
+                  fallbackText: (userData['username'] ?? "U")[0],
+                ),
+                const CircleAvatar(
+                  backgroundColor: Colors.blue,
+                  radius: 10,
+                  child: Icon(Icons.add, color: Colors.white, size: 14),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            const Text("Your Story", style: TextStyle(fontSize: 11)),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
@@ -199,180 +371,16 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (context, userSnapshot) {
           if (!userSnapshot.hasData)
             return const Center(child: CircularProgressIndicator());
+
           var userData =
               userSnapshot.data!.data() as Map<String, dynamic>? ?? {};
-          String currentUserName = userData['username'] ?? "User";
-          List feedUserIds = List.from(userData['following'] ?? [])
+          List following = List.from(userData['following'] ?? [])
             ..add(currentUid);
-          DateTime yesterday = DateTime.now().subtract(
-            const Duration(hours: 24),
-          );
 
           return Column(
             children: [
-              // --- స్టోరీస్ సెక్షన్ ---
-              SizedBox(
-                height: 125,
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('stories')
-                      .where('timestamp', isGreaterThanOrEqualTo: yesterday)
-                      .limit(20)
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    if (!snapshot.hasData) return const SizedBox();
-                    var validStories = snapshot.data!.docs.toList();
-                    Map<String, Map<String, dynamic>> uniqueStoryUsers = {};
-                    for (var doc in validStories) {
-                      var data = doc.data() as Map<String, dynamic>;
-                      data['storyId'] = doc.id;
-                      uniqueStoryUsers[data['ownerId']] = data;
-                    }
-                    var storyList = uniqueStoryUsers.values.toList();
-
-                    return ListView.builder(
-                      scrollDirection: Axis.horizontal,
-                      itemCount: storyList.length + 1,
-                      itemBuilder: (builderContext, index) {
-                        if (index == 0) {
-                          return Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: Column(
-                              children: [
-                                GestureDetector(
-                                  onTap: () => _showStoryPicker(userData),
-                                  child: Stack(
-                                    alignment: Alignment.bottomRight,
-                                    children: [
-                                      SafeProfilePic(
-                                        base64String: userData['profilePic'],
-                                        radius: 32,
-                                        fallbackText: currentUserName.isNotEmpty
-                                            ? currentUserName[0]
-                                            : "U",
-                                      ),
-                                      Container(
-                                        padding: const EdgeInsets.all(2),
-                                        decoration: BoxDecoration(
-                                          color: isDark
-                                              ? Colors.black
-                                              : Colors.white,
-                                          shape: BoxShape.circle,
-                                        ),
-                                        child: const CircleAvatar(
-                                          backgroundColor: Colors.blue,
-                                          radius: 8,
-                                          child: Icon(
-                                            Icons.add,
-                                            color: Colors.white,
-                                            size: 12,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                AutoScrollText(
-                                  text: "Your Story",
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    fontWeight: FontWeight.w500,
-                                    color: isDark ? Colors.white : Colors.black,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        }
-
-                        var userStory = storyList[index - 1];
-                        List viewers = userStory['viewers'] ?? [];
-                        bool isSeen = viewers.contains(currentUid);
-                        String sName = userStory['username'] ?? "User";
-
-                        return GestureDetector(
-                          onTap: () async {
-                            await FirebaseFirestore.instance
-                                .collection('stories')
-                                .doc(userStory['storyId'])
-                                .update({
-                                  'viewers': FieldValue.arrayUnion([
-                                    currentUid,
-                                  ]),
-                                });
-                            if (!builderContext.mounted) return;
-                            Navigator.push(
-                              builderContext,
-                              MaterialPageRoute(
-                                builder: (_) => StoryScreen(user: userStory),
-                              ),
-                            );
-                          },
-                          child: Padding(
-                            padding: const EdgeInsets.all(8.0),
-                            child: Column(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(3),
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    gradient: isSeen
-                                        ? const LinearGradient(
-                                            colors: [Colors.grey, Colors.grey],
-                                          )
-                                        : const LinearGradient(
-                                            colors: [
-                                              Color(0xFF833AB4),
-                                              Color(0xFFFD1D1D),
-                                              Color(0xFFFCAF45),
-                                            ],
-                                          ),
-                                  ),
-                                  child: Container(
-                                    padding: const EdgeInsets.all(2),
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: isDark
-                                          ? Colors.black
-                                          : Colors.white,
-                                    ),
-                                    child: SafeProfilePic(
-                                      base64String: userStory['profilePic'],
-                                      radius: 28,
-                                      fallbackText: sName.isNotEmpty
-                                          ? sName[0]
-                                          : "U",
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                AutoScrollText(
-                                  text: sName,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: isSeen
-                                        ? Colors.grey
-                                        : (isDark
-                                              ? Colors.white
-                                              : Colors.black),
-                                    fontWeight: isSeen
-                                        ? FontWeight.normal
-                                        : FontWeight.bold,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
+              _buildStoriesSection(userData),
               const Divider(height: 1),
-
-              // --- 🌟 ఫీడ్ సెక్షన్ ---
               Expanded(
                 child: Stack(
                   children: [
@@ -380,81 +388,29 @@ class _HomeScreenState extends State<HomeScreen> {
                       onRefresh: _refreshFeed,
                       color: const Color(0xFFFD1D1D),
                       child: StreamBuilder<QuerySnapshot>(
-                        // 🌟 మ్యాజిక్ ఇక్కడే జరిగింది!
                         stream: FirebaseFirestore.instance
                             .collection('posts')
-                            .where(
-                              'type',
-                              isEqualTo: 'image',
-                            ) // 👈 రీల్స్ హోమ్ ఫీడ్ లోకి రాకుండా ఆపేశాం!
+                            .where('type', isEqualTo: 'image')
                             .orderBy('timestamp', descending: true)
                             .limit(30)
                             .snapshots(),
                         builder: (context, snapshot) {
-                          if (snapshot.hasError) {
-                            return ListView(
-                              physics: const AlwaysScrollableScrollPhysics(),
-                              children: [
-                                const SizedBox(height: 50),
-                                const Icon(
-                                  Icons.error_outline,
-                                  color: Colors.red,
-                                  size: 50,
-                                ),
-                                Padding(
-                                  padding: const EdgeInsets.all(20.0),
-                                  child: Text(
-                                    "Error: \n${snapshot.error}",
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ),
-                              ],
-                            );
-                          }
-
-                          if (snapshot.connectionState ==
-                              ConnectionState.waiting) {
+                          if (!snapshot.hasData)
                             return const Center(
                               child: CircularProgressIndicator(),
                             );
-                          }
 
-                          var allDocs = snapshot.data!.docs;
-                          var allPosts = allDocs.where((doc) {
+                          var allPosts = snapshot.data!.docs.where((doc) {
                             var data = doc.data() as Map<String, dynamic>;
-                            bool isPublic =
-                                data['isPublic'] == true ||
-                                data['isPublic'] == null;
-                            bool isFollowing = feedUserIds.contains(
-                              data['ownerId'],
-                            );
-                            return isPublic || isFollowing;
+                            bool isPublic = data['isPublic'] != false;
+                            return isPublic ||
+                                following.contains(data['ownerId']);
                           }).toList();
 
-                          allPosts.shuffle(Random(_randomSeed));
-
-                          if (allPosts.isEmpty) {
-                            return ListView(
-                              physics: const AlwaysScrollableScrollPhysics(
-                                parent: BouncingScrollPhysics(),
-                              ),
-                              children: [
-                                SizedBox(
-                                  height:
-                                      MediaQuery.of(context).size.height * 0.3,
-                                ),
-                                const Center(
-                                  child: Text(
-                                    "No posts found. Pull down to refresh. 👇",
-                                    style: TextStyle(
-                                      color: Colors.grey,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                ),
-                              ],
+                          if (allPosts.isEmpty)
+                            return const Center(
+                              child: Text("No posts found. 👇"),
                             );
-                          }
 
                           return ListView.builder(
                             physics: const AlwaysScrollableScrollPhysics(
@@ -466,14 +422,12 @@ class _HomeScreenState extends State<HomeScreen> {
                                   allPosts[index].data()
                                       as Map<String, dynamic>;
                               post['postId'] = allPosts[index].id;
-
                               return PostWidget(post: post);
                             },
                           );
                         },
                       ),
                     ),
-
                     if (_isUploading)
                       Positioned(
                         top: 10,
@@ -522,68 +476,6 @@ class _HomeScreenState extends State<HomeScreen> {
             ],
           );
         },
-      ),
-    );
-  }
-}
-
-class AutoScrollText extends StatefulWidget {
-  final String text;
-  final TextStyle style;
-  const AutoScrollText({super.key, required this.text, required this.style});
-  @override
-  State<AutoScrollText> createState() => _AutoScrollTextState();
-}
-
-class _AutoScrollTextState extends State<AutoScrollText> {
-  final ScrollController _scrollController = ScrollController();
-  @override
-  void initState() {
-    super.initState();
-    _startScrolling();
-  }
-
-  void _startScrolling() async {
-    await Future.delayed(const Duration(seconds: 2));
-    while (mounted) {
-      if (_scrollController.hasClients) {
-        double maxScroll = _scrollController.position.maxScrollExtent;
-        if (maxScroll > 0) {
-          await _scrollController.animateTo(
-            maxScroll,
-            duration: const Duration(seconds: 2),
-            curve: Curves.linear,
-          );
-          await Future.delayed(const Duration(seconds: 1));
-          if (!mounted) break;
-          await _scrollController.animateTo(
-            0,
-            duration: const Duration(seconds: 2),
-            curve: Curves.linear,
-          );
-          await Future.delayed(const Duration(seconds: 1));
-        } else
-          break;
-      } else
-        await Future.delayed(const Duration(seconds: 1));
-    }
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: 70,
-      child: SingleChildScrollView(
-        physics: const NeverScrollableScrollPhysics(),
-        controller: _scrollController,
-        scrollDirection: Axis.horizontal,
-        child: Text(widget.text, style: widget.style),
       ),
     );
   }
