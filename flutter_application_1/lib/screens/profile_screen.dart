@@ -1,11 +1,11 @@
-// ignore_for_file: curly_braces_in_flow_control_structures
+// ignore_for_file: curly_braces_in_flow_control_structures, use_build_context_synchronously
 
 import 'dart:io';
-import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart'; // 🌟 స్టోరేజ్ ఇంపోర్ట్
 
 import 'single_reel_screen.dart';
 import 'scrolling_posts_screen.dart';
@@ -65,25 +65,54 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // 🌟 ప్రొఫైల్ పిక్ అప్‌డేట్ (Firebase Storage & HD Quality)
   Future<void> _updateProfilePic() async {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(
       source: ImageSource.gallery,
-      imageQuality: 10,
-      maxWidth: 300,
+      imageQuality: 85, // HD క్వాలిటీ
     );
 
     if (image != null) {
-      String base64Image = base64Encode(await File(image.path).readAsBytes());
-      String uid = FirebaseAuth.instance.currentUser!.uid;
+      // 🌟 Async Gap వార్నింగ్ రాకుండా ఈ కండిషన్ యాడ్ చేశాం!
+      if (!mounted) return;
 
-      await FirebaseFirestore.instance.collection('users').doc(uid).update({
-        "profilePic": base64Image,
-      });
-      if (mounted)
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text("Profile updated! 📸")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Uploading HD Profile Pic... ⏳")),
+      );
+
+      try {
+        File file = File(image.path);
+        String uid = FirebaseAuth.instance.currentUser!.uid;
+
+        var storageRef = FirebaseStorage.instance
+            .ref()
+            .child('profile_pics')
+            .child('$uid.jpg');
+        await storageRef.putFile(file);
+
+        String downloadUrl = await storageRef.getDownloadURL();
+
+        await FirebaseFirestore.instance.collection('users').doc(uid).update({
+          "profilePic": downloadUrl,
+        });
+
+        if (mounted)
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Profile updated successfully! 📸"),
+              backgroundColor: Colors.green,
+            ),
+          );
+      } catch (e) {
+        if (mounted)
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text("Upload Failed: $e"),
+              backgroundColor: Colors.red,
+            ),
+          );
+      }
     }
   }
 
@@ -288,8 +317,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                       _buildReelsGrid(
                         FirebaseFirestore.instance
-                            .collection('reels')
-                            .where('uid', isEqualTo: uid)
+                            .collection('posts')
+                            .where('type', isEqualTo: 'video')
+                            .where('ownerId', isEqualTo: uid)
                             .snapshots(),
                       ),
                       _buildSavedTab(uid, savedReels),
@@ -318,6 +348,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _buildPostGrid(
           FirebaseFirestore.instance
               .collection('posts')
+              .where('type', isNotEqualTo: 'video')
               .where('savedBy', arrayContains: uid)
               .snapshots(),
           shrinkWrap: true,
@@ -351,14 +382,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
           physics: const AlwaysScrollableScrollPhysics(),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 3,
-            childAspectRatio: 0.7,
+            childAspectRatio: 0.56,
             crossAxisSpacing: 2,
             mainAxisSpacing: 2,
           ),
           itemCount: reels.length,
           itemBuilder: (context, i) {
             var reelData = reels[i].data() as Map<String, dynamic>;
-            String reelId = reelData['reelId'] ?? reels[i].id;
+            String reelId = reelData['postId'] ?? reels[i].id;
             return GestureDetector(
               onTap: () => Navigator.push(
                 context,
@@ -380,56 +411,122 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Widget _buildSavedReelsGrid() {
+    final String currentUid = FirebaseAuth.instance.currentUser!.uid;
+    bool isDark = Theme.of(context).brightness == Brightness.dark;
+
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
-          .collection('reels')
-          .where(
-            'savedBy',
-            arrayContains: FirebaseAuth.instance.currentUser!.uid,
-          )
+          .collection('posts')
+          .where('type', isEqualTo: 'video')
+          .where('savedBy', arrayContains: currentUid)
+          .orderBy('timestamp', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData)
-          return const Center(child: CircularProgressIndicator());
-        var savedReels = snapshot.data!.docs;
-        if (savedReels.isEmpty)
+        if (snapshot.hasError)
           return const Center(
+            child: Text(
+              "Please build index in Firebase!",
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.red),
+            ),
+          );
+        if (snapshot.connectionState == ConnectionState.waiting)
+          return const Center(child: CircularProgressIndicator());
+
+        var savedReels = snapshot.data!.docs;
+
+        if (savedReels.isEmpty) {
+          return Center(
             child: Padding(
-              padding: EdgeInsets.all(20),
-              child: Text(
-                "No saved reels yet. 🎬\n(Try saving a reel first!)",
-                textAlign: TextAlign.center,
+              padding: const EdgeInsets.symmetric(vertical: 30),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.bookmark_border,
+                    size: 60,
+                    color: isDark ? Colors.white54 : Colors.black54,
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    "No Saved Reels Yet",
+                    style: TextStyle(
+                      color: isDark ? Colors.white70 : Colors.black87,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  Text(
+                    "Save reels to watch them later.",
+                    style: TextStyle(
+                      color: isDark ? Colors.white54 : Colors.black54,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
               ),
             ),
           );
+        }
 
         return GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(2),
+          itemCount: savedReels.length,
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 3,
-            childAspectRatio: 0.7,
             crossAxisSpacing: 2,
             mainAxisSpacing: 2,
+            childAspectRatio: 0.56,
           ),
-          itemCount: savedReels.length,
           itemBuilder: (context, index) {
-            var reelData = savedReels[index].data() as Map<String, dynamic>;
-            String reelDocId = reelData['reelId'] ?? savedReels[index].id;
+            var reel = savedReels[index].data() as Map<String, dynamic>;
+            String reelId = reel['postId'] ?? savedReels[index].id;
+
             return GestureDetector(
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => SingleReelScreen(reelId: reelDocId),
+                  builder: (context) => SingleReelScreen(reelId: reelId),
                 ),
               ),
-              child: Container(
-                color: Colors.black,
-                child: const Icon(
-                  Icons.bookmark,
-                  color: Colors.white24,
-                  size: 30,
-                ),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  Container(
+                    color: Colors.grey[900],
+                    child: const Center(
+                      child: Icon(
+                        Icons.play_circle_outline,
+                        color: Colors.white54,
+                        size: 40,
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 5,
+                    left: 5,
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.favorite,
+                          color: Colors.white,
+                          size: 14,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          "${reel['likes']?.length ?? 0}",
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
               ),
             );
           },
@@ -446,7 +543,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return StreamBuilder<QuerySnapshot>(
       stream: stream,
       builder: (context, snapshot) {
-        if (!snapshot.hasData)
+        if (snapshot.hasError)
+          return const Center(
+            child: Text(
+              "Please build index in Firebase!",
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.red),
+            ),
+          );
+        if (snapshot.connectionState == ConnectionState.waiting)
           return const Center(child: CircularProgressIndicator());
         var posts = snapshot.data!.docs;
         if (posts.isEmpty) return const Center(child: Text("No posts found."));
@@ -462,7 +567,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           itemCount: posts.length,
           itemBuilder: (context, i) {
-            // 🌟 కొత్త URL ఇమేజ్ కి, పాత Base64 ఇమేజ్ కి సపోర్ట్ చేసే లాజిక్
             var postData = posts[i].data() as Map<String, dynamic>;
             String thumbnail = "";
 
@@ -481,16 +585,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ScrollingPostsScreen(postIds: postIds, initialIndex: i),
                 ),
               ),
-              child: thumbnail.startsWith('http')
-                  ? Image.network(
-                      thumbnail,
-                      fit: BoxFit.cover,
-                      errorBuilder: (c, e, s) => Container(
-                        color: Colors.grey[300],
-                        child: const Icon(Icons.broken_image),
-                      ),
-                    )
-                  : SafeImage(base64String: thumbnail),
+              child: SafeImage(base64String: thumbnail),
             );
           },
         );

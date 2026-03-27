@@ -23,8 +23,9 @@ class SingleReelScreen extends StatelessWidget {
         ),
       ),
       body: FutureBuilder<DocumentSnapshot>(
+        // 🌟 మ్యాజిక్ ఇక్కడే జరిగింది: 'reels' బదులు 'posts' వాడాం!
         future: FirebaseFirestore.instance
-            .collection('reels')
+            .collection('posts')
             .doc(reelId)
             .get(),
         builder: (context, snapshot) {
@@ -43,8 +44,9 @@ class SingleReelScreen extends StatelessWidget {
           }
 
           var reelData = snapshot.data!.data() as Map<String, dynamic>;
+          // 🌟 సేఫ్టీ కోసం postId ని డేటాలోకి పంపుతున్నాం (లైక్/కామెంట్ కోసం యూజ్ అవుతుంది)
+          reelData['postId'] = reelId;
 
-          // 🌟 ఫిక్స్: ReelItem కి reel మరియు reelId పక్కాగా పంపుతున్నాం
           return ReelItem(reel: reelData, reelId: reelId);
         },
       ),

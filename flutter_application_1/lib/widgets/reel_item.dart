@@ -369,17 +369,20 @@ class _ReelItemState extends State<ReelItem> {
                       : 0;
                   return Column(
                     children: [
+                      // 🌟 పాత కోడ్ బదులు ఇది పెట్టండి
                       IconButton(
                         icon: const Icon(
-                          Icons.chat_bubble_outline,
+                          Icons.comment_outlined,
                           color: Colors.white,
-                          size: 30,
+                          size: 32,
                         ),
                         onPressed: () => Navigator.push(
                           context,
                           MaterialPageRoute(
                             builder: (_) => CommentsScreen(
-                              postId: widget.reelId,
+                              postId: widget.reel['postId'],
+                              postOwnerId:
+                                  widget.reel['ownerId'], // 🌟 ఇది యాడ్ చేసాం!
                               isReel: true,
                             ),
                           ),

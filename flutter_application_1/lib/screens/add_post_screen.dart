@@ -1,4 +1,4 @@
-// ignore_for_file: curly_braces_in_flow_control_structures, deprecated_member_use
+// ignore_for_file: curly_braces_in_flow_control_structures, deprecated_member_use, use_build_context_synchronously
 
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -28,10 +28,11 @@ class _AddPostScreenState extends State<AddPostScreen> {
   bool _isUploadingReel = false;
   bool _isReelPublic = true;
 
-  // 🌟 Pick Multiple Images for Post
+  // 🌟 Pick Multiple Images for Post (HD Quality)
   Future<void> _pickImages() async {
     final picker = ImagePicker();
-    final pickedFiles = await picker.pickMultiImage(imageQuality: 50);
+    // 🌟 మ్యాజిక్ ఇక్కడే: క్వాలిటీ 85% కి పెంచాం. సైజు స్టోరేజ్ చూసుకుంటుంది, క్వాలిటీ సూపర్ వస్తుంది!
+    final pickedFiles = await picker.pickMultiImage(imageQuality: 85);
 
     if (pickedFiles.isNotEmpty) {
       setState(() {
@@ -58,6 +59,9 @@ class _AddPostScreenState extends State<AddPostScreen> {
       return;
     }
     setState(() => _isUploadingPost = true);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Uploading HD Images... Please wait ⏳")),
+    );
 
     try {
       String uid = FirebaseAuth.instance.currentUser!.uid;
@@ -75,7 +79,8 @@ class _AddPostScreenState extends State<AddPostScreen> {
             .ref()
             .child('posts')
             .child(uid)
-            .child(imageId);
+            .child('$imageId.jpg');
+
         UploadTask uploadTask = ref.putFile(file);
         TaskSnapshot snapshot = await uploadTask;
         String downloadUrl = await snapshot.ref.getDownloadURL();
@@ -89,8 +94,8 @@ class _AddPostScreenState extends State<AddPostScreen> {
         'ownerId': uid,
         'username': username,
         'profilePic': profilePic,
-        'postData': imageUrls,
-        'type': 'image', // 🌟 ట్యాగ్: image
+        'postData': imageUrls, // 🌟 ఇక్కడ హై క్వాలిటీ లింక్స్ సేవ్ అవుతాయి
+        'type': 'image',
         'caption': _postCaptionController.text.trim(),
         'likes': [],
         'savedBy': [],
@@ -107,13 +112,23 @@ class _AddPostScreenState extends State<AddPostScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text("Post uploaded successfully! ✅"),
+            content: Text("Post uploaded successfully in HD! ✅"),
             backgroundColor: Colors.green,
           ),
         );
       }
     } catch (e) {
       debugPrint("Post Upload Error: $e");
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              "Upload Error: $e",
+              style: const TextStyle(color: Colors.white),
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
     }
 
     if (mounted) setState(() => _isUploadingPost = false);
@@ -128,6 +143,9 @@ class _AddPostScreenState extends State<AddPostScreen> {
       return;
     }
     setState(() => _isUploadingReel = true);
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text("Uploading Video... Please wait ⏳")),
+    );
 
     try {
       String uid = FirebaseAuth.instance.currentUser!.uid;
@@ -148,15 +166,14 @@ class _AddPostScreenState extends State<AddPostScreen> {
       TaskSnapshot snapshot = await uploadTask;
       String videoUrl = await snapshot.ref.getDownloadURL();
 
-      // 🌟 మ్యాజిక్: రీల్స్ ని కూడా 'posts' లోకే పంపుతున్నాం!
       await FirebaseFirestore.instance.collection('posts').doc(postId).set({
         'postId': postId,
         'ownerId': uid,
         'username': username,
         'profilePic': profilePic,
         'postData': [videoUrl],
-        'storyUrl': videoUrl, // రీల్ ప్లేయర్ కోసం
-        'type': 'video', // 🌟 ట్యాగ్: video (ఇదే ముఖ్యం!)
+        'storyUrl': videoUrl,
+        'type': 'video',
         'caption': _reelCaptionController.text.trim(),
         'likes': [],
         'savedBy': [],
@@ -180,6 +197,16 @@ class _AddPostScreenState extends State<AddPostScreen> {
       }
     } catch (e) {
       debugPrint("Reel Upload Error: $e");
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              "Upload Error: $e",
+              style: const TextStyle(color: Colors.white),
+            ),
+            backgroundColor: Colors.red,
+          ),
+        );
     }
 
     if (mounted) setState(() => _isUploadingReel = false);
@@ -212,14 +239,7 @@ class _AddPostScreenState extends State<AddPostScreen> {
             ],
           ),
         ),
-        body: TabBarView(
-          children: [
-            // 🌟 POST TAB
-            _buildPostTab(),
-            // 🌟 REEL TAB
-            _buildReelTab(),
-          ],
-        ),
+        body: TabBarView(children: [_buildPostTab(), _buildReelTab()]),
       ),
     );
   }
@@ -285,7 +305,11 @@ class _AddPostScreenState extends State<AddPostScreen> {
                   ? const CircularProgressIndicator(color: Colors.white)
                   : const Text(
                       "Share Post",
-                      style: TextStyle(color: Colors.white),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
             ),
           ),
@@ -352,7 +376,11 @@ class _AddPostScreenState extends State<AddPostScreen> {
                   ? const CircularProgressIndicator(color: Colors.white)
                   : const Text(
                       "Share Reel",
-                      style: TextStyle(color: Colors.white),
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
             ),
           ),
