@@ -46,7 +46,7 @@ class UserListScreen extends StatelessWidget {
                           context,
                           MaterialPageRoute(
                             builder: (context) =>
-                                OtherUserProfileScreen(uid: userIds[index]),
+                                OtherUserProfileScreen(userId: userIds[index]),
                           ),
                         );
                       },

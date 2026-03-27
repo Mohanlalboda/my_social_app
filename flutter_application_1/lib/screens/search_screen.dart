@@ -134,7 +134,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 context,
                 MaterialPageRoute(
                   builder: (context) =>
-                      OtherUserProfileScreen(uid: users[index].id),
+                      OtherUserProfileScreen(userId: users[index].id),
                 ),
               ),
             );
@@ -238,7 +238,7 @@ class _SearchScreenState extends State<SearchScreen> {
                           context,
                           MaterialPageRoute(
                             builder: (_) => OtherUserProfileScreen(
-                              uid: suggestedUsers[index].id,
+                              userId: suggestedUsers[index].id,
                             ),
                           ),
                         ),

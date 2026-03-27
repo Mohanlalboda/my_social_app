@@ -546,7 +546,7 @@ class _ReelItemState extends State<ReelItem> {
                           context,
                           MaterialPageRoute(
                             builder: (_) => OtherUserProfileScreen(
-                              uid: widget.reel['ownerId'],
+                              userId: widget.reel['ownerId'],
                             ),
                           ),
                         ),
@@ -562,7 +562,7 @@ class _ReelItemState extends State<ReelItem> {
                           context,
                           MaterialPageRoute(
                             builder: (_) => OtherUserProfileScreen(
-                              uid: widget.reel['ownerId'],
+                              userId: widget.reel['ownerId'],
                             ),
                           ),
                         ),

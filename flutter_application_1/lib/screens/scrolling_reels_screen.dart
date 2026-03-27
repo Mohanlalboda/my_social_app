@@ -51,8 +51,9 @@ class _ScrollingReelsScreenState extends State<ScrollingReelsScreen> {
         itemCount: widget.reelIds.length,
         itemBuilder: (context, index) {
           return FutureBuilder<DocumentSnapshot>(
+            // 🌟 మ్యాజిక్ ఇక్కడే జరిగింది: 'reels' బదులు 'posts' వాడాం!
             future: FirebaseFirestore.instance
-                .collection('reels')
+                .collection('posts')
                 .doc(widget.reelIds[index])
                 .get(),
             builder: (context, snapshot) {
@@ -69,6 +70,9 @@ class _ScrollingReelsScreenState extends State<ScrollingReelsScreen> {
                 );
 
               var reelData = snapshot.data!.data() as Map<String, dynamic>;
+              // 🌟 సేఫ్టీ కోసం postId ని డేటాలోకి పంపుతున్నాం
+              reelData['postId'] = widget.reelIds[index];
+
               return ReelItem(reel: reelData, reelId: widget.reelIds[index]);
             },
           );

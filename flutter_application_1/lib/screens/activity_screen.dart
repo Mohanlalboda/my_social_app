@@ -174,7 +174,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
                             context,
                             MaterialPageRoute(
                               builder: (_) =>
-                                  OtherUserProfileScreen(uid: senderId),
+                                  OtherUserProfileScreen(userId: senderId),
                             ),
                           );
                         } else if (type == 'like' || type == 'comment') {
@@ -203,7 +203,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
                                 context,
                                 MaterialPageRoute(
                                   builder: (_) =>
-                                      OtherUserProfileScreen(uid: senderId),
+                                      OtherUserProfileScreen(userId: senderId),
                                 ),
                               ),
                               child: SafeProfilePic(

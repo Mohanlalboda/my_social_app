@@ -392,7 +392,7 @@ class _PostWidgetState extends State<PostWidget> {
               context,
               MaterialPageRoute(
                 builder: (_) =>
-                    OtherUserProfileScreen(uid: widget.post['ownerId']),
+                    OtherUserProfileScreen(userId: widget.post['ownerId']),
               ),
             ),
             leading: SafeProfilePic(
