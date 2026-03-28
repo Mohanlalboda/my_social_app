@@ -6,7 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:timeago/timeago.dart' as timeago;
 
-import '../widgets/cached_media_widget.dart'; // 🌟 మన కొత్త మ్యాజిక్ విడ్జెట్!
+import '../widgets/cached_media_widget.dart';
 import '../widgets/safe_elements.dart';
 
 class StoryViewScreen extends StatefulWidget {
@@ -65,15 +65,13 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
     }
   }
 
-  // 🌟 వీడియో ఉన్నప్పుడు టైమర్ స్లో అవ్వడానికి చిన్న లాజిక్ (ఆప్షనల్)
   void _startTimer() {
     _timer?.cancel();
 
-    // ఒకవేళ ప్రస్తుతం ప్లే అవుతున్నది వీడియో అయితే 15 సెకన్లు, ఫోటో అయితే 5 సెకన్లు ఉండడానికి టైమర్ అడ్జస్ట్మెంట్.
     int durationMs = 50;
     if (currentStoryItems.isNotEmpty) {
       String type = currentStoryItems[currentStoryIndex]['type'] ?? 'image';
-      if (type == 'video') durationMs = 150; // వీడియో అయితే స్లోగా వెళ్తుంది
+      if (type == 'video') durationMs = 150;
     }
 
     _timer = Timer.periodic(Duration(milliseconds: durationMs), (timer) {
@@ -287,7 +285,7 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
 
     var storyData = currentStoryItems[currentStoryIndex];
     bool isOwner = storyData['ownerId'] == currentUid;
-    String type = storyData['type'] ?? 'image'; // 🌟 టైప్ తీసుకుంటున్నాం
+    String type = storyData['type'] ?? 'image';
 
     String timeStr = "Just now";
     if (storyData['timestamp'] != null) {
@@ -312,18 +310,20 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // 🌟 1. బగ్ ఫిక్స్: ఇక్కడ మన మ్యాజిక్ విడ్జెట్ ని వాడాం (ఫోటో అయినా, వీడియో అయినా సెట్ అవుతుంది)
             Center(
               child: InteractiveViewer(
                 minScale: 1.0,
                 maxScale: 4.0,
                 onInteractionStart: (_) => setState(() => _isPaused = true),
                 onInteractionEnd: (_) => setState(() => _isPaused = false),
+
+                // 🌟 బగ్ ఫిక్స్ ఇక్కడే: ValueKey యాడ్ చేశాం!
+                // ఇది పెట్టడం వల్ల ఫోటో, వీడియోలు మారుతున్న ప్రతిసారీ ఫ్లట్టర్ పాత దాన్ని ఆపేసి కొత్తదాన్ని ఫ్రెష్ గా స్టార్ట్ చేస్తుంది.
                 child: CachedMediaWidget(
+                  key: ValueKey(storyData['storyUrl']),
                   mediaUrl: storyData['storyUrl'],
                   type: type,
-                  showAudioControl:
-                      true, // 🌟 ఇక్కడ true పెడితే బటన్ వస్తుంది, ఆడియో ప్లే అవుతుంది
+                  showAudioControl: true,
                 ),
               ),
             ),
