@@ -80,8 +80,9 @@ class _SearchScreenState extends State<SearchScreen> {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('users').snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData)
+        if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
         var users = snapshot.data!.docs.where((doc) {
           var userData = doc.data() as Map<String, dynamic>;
           String username = (userData['username'] ?? '')
@@ -90,13 +91,14 @@ class _SearchScreenState extends State<SearchScreen> {
           return username.contains(searchText);
         }).toList();
 
-        if (users.isEmpty)
+        if (users.isEmpty) {
           return const Center(
             child: Text(
               "No users found.",
               style: TextStyle(color: Colors.grey),
             ),
           );
+        }
 
         return ListView.builder(
           itemCount: users.length,
@@ -141,7 +143,6 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget _buildExploreSection() {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // 🌟 1. యూజర్ డేటా తెచ్చుకుని అందులో following లిస్ట్ పట్టుకుంటున్నాం
     return FutureBuilder<DocumentSnapshot>(
       future: FirebaseFirestore.instance
           .collection('users')
@@ -151,8 +152,6 @@ class _SearchScreenState extends State<SearchScreen> {
         if (!userSnap.hasData)
           return const Center(child: CircularProgressIndicator());
         var myData = userSnap.data!.data() as Map<String, dynamic>? ?? {};
-
-        // నా following లిస్ట్ కి నా సొంత UID కూడా కలుపుతున్నాను (నా ప్రైవేట్ పోస్ట్స్ నాకు కనిపించాలి కదా)
         List myFollowing = List.from(myData['following'] ?? [])
           ..add(currentUid);
 
@@ -167,19 +166,15 @@ class _SearchScreenState extends State<SearchScreen> {
                 labelColor: isDark ? Colors.white : Colors.black,
                 unselectedLabelColor: Colors.grey,
                 tabs: const [
-                  Tab(icon: Icon(Icons.grid_on), text: "Posts"),
-                  Tab(icon: Icon(Icons.video_library), text: "Reels"),
+                  Tab(icon: Icon(Icons.grid_on), text: "Trending Posts"),
+                  Tab(icon: Icon(Icons.video_library), text: "Top Reels"),
                 ],
               ),
               Expanded(
                 child: TabBarView(
                   children: [
-                    _buildPostsGrid(
-                      myFollowing,
-                    ), // 🌟 following లిస్ట్ ని పాస్ చేస్తున్నాం
-                    _buildReelsGrid(
-                      myFollowing,
-                    ), // 🌟 following లిస్ట్ ని పాస్ చేస్తున్నాం
+                    _buildPostsGrid(myFollowing),
+                    _buildReelsGrid(myFollowing),
                   ],
                 ),
               ),
@@ -190,16 +185,18 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
+  // 🌟 1. Mutual Friends లాజిక్ ఇక్కడ యాడ్ చేశాం
   Widget _buildSuggestedFriends(List myFollowing) {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
 
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('users')
-          .limit(15)
+          .limit(30) // కొంచెం ఎక్కువ మందిని తీసుకుందాం ఫిల్టర్ చేయడానికి
           .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const SizedBox();
+
         var suggestedUsers = snapshot.data!.docs
             .where(
               (doc) => doc.id != currentUid && !myFollowing.contains(doc.id),
@@ -207,6 +204,26 @@ class _SearchScreenState extends State<SearchScreen> {
             .toList();
 
         if (suggestedUsers.isEmpty) return const SizedBox();
+
+        // 🌟 మ్యూచువల్ ఫ్రెండ్స్ ని బట్టి సార్టింగ్ (ఎవరికి ఎక్కువ మ్యూచువల్స్ ఉంటే వాళ్ళు ముందుకి వస్తారు)
+        suggestedUsers.sort((a, b) {
+          var aData = a.data() as Map<String, dynamic>;
+          var bData = b.data() as Map<String, dynamic>;
+
+          List aFollowers = aData['followers'] ?? [];
+          List bFollowers = bData['followers'] ?? [];
+
+          int aMutuals = aFollowers
+              .where((id) => myFollowing.contains(id))
+              .length;
+          int bMutuals = bFollowers
+              .where((id) => myFollowing.contains(id))
+              .length;
+
+          return bMutuals.compareTo(
+            aMutuals,
+          ); // ఎక్కువ ఉన్నవాళ్లు ముందు వస్తారు
+        });
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -219,15 +236,23 @@ class _SearchScreenState extends State<SearchScreen> {
               ),
             ),
             SizedBox(
-              height: 150,
+              height: 165, // మ్యూచువల్ టెక్స్ట్ కి ప్లేస్ కోసం పెంచాం
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 10),
-                itemCount: suggestedUsers.length,
+                itemCount: suggestedUsers.length > 15
+                    ? 15
+                    : suggestedUsers.length, // టాప్ 15 మందిని చూపిస్తాం
                 itemBuilder: (context, index) {
                   var userData =
                       suggestedUsers[index].data() as Map<String, dynamic>;
                   String username = userData['username'] ?? 'User';
+
+                  // మ్యూచువల్ ఫ్రెండ్స్ లెక్క
+                  List userFollowers = userData['followers'] ?? [];
+                  int mutualCount = userFollowers
+                      .where((id) => myFollowing.contains(id))
+                      .length;
 
                   return GestureDetector(
                     onTap: () => Navigator.push(
@@ -258,14 +283,24 @@ class _SearchScreenState extends State<SearchScreen> {
                                 ? username[0]
                                 : 'U',
                           ),
-                          const SizedBox(height: 10),
+                          const SizedBox(height: 8),
                           Text(
                             username,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
-                          const SizedBox(height: 5),
+                          // 🌟 కింద "2 mutual friends" అని చూపిస్తుంది
+                          Text(
+                            mutualCount > 0
+                                ? "$mutualCount mutuals"
+                                : "New User",
+                            style: TextStyle(
+                              color: Colors.grey.shade500,
+                              fontSize: 10,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 15,
@@ -299,20 +334,19 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   // ----------------------------------------------------
-  // 📸 POSTS GRID (With Private Filter)
+  // 📸 POSTS GRID (🌟 Sorted by Likes)
   // ----------------------------------------------------
   Widget _buildPostsGrid(List myFollowing) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('posts')
           .where('type', isEqualTo: 'image')
-          .orderBy('timestamp', descending: true)
-          .snapshots(),
+          .snapshots(), // టైమ్‌స్టాంప్ తీసేసి అన్నీ తెచ్చుకుని లైక్స్ బట్టి సార్ట్ చేద్దాం
       builder: (context, snapshot) {
-        if (!snapshot.hasData)
+        if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
 
-        // 🌟 2. ప్రైవేట్ పోస్ట్ లను ఫిల్టర్ చేయడం
         var posts = snapshot.data!.docs.where((doc) {
           var data = doc.data() as Map<String, dynamic>;
           bool isPublic = data['isPublic'] ?? true;
@@ -320,15 +354,25 @@ class _SearchScreenState extends State<SearchScreen> {
           return isPublic || myFollowing.contains(ownerId);
         }).toList();
 
+        // 🌟 బ్రహ్మాస్త్రం: లైక్స్ ని బట్టి సార్టింగ్ (ఎక్కువ లైక్స్ ఉన్నవి ముందు వస్తాయి)
+        posts.sort((a, b) {
+          var aData = a.data() as Map<String, dynamic>;
+          var bData = b.data() as Map<String, dynamic>;
+          int aLikes = (aData['likes'] as List?)?.length ?? 0;
+          int bLikes = (bData['likes'] as List?)?.length ?? 0;
+          return bLikes.compareTo(aLikes); // Descending order
+        });
+
         List<String> postIds = posts.map((p) => p.id).toList();
 
-        if (posts.isEmpty)
+        if (posts.isEmpty) {
           return const Center(
             child: Text(
-              "No posts found.",
+              "No trending posts.",
               style: TextStyle(color: Colors.grey),
             ),
           );
+        }
 
         return GridView.builder(
           physics: const BouncingScrollPhysics(),
@@ -347,6 +391,8 @@ class _SearchScreenState extends State<SearchScreen> {
                     (data['postData'] as List).isNotEmpty)
                 ? data['postData'][0].toString()
                 : data['postData']?.toString() ?? "";
+
+            int likesCount = (data['likes'] as List?)?.length ?? 0;
 
             return GestureDetector(
               onTap: () => Navigator.push(
@@ -374,6 +420,31 @@ class _SearchScreenState extends State<SearchScreen> {
                               fit: BoxFit.cover,
                             ),
                     ),
+
+                    // 🌟 ఎన్ని లైక్స్ ఉన్నాయో బొమ్మ మీద చిన్నగా చూపిద్దాం
+                    Positioned(
+                      bottom: 5,
+                      left: 5,
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.favorite,
+                            color: Colors.white,
+                            size: 12,
+                          ),
+                          const SizedBox(width: 3),
+                          Text(
+                            "$likesCount",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
                     if (data['postData'] is List &&
                         (data['postData'] as List).length > 1)
                       const Positioned(
@@ -396,20 +467,19 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   // ----------------------------------------------------
-  // 🎬 REELS GRID (With Private Filter)
+  // 🎬 REELS GRID (🌟 Sorted by Likes)
   // ----------------------------------------------------
   Widget _buildReelsGrid(List myFollowing) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('posts')
           .where('type', isEqualTo: 'video')
-          .orderBy('timestamp', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData)
+        if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
 
-        // 🌟 3. ప్రైవేట్ రీల్స్ ని ఫిల్టర్ చేయడం
         var reels = snapshot.data!.docs.where((doc) {
           var data = doc.data() as Map<String, dynamic>;
           bool isPublic = data['isPublic'] ?? true;
@@ -417,15 +487,25 @@ class _SearchScreenState extends State<SearchScreen> {
           return isPublic || myFollowing.contains(ownerId);
         }).toList();
 
+        // 🌟 రీల్స్ ని కూడా లైక్స్ బట్టి సార్ట్ చేస్తున్నాం
+        reels.sort((a, b) {
+          var aData = a.data() as Map<String, dynamic>;
+          var bData = b.data() as Map<String, dynamic>;
+          int aLikes = (aData['likes'] as List?)?.length ?? 0;
+          int bLikes = (bData['likes'] as List?)?.length ?? 0;
+          return bLikes.compareTo(aLikes);
+        });
+
         List<String> reelIds = reels.map((r) => r.id).toList();
 
-        if (reels.isEmpty)
+        if (reels.isEmpty) {
           return const Center(
             child: Text(
-              "No reels found.",
+              "No trending reels.",
               style: TextStyle(color: Colors.grey),
             ),
           );
+        }
 
         return GridView.builder(
           physics: const BouncingScrollPhysics(),
@@ -444,6 +524,8 @@ class _SearchScreenState extends State<SearchScreen> {
                     (data['postData'] as List).isNotEmpty)
                 ? data['postData'][0].toString()
                 : (data['storyUrl'] ?? "");
+
+            int likesCount = (data['likes'] as List?)?.length ?? 0;
 
             return GestureDetector(
               onTap: () => Navigator.push(
@@ -466,6 +548,31 @@ class _SearchScreenState extends State<SearchScreen> {
                         type: 'video',
                       ),
                     ),
+
+                    // 🌟 ఎన్ని లైక్స్ ఉన్నాయో కింద చూపిద్దాం
+                    Positioned(
+                      bottom: 5,
+                      left: 5,
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.favorite,
+                            color: Colors.white,
+                            size: 12,
+                          ),
+                          const SizedBox(width: 3),
+                          Text(
+                            "$likesCount",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
                     const Positioned(
                       top: 5,
                       right: 5,
