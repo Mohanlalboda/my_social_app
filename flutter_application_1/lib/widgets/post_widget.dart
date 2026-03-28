@@ -8,6 +8,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+
 import 'safe_elements.dart';
 import 'cached_media_widget.dart'; // 🌟 మనం కొత్తగా చేసిన విడ్జెట్ ఇంపోర్ట్
 import '../screens/comments_screen.dart';
@@ -59,11 +60,13 @@ class _PostWidgetState extends State<PostWidget> {
     }
   }
 
+  // 🌟 లైక్ చేసినప్పుడు నోటిఫికేషన్ పంపే మ్యాజిక్
   void _handleLike() async {
     setState(() {
       isLiked = !isLiked;
       isLiked ? likeCount++ : likeCount--;
     });
+
     try {
       var ref = FirebaseFirestore.instance
           .collection('posts')
@@ -75,6 +78,7 @@ class _PostWidgetState extends State<PostWidget> {
         });
 
         String postOwnerId = widget.post['ownerId'];
+        // మన పోస్ట్ కి మనం లైక్ కొట్టుకుంటే నోటిఫికేషన్ వద్దు
         if (currentUid != postOwnerId) {
           await FirebaseFirestore.instance.collection('notifications').add({
             'receiverId': postOwnerId,
@@ -91,6 +95,7 @@ class _PostWidgetState extends State<PostWidget> {
         });
 
         String postOwnerId = widget.post['ownerId'];
+        // అన్‌లైక్ చేసినప్పుడు నోటిఫికేషన్ డిలీట్ చేద్దాం
         if (currentUid != postOwnerId) {
           var notifs = await FirebaseFirestore.instance
               .collection('notifications')
@@ -367,8 +372,7 @@ class _PostWidgetState extends State<PostWidget> {
     String timeStr = widget.post['timestamp'] != null
         ? timeago.format((widget.post['timestamp'] as Timestamp).toDate())
         : "Just now";
-    String postType =
-        widget.post['type'] ?? 'image'; // 🌟 పోస్ట్ టైప్ ని లాగుతున్నాం
+    String postType = widget.post['type'] ?? 'image';
 
     List<String> images = [];
     if (widget.post['postData'] is List) {
@@ -440,7 +444,6 @@ class _PostWidgetState extends State<PostWidget> {
                         return GestureDetector(
                           onDoubleTap: _handleLike,
                           child: imgData.startsWith('http')
-                              // 🌟 ఇక్కడే మనం ఫాస్ట్ ఇమేజ్/వీడియో క్యాచ్ వాడాం!
                               ? CachedMediaWidget(
                                   mediaUrl: imgData,
                                   type: postType,
@@ -565,7 +568,7 @@ class _PostWidgetState extends State<PostWidget> {
                 List<String> likers = List<String>.from(
                   widget.post['likes'] ?? [],
                 );
-                if (likers.isNotEmpty)
+                if (likers.isNotEmpty) {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -573,6 +576,7 @@ class _PostWidgetState extends State<PostWidget> {
                           UserListScreen(title: "Likes", userIds: likers),
                     ),
                   );
+                }
               },
               child: Text(
                 "$likeCount likes",

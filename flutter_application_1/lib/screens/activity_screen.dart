@@ -1,4 +1,4 @@
-// ignore_for_file: curly_braces_in_flow_control_structures
+// ignore_for_file: use_build_context_synchronously
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -7,7 +7,7 @@ import 'package:timeago/timeago.dart' as timeago;
 
 import '../widgets/safe_elements.dart';
 import 'other_user_profile_screen.dart';
-import 'single_post_screen.dart';
+import 'scrolling_posts_screen.dart';
 
 class ActivityScreen extends StatefulWidget {
   const ActivityScreen({super.key});
@@ -19,9 +19,21 @@ class ActivityScreen extends StatefulWidget {
 class _ActivityScreenState extends State<ActivityScreen> {
   final String currentUid = FirebaseAuth.instance.currentUser!.uid;
 
-  // 🌟 అన్నీ ఒకేసారి డిలీట్ చేయడానికి లాజిక్
+  // 🌟 నోటిఫికేషన్ చదివినట్టు మార్చడానికి
+  void _markAsRead(String docId) {
+    FirebaseFirestore.instance.collection('notifications').doc(docId).update({
+      'isRead': true,
+    });
+  }
+
+  // 🌟 సింగిల్ నోటిఫికేషన్ డిలీట్ చేయడానికి (స్వైప్ చేసినప్పుడు)
+  void _deleteNotification(String docId) {
+    FirebaseFirestore.instance.collection('notifications').doc(docId).delete();
+  }
+
+  // 🌟 మొత్తం నోటిఫికేషన్స్ క్లియర్ చేయడానికి (Clear All)
   void _clearAllNotifications() async {
-    bool? confirm = await showDialog(
+    bool? confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text("Clear All?"),
@@ -35,28 +47,31 @@ class _ActivityScreenState extends State<ActivityScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text(
-              "Delete All",
-              style: TextStyle(color: Colors.red),
-            ),
+            child: const Text("Clear All", style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
     );
 
     if (confirm == true) {
-      var snapshot = await FirebaseFirestore.instance
+      // ఫైర్‌బేస్ లో బల్క్ (Bulk) గా డిలీట్ చేయడానికి batch వాడుతున్నాం
+      var batch = FirebaseFirestore.instance.batch();
+      var notifs = await FirebaseFirestore.instance
           .collection('notifications')
           .where('receiverId', isEqualTo: currentUid)
           .get();
 
-      for (var doc in snapshot.docs) {
-        await doc.reference.delete();
+      for (var doc in notifs.docs) {
+        batch.delete(doc.reference);
       }
+      await batch.commit();
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("All notifications cleared! ✅")),
+          const SnackBar(
+            content: Text("All notifications cleared! 🗑️"),
+            backgroundColor: Colors.green,
+          ),
         );
       }
     }
@@ -65,20 +80,25 @@ class _ActivityScreenState extends State<ActivityScreen> {
   @override
   Widget build(BuildContext context) {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
-    Color textColor =
-        Theme.of(context).textTheme.bodyLarge?.color ??
-        (isDark ? Colors.white : Colors.black);
 
     return Scaffold(
+      backgroundColor: isDark ? Colors.black : Colors.white,
       appBar: AppBar(
-        title: const Text(
+        backgroundColor: isDark ? Colors.black : Colors.white,
+        elevation: 0,
+        title: Text(
           "Activity",
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: isDark ? Colors.white : Colors.black,
+            fontWeight: FontWeight.bold,
+            fontSize: 22,
+          ),
         ),
-        // 🌟 పైన "Clear All" ఐకాన్ యాడ్ చేశాం
+        // 🌟 Clear All బటన్ ని పైన యాడ్ చేశాం!
         actions: [
           IconButton(
-            icon: const Icon(Icons.delete_sweep, color: Colors.redAccent),
+            icon: const Icon(Icons.delete_sweep, color: Colors.red),
+            tooltip: "Clear All Notifications",
             onPressed: _clearAllNotifications,
           ),
         ],
@@ -93,11 +113,23 @@ class _ActivityScreenState extends State<ActivityScreen> {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
+
           if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-            return const Center(
-              child: Text(
-                "No notifications yet. 📭",
-                style: TextStyle(fontSize: 16, color: Colors.grey),
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.notifications_off_outlined,
+                    size: 80,
+                    color: Colors.grey.shade400,
+                  ),
+                  const SizedBox(height: 10),
+                  const Text(
+                    "No notifications yet.",
+                    style: TextStyle(color: Colors.grey, fontSize: 16),
+                  ),
+                ],
               ),
             );
           }
@@ -108,21 +140,17 @@ class _ActivityScreenState extends State<ActivityScreen> {
             itemCount: notifications.length,
             itemBuilder: (context, index) {
               var notif = notifications[index].data() as Map<String, dynamic>;
+              String notifId = notifications[index].id;
+
               String type = notif['type'] ?? '';
               String senderId = notif['senderId'] ?? '';
-              String postId = notif['postId'] ?? '';
               bool isRead = notif['isRead'] ?? false;
 
-              DateTime time =
-                  (notif['timestamp'] as Timestamp?)?.toDate() ??
-                  DateTime.now();
-              String timeAgo = timeago.format(time);
-
-              if (!isRead) {
-                FirebaseFirestore.instance
-                    .collection('notifications')
-                    .doc(notifications[index].id)
-                    .update({'isRead': true});
+              String timeStr = "Just now";
+              if (notif['timestamp'] != null) {
+                timeStr = timeago.format(
+                  (notif['timestamp'] as Timestamp).toDate(),
+                );
               }
 
               return FutureBuilder<DocumentSnapshot>(
@@ -131,124 +159,139 @@ class _ActivityScreenState extends State<ActivityScreen> {
                     .doc(senderId)
                     .get(),
                 builder: (context, userSnap) {
-                  if (!userSnap.hasData || !userSnap.data!.exists)
+                  if (!userSnap.hasData || !userSnap.data!.exists) {
                     return const SizedBox();
-
-                  var userData = userSnap.data!.data() as Map<String, dynamic>;
-                  String username = userData['username'] ?? 'User';
-                  String profilePic = userData['profilePic'] ?? '';
-
-                  String actionText = "";
-                  if (type == 'like') {
-                    actionText = "liked your post.";
-                  } else if (type == 'comment') {
-                    actionText =
-                        "commented: ${notif['commentText'] ?? 'on your post'}.";
-                  } else if (type == 'follow') {
-                    actionText = "started following you.";
-                  } else {
-                    actionText = "interacted with you.";
                   }
 
-                  // 🌟 ఇక్కడే మ్యాజిక్! Swipe to Delete (Dismissible) వాడాం
+                  var senderData =
+                      userSnap.data!.data() as Map<String, dynamic>;
+                  String username = senderData['username'] ?? "User";
+
+                  IconData notifIcon;
+                  Color iconColor;
+                  String notifMessage;
+
+                  if (type == 'like') {
+                    notifIcon = Icons.favorite;
+                    iconColor = Colors.red;
+                    notifMessage = "liked your post.";
+                  } else if (type == 'comment') {
+                    notifIcon = Icons.comment;
+                    iconColor = Colors.blue;
+                    notifMessage = "commented: ${notif['text'] ?? ''}";
+                  } else if (type == 'follow') {
+                    notifIcon = Icons.person_add;
+                    iconColor = Colors.green;
+                    notifMessage = "started following you.";
+                  } else {
+                    notifIcon = Icons.notifications;
+                    iconColor = Colors.grey;
+                    notifMessage = "interacted with you.";
+                  }
+
+                  // 🌟 Swipe To Delete కోసం Dismissible విడ్జెట్ యాడ్ చేశాం!
                   return Dismissible(
-                    key: Key(notifications[index].id),
-                    direction: DismissDirection.endToStart,
+                    key: Key(notifId),
+                    direction:
+                        DismissDirection.endToStart, // కుడి నుండి ఎడమకు స్వైప్
                     background: Container(
-                      color: Colors.red,
                       alignment: Alignment.centerRight,
-                      padding: const EdgeInsets.only(right: 20),
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      color: Colors.red,
                       child: const Icon(Icons.delete, color: Colors.white),
                     ),
                     onDismissed: (direction) {
-                      // 🌟 పక్కకి స్వైప్ చేయగానే డేటాబేస్ నుండి డిలీట్ అవుతుంది
-                      FirebaseFirestore.instance
-                          .collection('notifications')
-                          .doc(notifications[index].id)
-                          .delete();
+                      _deleteNotification(notifId);
                     },
-                    child: InkWell(
-                      onTap: () {
-                        if (type == 'follow') {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  OtherUserProfileScreen(userId: senderId),
-                            ),
-                          );
-                        } else if (type == 'like' || type == 'comment') {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => SinglePostScreen(postId: postId),
-                            ),
-                          );
-                        }
-                      },
-                      child: Container(
-                        color: isRead
-                            ? Colors.transparent
-                            : (isDark
-                                  ? Colors.white10
-                                  : Colors.blue.withValues(alpha: 0.1)),
-                        padding: const EdgeInsets.symmetric(
+                    child: Container(
+                      color: isRead
+                          ? Colors.transparent
+                          : (isDark
+                                ? Colors.grey.withValues(alpha: 0.2)
+                                : Colors.blue.withValues(alpha: 0.1)),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
                           horizontal: 15,
-                          vertical: 12,
+                          vertical: 8,
                         ),
-                        child: Row(
+                        onTap: () {
+                          if (!isRead) {
+                            _markAsRead(notifId);
+                          }
+
+                          // నావిగేషన్ పక్కాగా యాడ్ చేశాం!
+                          if (type == 'follow') {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    OtherUserProfileScreen(userId: senderId),
+                              ),
+                            );
+                          } else if ((type == 'like' || type == 'comment') &&
+                              notif['postId'] != null) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => ScrollingPostsScreen(
+                                  postIds: [notif['postId']],
+                                  initialIndex: 0,
+                                ),
+                              ),
+                            );
+                          }
+                        },
+                        leading: Stack(
                           children: [
-                            GestureDetector(
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      OtherUserProfileScreen(userId: senderId),
-                                ),
-                              ),
-                              child: SafeProfilePic(
-                                base64String: profilePic,
-                                radius: 22,
-                                fallbackText: username.isNotEmpty
-                                    ? username[0]
-                                    : 'U',
-                              ),
+                            SafeProfilePic(
+                              base64String: senderData['profilePic'],
+                              radius: 25,
+                              fallbackText: username[0].toUpperCase(),
                             ),
-                            const SizedBox(width: 15),
-                            Expanded(
-                              child: RichText(
-                                text: TextSpan(
-                                  style: TextStyle(
-                                    color: textColor,
-                                    fontSize: 14,
-                                    fontFamily: 'Poppins',
-                                  ),
-                                  children: [
-                                    TextSpan(
-                                      text: "$username ",
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                    TextSpan(text: actionText),
-                                    TextSpan(
-                                      text: "  $timeAgo",
-                                      style: const TextStyle(
-                                        color: Colors.grey,
-                                        fontSize: 12,
-                                      ),
-                                    ),
-                                  ],
+                            Positioned(
+                              bottom: 0,
+                              right: 0,
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: BoxDecoration(
+                                  color: isDark ? Colors.black : Colors.white,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  notifIcon,
+                                  color: iconColor,
+                                  size: 14,
                                 ),
                               ),
                             ),
-                            if (type == 'like' || type == 'comment')
-                              const Icon(
-                                Icons.chevron_right,
-                                color: Colors.grey,
-                                size: 20,
-                              ),
                           ],
+                        ),
+                        title: RichText(
+                          text: TextSpan(
+                            style: TextStyle(
+                              color: isDark ? Colors.white : Colors.black,
+                              fontSize: 14,
+                            ),
+                            children: [
+                              TextSpan(
+                                text: "$username ",
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              TextSpan(text: notifMessage),
+                            ],
+                          ),
+                        ),
+                        subtitle: Padding(
+                          padding: const EdgeInsets.only(top: 4.0),
+                          child: Text(
+                            timeStr,
+                            style: const TextStyle(
+                              color: Colors.grey,
+                              fontSize: 12,
+                            ),
+                          ),
                         ),
                       ),
                     ),

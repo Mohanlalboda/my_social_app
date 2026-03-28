@@ -63,10 +63,22 @@ class _CommentsScreenState extends State<CommentsScreen> {
             'timestamp': FieldValue.serverTimestamp(),
           });
 
-      // 4. టెక్స్ట్ బాక్స్ క్లియర్ చేద్దాం
-      _commentController.clear();
+      // 🌟 4. మ్యాజిక్ ఇక్కడే! కామెంట్ పెట్టింది మన పోస్ట్‌కి కాకపోతే నోటిఫికేషన్ పంపుతాం
+      if (widget.postOwnerId != currentUserUid) {
+        await FirebaseFirestore.instance.collection('notifications').add({
+          'receiverId':
+              widget.postOwnerId, // ఎవరి పోస్ట్ కి కామెంట్ పెట్టామో వాళ్ళకి
+          'senderId': currentUserUid, // పెట్టింది నేను
+          'type': 'comment', // 🌟 రకం: కామెంట్
+          'postId': widget.postId,
+          'text': text, // వాళ్ళు ఏం కామెంట్ పెట్టారో అది ఇక్కడ సేవ్ అవుతుంది
+          'timestamp': FieldValue.serverTimestamp(),
+          'isRead': false,
+        });
+      }
 
-      // (Optional) ఇక్కడ నోటిఫికేషన్స్ లాజిక్ కూడా యాడ్ చేసుకోవచ్చు తర్వాత!
+      // 5. టెక్స్ట్ బాక్స్ క్లియర్ చేద్దాం
+      _commentController.clear();
     } catch (e) {
       ScaffoldMessenger.of(
         context,
