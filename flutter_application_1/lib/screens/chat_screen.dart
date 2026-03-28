@@ -10,8 +10,8 @@ import 'package:intl/intl.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cached_video_player_plus/cached_video_player_plus.dart';
 import 'package:video_player/video_player.dart';
-import 'package:record/record.dart'; // 🌟 వాయిస్ రికార్డింగ్ కోసం
-import 'package:audioplayers/audioplayers.dart'; // 🌟 ఆడియో ప్లేయర్
+import 'package:record/record.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
@@ -40,15 +40,21 @@ class _ChatScreenState extends State<ChatScreen> {
   final String currentUid = FirebaseAuth.instance.currentUser!.uid;
   late String roomId;
   bool _isUploading = false;
-  bool _isTyping = false; // 🌟 టైపింగ్ స్టేటస్ పసిగట్టడానికి
+  bool _isTyping = false;
 
-  // 🌟 వాయిస్ రికార్డింగ్ వేరియబుల్స్
   final AudioRecorder _audioRecorder = AudioRecorder();
   bool _isRecording = false;
 
   bool _isReceiverPrivate = false;
   bool _amIFollowingReceiver = false;
   bool _isLoadingStatus = true;
+
+  // 🌟 బ్రాండ్ గ్రేడియంట్
+  final LinearGradient brandGradient = const LinearGradient(
+    colors: [Color(0xFF833AB4), Color(0xFFFD1D1D), Color(0xFFF56040)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
 
   @override
   void initState() {
@@ -137,12 +143,6 @@ class _ChatScreenState extends State<ChatScreen> {
         .collection('messages')
         .doc(msgId)
         .update({'status': 'accepted'});
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Request Accepted! ✅"),
-        backgroundColor: Colors.green,
-      ),
-    );
   }
 
   Future<void> _rejectRequest(String msgId) async {
@@ -152,12 +152,6 @@ class _ChatScreenState extends State<ChatScreen> {
         .collection('messages')
         .doc(msgId)
         .update({'status': 'rejected'});
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Request Rejected ❌"),
-        backgroundColor: Colors.red,
-      ),
-    );
   }
 
   void _sendMessage() async {
@@ -184,6 +178,7 @@ class _ChatScreenState extends State<ChatScreen> {
           'timestamp': timestamp,
           'isEdited': false,
           'isDeleted': false,
+          'deletedBy': [],
         });
 
     await FirebaseFirestore.instance.collection('chatRooms').doc(roomId).set({
@@ -192,58 +187,40 @@ class _ChatScreenState extends State<ChatScreen> {
       'timestamp': timestamp,
       'unread_${widget.receiverId}': FieldValue.increment(1),
     }, SetOptions(merge: true));
-
     _sendPushNotification(msg);
   }
 
-  // 🌟 UPDATE: కుదించిన (Compressed) ఫైల్స్ అప్‌లోడ్ చేసే లాజిక్
   Future<void> _uploadFileLogic(File file, String type) async {
     try {
-      File fileToUpload = file; // డీఫాల్ట్ గా ఒరిజినల్ ఫైల్
-
-      // 📸 1. IMAGE COMPRESSION (5MB -> ~500KB)
+      File fileToUpload = file;
       if (type == 'image') {
         final tempDir = await getTemporaryDirectory();
         final outPath =
             "${tempDir.path}/compressed_${DateTime.now().millisecondsSinceEpoch}.jpg";
-
         var compressedImage = await FlutterImageCompress.compressAndGetFile(
           file.path,
           outPath,
-          quality:
-              60, // 🌟 క్వాలిటీ 60% కి తగ్గించాం (కంటికి తేడా తెలియదు, సైజ్ సగానికి పడిపోతుంది)
+          quality: 60,
           minWidth: 1080,
           minHeight: 1080,
         );
-
-        if (compressedImage != null) {
-          fileToUpload = File(compressedImage.path);
-          debugPrint("✅ Image Compressed!");
-        }
-      }
-      // 🎥 2. VIDEO COMPRESSION (Medium Quality)
-      else if (type == 'video') {
+        if (compressedImage != null) fileToUpload = File(compressedImage.path);
+      } else if (type == 'video') {
         MediaInfo? mediaInfo = await VideoCompress.compressVideo(
           file.path,
-          quality:
-              VideoQuality.MediumQuality, // 🌟 మొబైల్ కి పర్ఫెక్ట్ క్వాలిటీ
+          quality: VideoQuality.MediumQuality,
           deleteOrigin: false,
           includeAudio: true,
         );
-
-        if (mediaInfo != null && mediaInfo.file != null) {
+        if (mediaInfo != null && mediaInfo.file != null)
           fileToUpload = mediaInfo.file!;
-          debugPrint("✅ Video Compressed: ${mediaInfo.filesize} bytes");
-        }
       }
 
-      // 🌟 కంప్రెస్ అయిన ఫైల్ ని ఫైర్‌బేస్ కి పంపుతున్నాం!
       String ext = type == 'video' ? 'mp4' : (type == 'audio' ? 'm4a' : 'jpg');
       String fileName = "${DateTime.now().millisecondsSinceEpoch}.$ext";
       Reference ref = FirebaseStorage.instance.ref().child(
         'chat_media/$roomId/$fileName',
       );
-
       UploadTask uploadTask = ref.putFile(fileToUpload);
       TaskSnapshot snap = await uploadTask;
       String fileUrl = await snap.ref.getDownloadURL();
@@ -268,6 +245,7 @@ class _ChatScreenState extends State<ChatScreen> {
             'isRead': false,
             'timestamp': timestamp,
             'isDeleted': false,
+            'deletedBy': [],
           });
 
       await FirebaseFirestore.instance.collection('chatRooms').doc(roomId).set({
@@ -276,7 +254,6 @@ class _ChatScreenState extends State<ChatScreen> {
         'timestamp': timestamp,
         'unread_${widget.receiverId}': FieldValue.increment(1),
       }, SetOptions(merge: true));
-
       _sendPushNotification(msgText);
     } catch (e) {
       if (mounted)
@@ -284,14 +261,10 @@ class _ChatScreenState extends State<ChatScreen> {
           context,
         ).showSnackBar(SnackBar(content: Text("Failed: $e")));
     } finally {
-      // వీడియో కంప్రెస్ అయ్యాక క్యాచీ ని క్లీన్ చేయడం (స్టోరేజ్ ఫుల్ అవ్వకుండా)
-      if (type == 'video') {
-        VideoCompress.deleteAllCache();
-      }
+      if (type == 'video') VideoCompress.deleteAllCache();
     }
   }
 
-  // 🌟 VOICE RECORDING LOGIC
   Future<void> _startRecording() async {
     if (await Permission.microphone.request().isGranted) {
       final tempDir = await getTemporaryDirectory();
@@ -302,10 +275,6 @@ class _ChatScreenState extends State<ChatScreen> {
         path: path,
       );
       setState(() => _isRecording = true);
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Microphone permission required!")),
-      );
     }
   }
 
@@ -338,39 +307,28 @@ class _ChatScreenState extends State<ChatScreen> {
         title: senderName,
         body: content,
       );
-    } catch (e) {
-      debugPrint("Notification Error: $e");
-    }
+    } catch (e) {}
   }
 
   Future<void> _pickSingleMedia(ImageSource source, bool isVideo) async {
     final picker = ImagePicker();
-    try {
-      XFile? file = isVideo
-          ? await picker.pickVideo(source: source)
-          : await picker.pickImage(source: source, imageQuality: 70);
-      if (file != null) {
-        setState(() => _isUploading = true);
-        await _uploadFileLogic(File(file.path), isVideo ? 'video' : 'image');
-        if (mounted) setState(() => _isUploading = false);
-      }
-    } catch (e) {
-      debugPrint("Error: $e");
+    XFile? file = isVideo
+        ? await picker.pickVideo(source: source)
+        : await picker.pickImage(source: source, imageQuality: 70);
+    if (file != null) {
+      setState(() => _isUploading = true);
+      await _uploadFileLogic(File(file.path), isVideo ? 'video' : 'image');
+      if (mounted) setState(() => _isUploading = false);
     }
   }
 
   Future<void> _pickMultipleImages() async {
     final picker = ImagePicker();
-    try {
-      final List<XFile> files = await picker.pickMultiImage(imageQuality: 70);
-      if (files.isNotEmpty) {
-        setState(() => _isUploading = true);
-        for (var file in files)
-          await _uploadFileLogic(File(file.path), 'image');
-        if (mounted) setState(() => _isUploading = false);
-      }
-    } catch (e) {
-      debugPrint("Error: $e");
+    final List<XFile> files = await picker.pickMultiImage(imageQuality: 70);
+    if (files.isNotEmpty) {
+      setState(() => _isUploading = true);
+      for (var file in files) await _uploadFileLogic(File(file.path), 'image');
+      if (mounted) setState(() => _isUploading = false);
     }
   }
 
@@ -428,7 +386,12 @@ class _ChatScreenState extends State<ChatScreen> {
     }, SetOptions(merge: true));
   }
 
-  void _showMessageOptions(String msgId, String currentText, bool isTextMsg) {
+  void _showMessageOptions(
+    String msgId,
+    String currentText,
+    bool isTextMsg,
+    bool isMe,
+  ) {
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -437,7 +400,7 @@ class _ChatScreenState extends State<ChatScreen> {
       builder: (ctx) => SafeArea(
         child: Wrap(
           children: [
-            if (isTextMsg)
+            if (isTextMsg && isMe)
               ListTile(
                 leading: const Icon(Icons.edit, color: Colors.blue),
                 title: const Text("Edit Message"),
@@ -447,16 +410,28 @@ class _ChatScreenState extends State<ChatScreen> {
                 },
               ),
             ListTile(
-              leading: const Icon(Icons.delete, color: Colors.red),
+              leading: const Icon(Icons.delete_outline, color: Colors.orange),
               title: const Text(
-                "Delete for everyone",
-                style: TextStyle(color: Colors.red),
+                "Delete for me",
+                style: TextStyle(color: Colors.orange),
               ),
               onTap: () {
                 Navigator.pop(ctx);
-                _deleteMessage(msgId);
+                _deleteMessageForMe(msgId);
               },
             ),
+            if (isMe)
+              ListTile(
+                leading: const Icon(Icons.delete, color: Colors.red),
+                title: const Text(
+                  "Delete for everyone",
+                  style: TextStyle(color: Colors.red),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _deleteMessageForEveryone(msgId);
+                },
+              ),
           ],
         ),
       ),
@@ -495,7 +470,20 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  void _deleteMessage(String msgId) async {
+  // 🌟 "Delete for me"
+  void _deleteMessageForMe(String msgId) async {
+    await FirebaseFirestore.instance
+        .collection('chatRooms')
+        .doc(roomId)
+        .collection('messages')
+        .doc(msgId)
+        .update({
+          'deletedBy': FieldValue.arrayUnion([currentUid]),
+        });
+  }
+
+  // 🌟 "Delete for everyone"
+  void _deleteMessageForEveryone(String msgId) async {
     await FirebaseFirestore.instance
         .collection('chatRooms')
         .doc(roomId)
@@ -508,6 +496,45 @@ class _ChatScreenState extends State<ChatScreen> {
         });
   }
 
+  // 🌟 "Clear Chat"
+  void _clearChat() async {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Clear Chat?"),
+        content: const Text(
+          "This will clear all messages in this chat for you. The other person will still see them.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () async {
+              Navigator.pop(ctx);
+              var messagesRef = FirebaseFirestore.instance
+                  .collection('chatRooms')
+                  .doc(roomId)
+                  .collection('messages');
+              var snapshot = await messagesRef.get();
+              for (var doc in snapshot.docs) {
+                await messagesRef.doc(doc.id).update({
+                  'deletedBy': FieldValue.arrayUnion([currentUid]),
+                });
+              }
+              if (mounted)
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(const SnackBar(content: Text("Chat cleared!")));
+            },
+            child: const Text("Clear", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
@@ -517,7 +544,9 @@ class _ChatScreenState extends State<ChatScreen> {
     return Scaffold(
       backgroundColor: isDark ? Colors.black : Colors.grey[200],
       appBar: AppBar(
-        backgroundColor: isDark ? Colors.grey[900] : const Color(0xFF007AFF),
+        flexibleSpace: Container(
+          decoration: BoxDecoration(gradient: brandGradient),
+        ),
         elevation: 1,
         titleSpacing: 0,
         iconTheme: const IconThemeData(color: Colors.white),
@@ -549,7 +578,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       .snapshots(),
                   builder: (context, roomSnap) {
                     bool isTyping = false;
-                    if (roomSnap.hasData && roomSnap.data!.exists)
+                    if (roomSnap.hasData && roomSnap.data!.exists) {
                       isTyping =
                           (roomSnap.data!.data()
                               as Map<
@@ -557,6 +586,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                 dynamic
                               >)['typing_${widget.receiverId}'] ??
                           false;
+                    }
                     if (isTyping)
                       return const Text(
                         "typing...",
@@ -566,6 +596,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           fontStyle: FontStyle.italic,
                         ),
                       );
+
                     return StreamBuilder<DocumentSnapshot>(
                       stream: FirebaseFirestore.instance
                           .collection('users')
@@ -593,6 +624,16 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ],
         ),
+        actions: [
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              if (value == 'clear') _clearChat();
+            },
+            itemBuilder: (BuildContext context) => [
+              const PopupMenuItem(value: 'clear', child: Text("Clear Chat")),
+            ],
+          ),
+        ],
       ),
       body: Column(
         children: [
@@ -615,7 +656,20 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                   );
 
-                var messages = snapshot.data!.docs;
+                var allMessages = snapshot.data!.docs;
+                var messages = allMessages.where((doc) {
+                  var data = doc.data() as Map<String, dynamic>;
+                  List deletedBy = data['deletedBy'] ?? [];
+                  return !deletedBy.contains(currentUid);
+                }).toList();
+
+                if (messages.isEmpty)
+                  return const Center(
+                    child: Text(
+                      "No messages here.",
+                      style: TextStyle(color: Colors.grey),
+                    ),
+                  );
 
                 return ListView.builder(
                   reverse: true,
@@ -635,13 +689,14 @@ class _ChatScreenState extends State<ChatScreen> {
                         DateTime.now();
                     String timeStr = DateFormat('hh:mm a').format(time);
 
-                    if (!isMe && !isRead)
+                    if (!isMe && !isRead) {
                       FirebaseFirestore.instance
                           .collection('chatRooms')
                           .doc(roomId)
                           .collection('messages')
                           .doc(msgId)
                           .update({'isRead': true});
+                    }
 
                     if (msgType == 'friend_request') {
                       return Container(
@@ -743,16 +798,13 @@ class _ChatScreenState extends State<ChatScreen> {
                       );
                     }
 
-                    // 🌟 NORMAL MESSAGES UI
                     return GestureDetector(
-                      onLongPress: () {
-                        if (isMe && !isDeleted)
-                          _showMessageOptions(
-                            msgId,
-                            msgData['text'],
-                            msgType == 'text',
-                          );
-                      },
+                      onLongPress: () => _showMessageOptions(
+                        msgId,
+                        msgData['text'],
+                        msgType == 'text',
+                        isMe,
+                      ),
                       child: Align(
                         alignment: isMe
                             ? Alignment.centerRight
@@ -862,8 +914,7 @@ class _ChatScreenState extends State<ChatScreen> {
                                     ],
                                   ),
                                 )
-                              else if (msgType ==
-                                  'audio') // 🌟 ఆడియో ప్లేయర్ UI
+                              else if (msgType == 'audio')
                                 AudioMessageWidget(
                                   audioUrl: msgData['mediaUrl'] ?? '',
                                   isMe: isMe,
@@ -930,7 +981,6 @@ class _ChatScreenState extends State<ChatScreen> {
                                     ),
                                   ),
                                 ),
-
                               const SizedBox(height: 3),
                               Padding(
                                 padding: EdgeInsets.symmetric(
@@ -974,7 +1024,7 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
           if (_isUploading)
-            const LinearProgressIndicator(color: Color(0xFF007AFF)),
+            const LinearProgressIndicator(color: Color(0xFFFD1D1D)),
           if (isRestricted)
             Container(
               padding: const EdgeInsets.all(15),
@@ -997,7 +1047,6 @@ class _ChatScreenState extends State<ChatScreen> {
                 children: [
                   Expanded(
                     child: _isRecording
-                        // 🌟 రికార్డింగ్ అవుతున్నప్పుడు కనిపించే UI
                         ? Container(
                             height: 48,
                             decoration: BoxDecoration(
@@ -1019,34 +1068,12 @@ class _ChatScreenState extends State<ChatScreen> {
                               ],
                             ),
                           )
-                        // 🌟 నార్మల్ టెక్స్ట్ ఫీల్డ్
                         : TextField(
                             controller: _msgController,
                             onChanged: _onTyping,
                             style: TextStyle(
                               color: isDark ? Colors.white : Colors.black,
                             ),
-                            contentInsertionConfiguration:
-                                ContentInsertionConfiguration(
-                                  onContentInserted:
-                                      (KeyboardInsertedContent content) async {
-                                        if (content.hasData) {
-                                          final tempDir = Directory.systemTemp;
-                                          final file = File(
-                                            '${tempDir.path}/${DateTime.now().millisecondsSinceEpoch}.png',
-                                          );
-                                          await file.writeAsBytes(
-                                            content.data!,
-                                          );
-                                          _handleStickerUpload(file.path);
-                                        }
-                                      },
-                                  allowedMimeTypes: const <String>[
-                                    'image/png',
-                                    'image/gif',
-                                    'image/jpeg',
-                                  ],
-                                ),
                             decoration: InputDecoration(
                               hintText: "Message...",
                               hintStyle: const TextStyle(color: Colors.grey),
@@ -1095,10 +1122,9 @@ class _ChatScreenState extends State<ChatScreen> {
                           ),
                   ),
                   const SizedBox(width: 8),
-                  // 🌟 టైప్ చేస్తే SEND బటన్, ఖాళీగా ఉంటే MIC బటన్
                   _isTyping
                       ? CircleAvatar(
-                          backgroundColor: const Color(0xFF007AFF),
+                          backgroundColor: const Color(0xFFFD1D1D),
                           radius: 22,
                           child: IconButton(
                             icon: const Icon(
@@ -1110,14 +1136,12 @@ class _ChatScreenState extends State<ChatScreen> {
                           ),
                         )
                       : GestureDetector(
-                          onLongPress:
-                              _startRecording, // నొక్కి పట్టుకుంటే రికార్డ్
-                          onLongPressUp:
-                              _stopRecordingAndSend, // వదిలేస్తే సెండ్ అవుతుంది
+                          onLongPress: _startRecording,
+                          onLongPressUp: _stopRecordingAndSend,
                           child: CircleAvatar(
                             backgroundColor: _isRecording
                                 ? Colors.red
-                                : const Color(0xFF007AFF),
+                                : const Color(0xFFFD1D1D),
                             radius: 24,
                             child: const Icon(
                               Icons.mic,
@@ -1135,7 +1159,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
-// 🌟 ఆడియో ప్లే చేయడానికి కొత్త విడ్జెట్
 class AudioMessageWidget extends StatefulWidget {
   final String audioUrl;
   final bool isMe;
@@ -1254,7 +1277,6 @@ class _AudioMessageWidgetState extends State<AudioMessageWidget> {
   }
 }
 
-// పాత వ్యూయర్స్
 class FullScreenImageViewer extends StatelessWidget {
   final String imageUrl;
   const FullScreenImageViewer({super.key, required this.imageUrl});
