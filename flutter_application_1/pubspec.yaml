@@ -44,20 +44,20 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^6.0.0
-  # 🌟 ఐకాన్ కోసం ప్యాకేజీ ఇక్కడ యాడ్ చేశాం
   flutter_launcher_icons: ^0.13.1
 
-# 🌟 మన కొత్త లోగో సెట్టింగ్స్ ఇక్కడ ఉన్నాయి
+
+# 🌟 పక్కాగా ఫిట్ అయ్యే సెట్టింగ్స్ (Adaptive Icons)
 flutter_launcher_icons:
-  android: "launcher_icon"
+  android: true
   ios: true
-  image_path: "assets/images/logo.png"
+  image_path: "assets/images/app_icon_fixed.png"
+  adaptive_icon_background: "#FFFFFF" # 🌟 బ్యాక్‌గ్రౌండ్ వైట్ కలర్ సెట్ అవుతుంది
+  adaptive_icon_foreground: "assets/images/app_icon_fixed.png" # 🌟 లోగో ముందుకి వస్తుంది
   min_sdk_android: 21
 
 flutter:
   uses-material-design: true
-
-  # 🌟 గమనించండి: 'assets:' కి ముందు సరిగ్గా 2 స్పేస్‌లు ఉండాలి
   assets:
-    - assets/images/logo.png
+    - assets/images/app_icon_fixed.png
     - assets/service/
