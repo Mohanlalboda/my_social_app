@@ -5,7 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 import '../widgets/safe_elements.dart';
-import '../widgets/cached_media_widget.dart'; // 🌟 మన బ్రహ్మాస్త్రం!
+import '../widgets/cached_media_widget.dart';
 import 'other_user_profile_screen.dart';
 import 'scrolling_posts_screen.dart';
 import 'scrolling_reels_screen.dart';
@@ -141,156 +141,167 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget _buildExploreSection() {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return DefaultTabController(
-      length: 2,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildSuggestedFriends(),
-          TabBar(
-            indicatorColor: const Color(0xFFFD1D1D),
-            labelColor: isDark ? Colors.white : Colors.black,
-            unselectedLabelColor: Colors.grey,
-            tabs: const [
-              Tab(icon: Icon(Icons.grid_on), text: "Posts"),
-              Tab(icon: Icon(Icons.video_library), text: "Reels"),
-            ],
-          ),
-          Expanded(
-            child: TabBarView(children: [_buildPostsGrid(), _buildReelsGrid()]),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSuggestedFriends() {
-    bool isDark = Theme.of(context).brightness == Brightness.dark;
-
+    // 🌟 1. యూజర్ డేటా తెచ్చుకుని అందులో following లిస్ట్ పట్టుకుంటున్నాం
     return FutureBuilder<DocumentSnapshot>(
       future: FirebaseFirestore.instance
           .collection('users')
           .doc(currentUid)
           .get(),
       builder: (context, userSnap) {
-        if (!userSnap.hasData) return const SizedBox();
+        if (!userSnap.hasData)
+          return const Center(child: CircularProgressIndicator());
         var myData = userSnap.data!.data() as Map<String, dynamic>? ?? {};
-        List myFollowing = myData['following'] ?? [];
 
-        return StreamBuilder<QuerySnapshot>(
-          stream: FirebaseFirestore.instance
-              .collection('users')
-              .limit(15)
-              .snapshots(),
-          builder: (context, snapshot) {
-            if (!snapshot.hasData) return const SizedBox();
-            var suggestedUsers = snapshot.data!.docs
-                .where(
-                  (doc) =>
-                      doc.id != currentUid && !myFollowing.contains(doc.id),
-                )
-                .toList();
+        // నా following లిస్ట్ కి నా సొంత UID కూడా కలుపుతున్నాను (నా ప్రైవేట్ పోస్ట్స్ నాకు కనిపించాలి కదా)
+        List myFollowing = List.from(myData['following'] ?? [])
+          ..add(currentUid);
 
-            if (suggestedUsers.isEmpty) return const SizedBox();
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 15, vertical: 10),
-                  child: Text(
-                    "Discover People",
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-                  ),
+        return DefaultTabController(
+          length: 2,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildSuggestedFriends(myFollowing),
+              TabBar(
+                indicatorColor: const Color(0xFFFD1D1D),
+                labelColor: isDark ? Colors.white : Colors.black,
+                unselectedLabelColor: Colors.grey,
+                tabs: const [
+                  Tab(icon: Icon(Icons.grid_on), text: "Posts"),
+                  Tab(icon: Icon(Icons.video_library), text: "Reels"),
+                ],
+              ),
+              Expanded(
+                child: TabBarView(
+                  children: [
+                    _buildPostsGrid(
+                      myFollowing,
+                    ), // 🌟 following లిస్ట్ ని పాస్ చేస్తున్నాం
+                    _buildReelsGrid(
+                      myFollowing,
+                    ), // 🌟 following లిస్ట్ ని పాస్ చేస్తున్నాం
+                  ],
                 ),
-                SizedBox(
-                  height: 150,
-                  child: ListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
-                    itemCount: suggestedUsers.length,
-                    itemBuilder: (context, index) {
-                      var userData =
-                          suggestedUsers[index].data() as Map<String, dynamic>;
-                      String username = userData['username'] ?? 'User';
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
-                      return GestureDetector(
-                        onTap: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => OtherUserProfileScreen(
-                              userId: suggestedUsers[index].id,
+  Widget _buildSuggestedFriends(List myFollowing) {
+    bool isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('users')
+          .limit(15)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) return const SizedBox();
+        var suggestedUsers = snapshot.data!.docs
+            .where(
+              (doc) => doc.id != currentUid && !myFollowing.contains(doc.id),
+            )
+            .toList();
+
+        if (suggestedUsers.isEmpty) return const SizedBox();
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+              child: Text(
+                "Discover People",
+                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              ),
+            ),
+            SizedBox(
+              height: 150,
+              child: ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 10),
+                itemCount: suggestedUsers.length,
+                itemBuilder: (context, index) {
+                  var userData =
+                      suggestedUsers[index].data() as Map<String, dynamic>;
+                  String username = userData['username'] ?? 'User';
+
+                  return GestureDetector(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => OtherUserProfileScreen(
+                          userId: suggestedUsers[index].id,
+                        ),
+                      ),
+                    ),
+                    child: Container(
+                      width: 120,
+                      margin: const EdgeInsets.symmetric(horizontal: 5),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.grey[900] : Colors.grey[100],
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: Colors.grey.withValues(alpha: 0.2),
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          SafeProfilePic(
+                            base64String: userData['profilePic'],
+                            radius: 35,
+                            fallbackText: username.isNotEmpty
+                                ? username[0]
+                                : 'U',
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            username,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 5),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 15,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.blue,
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                            child: const Text(
+                              "View",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
                           ),
-                        ),
-                        child: Container(
-                          width: 120,
-                          margin: const EdgeInsets.symmetric(horizontal: 5),
-                          decoration: BoxDecoration(
-                            color: isDark ? Colors.grey[900] : Colors.grey[100],
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                              color: Colors.grey.withValues(alpha: 0.2),
-                            ),
-                          ),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              SafeProfilePic(
-                                base64String: userData['profilePic'],
-                                radius: 35,
-                                fallbackText: username.isNotEmpty
-                                    ? username[0]
-                                    : 'U',
-                              ),
-                              const SizedBox(height: 10),
-                              Text(
-                                username,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 5),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 15,
-                                  vertical: 5,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.blue,
-                                  borderRadius: BorderRadius.circular(5),
-                                ),
-                                child: const Text(
-                                  "View",
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.bold,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                const SizedBox(height: 10),
-              ],
-            );
-          },
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 10),
+          ],
         );
       },
     );
   }
 
   // ----------------------------------------------------
-  // 📸 POSTS GRID (Using CachedMediaWidget)
+  // 📸 POSTS GRID (With Private Filter)
   // ----------------------------------------------------
-  Widget _buildPostsGrid() {
+  Widget _buildPostsGrid(List myFollowing) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('posts')
@@ -300,7 +311,15 @@ class _SearchScreenState extends State<SearchScreen> {
       builder: (context, snapshot) {
         if (!snapshot.hasData)
           return const Center(child: CircularProgressIndicator());
-        var posts = snapshot.data!.docs;
+
+        // 🌟 2. ప్రైవేట్ పోస్ట్ లను ఫిల్టర్ చేయడం
+        var posts = snapshot.data!.docs.where((doc) {
+          var data = doc.data() as Map<String, dynamic>;
+          bool isPublic = data['isPublic'] ?? true;
+          String ownerId = data['ownerId'];
+          return isPublic || myFollowing.contains(ownerId);
+        }).toList();
+
         List<String> postIds = posts.map((p) => p.id).toList();
 
         if (posts.isEmpty)
@@ -345,7 +364,6 @@ class _SearchScreenState extends State<SearchScreen> {
                   fit: StackFit.expand,
                   children: [
                     Positioned.fill(
-                      // 🌟 ఇక్కడ క్యాచ్ విడ్జెట్ యాడ్ చేశాం!
                       child: thumbnail.startsWith('http')
                           ? CachedMediaWidget(
                               mediaUrl: thumbnail,
@@ -378,9 +396,9 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   // ----------------------------------------------------
-  // 🎬 REELS GRID (Using CachedMediaWidget for Videos)
+  // 🎬 REELS GRID (With Private Filter)
   // ----------------------------------------------------
-  Widget _buildReelsGrid() {
+  Widget _buildReelsGrid(List myFollowing) {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('posts')
@@ -390,7 +408,15 @@ class _SearchScreenState extends State<SearchScreen> {
       builder: (context, snapshot) {
         if (!snapshot.hasData)
           return const Center(child: CircularProgressIndicator());
-        var reels = snapshot.data!.docs;
+
+        // 🌟 3. ప్రైవేట్ రీల్స్ ని ఫిల్టర్ చేయడం
+        var reels = snapshot.data!.docs.where((doc) {
+          var data = doc.data() as Map<String, dynamic>;
+          bool isPublic = data['isPublic'] ?? true;
+          String ownerId = data['ownerId'];
+          return isPublic || myFollowing.contains(ownerId);
+        }).toList();
+
         List<String> reelIds = reels.map((r) => r.id).toList();
 
         if (reels.isEmpty)
@@ -434,7 +460,6 @@ class _SearchScreenState extends State<SearchScreen> {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    // 🌟 ఇక్కడ క్యాచ్ విడ్జెట్ యాడ్ చేశాం!
                     Positioned.fill(
                       child: CachedMediaWidget(
                         mediaUrl: videoUrl,
