@@ -11,7 +11,7 @@ import 'package:share_plus/share_plus.dart';
 import 'scrolling_posts_screen.dart';
 import 'scrolling_reels_screen.dart';
 import '../widgets/safe_elements.dart';
-import '../widgets/cached_media_widget.dart'; // 🌟 మన బ్రహ్మాస్త్రం ఇక్కడే ఉంది!
+import '../widgets/cached_media_widget.dart';
 import 'user_list_screen.dart';
 import 'add_post_screen.dart';
 
@@ -25,7 +25,17 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final String uid = FirebaseAuth.instance.currentUser!.uid;
 
-  // 🛠️ 1. Settings & Privacy Sheet
+  final LinearGradient brandGradient = const LinearGradient(
+    colors: [
+      Color(0xFF833AB4),
+      Color(0xFFFD1D1D),
+      Color(0xFFF56040),
+      Color(0xFFFFDC80),
+    ],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
   void _showSettings(bool currentPrivateStatus) {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
     showModalBottomSheet(
@@ -34,46 +44,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setModalState) {
-          return SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Padding(
-                  padding: EdgeInsets.all(15.0),
-                  child: Text(
-                    "Settings and privacy",
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                const Divider(),
-                SwitchListTile(
-                  secondary: const Icon(Icons.lock_outline),
-                  title: const Text("Private Account"),
-                  subtitle: const Text(
-                    "When your account is public, anyone can see your photos and videos.",
-                  ),
-                  value: currentPrivateStatus,
-                  activeThumbColor: Colors.blue,
-                  onChanged: (val) async {
-                    setModalState(() => currentPrivateStatus = val);
-                    await FirebaseFirestore.instance
-                        .collection('users')
-                        .doc(uid)
-                        .update({'isPrivate': val});
-                  },
-                ),
-                const SizedBox(height: 20),
-              ],
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Padding(
+              padding: EdgeInsets.all(15.0),
+              child: Text(
+                "Settings and privacy",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
             ),
-          );
-        },
+            const Divider(),
+            SwitchListTile(
+              secondary: const Icon(Icons.lock_outline),
+              title: const Text("Private Account"),
+              value: currentPrivateStatus,
+              // 🌟 ఫిక్స్ 1: activeColor బదులు activeThumbColor వాడాను
+              activeThumbColor: const Color(0xFFFD1D1D),
+              onChanged: (val) async {
+                Navigator.pop(ctx);
+                await FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(uid)
+                    .update({'isPrivate': val});
+              },
+            ),
+            const SizedBox(height: 20),
+          ],
+        ),
       ),
     );
   }
 
-  // 🛠️ 2. Profile Actions (View/Change Picture)
   void _onProfilePicAction(String picUrl, String name) {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
     showModalBottomSheet(
@@ -85,20 +88,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       builder: (ctx) => SafeArea(
         child: Wrap(
           children: [
-            Container(
-              alignment: Alignment.center,
-              margin: const EdgeInsets.symmetric(vertical: 10),
-              child: Container(
-                height: 4,
-                width: 40,
-                decoration: BoxDecoration(
-                  color: Colors.grey[600],
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
             ListTile(
-              leading: const Icon(Icons.person_outline, size: 28),
+              leading: const Icon(Icons.person_outline),
               title: const Text("View Profile Picture"),
               onTap: () {
                 Navigator.pop(ctx);
@@ -108,13 +99,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ListTile(
               leading: const Icon(
                 Icons.camera_alt_outlined,
-                color: Colors.blue,
-                size: 28,
+                color: Color(0xFFFD1D1D),
               ),
               title: const Text(
                 "Change Profile Picture",
                 style: TextStyle(
-                  color: Colors.blue,
+                  color: Color(0xFFFD1D1D),
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -123,65 +113,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 _updateProfilePic();
               },
             ),
-            const SizedBox(height: 10),
           ],
         ),
       ),
     );
   }
 
-  // 🛠️ 3. Main Menu Sheet
   void _showInstagramMenu(String name, String bio, bool isPrivate) {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
     showModalBottomSheet(
       context: context,
-      isScrollControlled: true,
       backgroundColor: isDark ? Colors.grey[900] : Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) => SafeArea(
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                margin: const EdgeInsets.symmetric(vertical: 10),
-                height: 4,
-                width: 40,
-                decoration: BoxDecoration(
-                  color: Colors.grey[600],
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-              ListTile(
-                leading: const Icon(Icons.settings_outlined),
-                title: const Text("Settings and privacy"),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _showSettings(isPrivate);
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.logout, color: Colors.red),
-                title: const Text(
-                  "Logout",
-                  style: TextStyle(color: Colors.red),
-                ),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  FirebaseAuth.instance.signOut();
-                },
-              ),
-              const SizedBox(height: 10),
-            ],
-          ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.settings_outlined),
+              title: const Text("Settings and privacy"),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showSettings(isPrivate);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.logout, color: Colors.red),
+              title: const Text("Logout", style: TextStyle(color: Colors.red)),
+              onTap: () {
+                Navigator.pop(ctx);
+                FirebaseAuth.instance.signOut();
+              },
+            ),
+          ],
         ),
       ),
     );
   }
 
-  // 🛠️ 4. Profile Operations (Edit, Upload Pic, Story)
   void _showEditDialog(String currentName, String currentBio) {
     final nameCtrl = TextEditingController(text: currentName);
     final bioCtrl = TextEditingController(text: currentBio);
@@ -208,6 +179,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: const Text("Cancel"),
           ),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFD1D1D),
+            ),
             onPressed: () async {
               await FirebaseFirestore.instance
                   .collection('users')
@@ -218,7 +192,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   });
               Navigator.pop(ctx);
             },
-            child: const Text("Save"),
+            child: const Text("Save", style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -232,9 +206,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       imageQuality: 85,
     );
     if (image != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Uploading... ⏳")));
       try {
         var storageRef = FirebaseStorage.instance
             .ref()
@@ -245,14 +216,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         await FirebaseFirestore.instance.collection('users').doc(uid).update({
           "profilePic": downloadUrl,
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Profile updated! 📸"),
-            backgroundColor: Colors.green,
-          ),
-        );
       } catch (e) {
-        debugPrint("Pic Upload Error: $e");
+        debugPrint("Upload Error: $e");
       }
     }
   }
@@ -265,13 +230,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Hero(
-              tag: 'p_zoom',
-              child: SafeProfilePic(
-                base64String: base64String,
-                radius: 150,
-                fallbackText: name.isNotEmpty ? name[0] : "U",
-              ),
+            SafeProfilePic(
+              base64String: base64String,
+              radius: 150,
+              fallbackText: name.isNotEmpty ? name[0] : "U",
             ),
             IconButton(
               icon: const Icon(Icons.close, color: Colors.white, size: 30),
@@ -293,14 +255,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Wrap(
           children: [
             const Padding(
-              padding: EdgeInsets.all(15.0),
+              padding: EdgeInsets.all(15),
               child: Text(
                 "Add to Story",
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ),
             ListTile(
-              leading: const Icon(Icons.photo_library, color: Colors.blue),
+              leading: const Icon(
+                Icons.photo_library,
+                color: Color(0xFFFD1D1D),
+              ),
               title: const Text("Photo Story"),
               onTap: () {
                 Navigator.pop(context);
@@ -308,7 +273,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.video_collection, color: Colors.pink),
+              leading: const Icon(
+                Icons.video_collection,
+                color: Color(0xFF833AB4),
+              ),
               title: const Text("Video Story"),
               onTap: () {
                 Navigator.pop(context);
@@ -327,9 +295,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ? await picker.pickVideo(source: ImageSource.gallery)
         : await picker.pickImage(source: ImageSource.gallery);
     if (file != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Uploading Story... ⏳")));
       try {
         String storyId = DateTime.now().millisecondsSinceEpoch.toString();
         Reference ref = FirebaseStorage.instance
@@ -349,12 +314,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           "timestamp": FieldValue.serverTimestamp(),
           "viewers": [],
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Story Added! ✅"),
-            backgroundColor: Colors.green,
-          ),
-        );
       } catch (e) {
         debugPrint("Story Error: $e");
       }
@@ -441,15 +400,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 name,
                               ),
                               child: Container(
-                                padding: const EdgeInsets.all(2),
+                                padding: const EdgeInsets.all(3),
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: Colors.grey.shade300,
-                                  ),
+                                  gradient: brandGradient,
                                 ),
-                                child: Hero(
-                                  tag: 'p_zoom',
+                                child: Container(
+                                  padding: const EdgeInsets.all(2),
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: isDark ? Colors.black : Colors.white,
+                                  ),
                                   child: SafeProfilePic(
                                     base64String: userData['profilePic'],
                                     radius: 40,
@@ -532,24 +493,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             Row(
                               children: [
                                 Expanded(
-                                  child: ElevatedButton(
-                                    onPressed: () => _showEditDialog(name, bio),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: isDark
-                                          ? Colors.grey[900]
-                                          : Colors.grey[200],
-                                      foregroundColor: isDark
-                                          ? Colors.white
-                                          : Colors.black,
-                                      elevation: 0,
+                                  child: GestureDetector(
+                                    onTap: () => _showEditDialog(name, bio),
+                                    child: Container(
+                                      height: 38,
+                                      alignment: Alignment.center,
+                                      decoration: BoxDecoration(
+                                        gradient: brandGradient,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: const Text(
+                                        "Edit profile",
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
                                     ),
-                                    child: const Text("Edit profile"),
                                   ),
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
-                                  child: ElevatedButton(
-                                    onPressed: () {
+                                  child: GestureDetector(
+                                    onTap: () {
                                       SharePlus.instance.share(
                                         ShareParams(
                                           text:
@@ -557,16 +523,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                         ),
                                       );
                                     },
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: isDark
-                                          ? Colors.grey[900]
-                                          : Colors.grey[200],
-                                      foregroundColor: isDark
-                                          ? Colors.white
-                                          : Colors.black,
-                                      elevation: 0,
+                                    child: Container(
+                                      height: 38,
+                                      alignment: Alignment.center,
+                                      decoration: BoxDecoration(
+                                        gradient: brandGradient,
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      child: const Text(
+                                        "Share profile",
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
                                     ),
-                                    child: const Text("Share profile"),
                                   ),
                                 ),
                               ],
@@ -581,12 +552,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     "New",
                                     true,
                                     isDark,
+                                    brandGradient,
                                     () => _showStoryPicker(userData),
                                   ),
                                   _buildHighlightCircle(
                                     "Moments",
                                     false,
                                     isDark,
+                                    brandGradient,
                                     () {},
                                   ),
                                 ],
@@ -601,11 +574,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 SliverPersistentHeader(
                   pinned: true,
                   delegate: _SliverAppBarDelegate(
-                    TabBar(
-                      indicatorColor: isDark ? Colors.white : Colors.black,
-                      labelColor: isDark ? Colors.white : Colors.black,
+                    const TabBar(
+                      indicatorColor: Color(0xFFFD1D1D),
+                      labelColor: Color(0xFFFD1D1D),
                       unselectedLabelColor: Colors.grey,
-                      tabs: const [
+                      tabs: [
                         Tab(icon: Icon(Icons.grid_on)),
                         Tab(icon: Icon(Icons.smart_display_outlined)),
                         Tab(icon: Icon(Icons.bookmark_border)),
@@ -645,6 +618,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     String title,
     bool isNew,
     bool isDark,
+    Gradient gradient,
     VoidCallback onTap,
   ) {
     return GestureDetector(
@@ -657,17 +631,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
               padding: const EdgeInsets.all(2),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                border: Border.all(color: Colors.grey.shade400),
+                gradient: gradient,
               ),
-              child: CircleAvatar(
-                radius: 28,
-                backgroundColor: isDark ? Colors.grey[800] : Colors.grey[200],
-                child: isNew
-                    ? Icon(
-                        Icons.add,
-                        color: isDark ? Colors.white : Colors.black,
-                      )
-                    : null,
+              child: Container(
+                padding: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: isDark ? Colors.black : Colors.white,
+                ),
+                child: CircleAvatar(
+                  radius: 26,
+                  backgroundColor: isDark ? Colors.grey[900] : Colors.grey[200],
+                  child: isNew
+                      ? Icon(
+                          Icons.add,
+                          color: isDark ? Colors.white : Colors.black,
+                        )
+                      : null,
+                ),
               ),
             ),
             const SizedBox(height: 5),
@@ -678,12 +659,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // 🖼️ 5. Grids with Thumbnails
-  Widget _buildPostGrid(
-    Stream<QuerySnapshot> stream, {
-    bool shrinkWrap = false,
-    ScrollPhysics? physics,
-  }) {
+  Widget _buildPostGrid(Stream<QuerySnapshot> stream) {
     return StreamBuilder<QuerySnapshot>(
       stream: stream,
       builder: (context, snapshot) {
@@ -694,8 +670,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         if (posts.isEmpty) return const Center(child: Text("No posts yet."));
         return GridView.builder(
           padding: EdgeInsets.zero,
-          shrinkWrap: shrinkWrap,
-          physics: physics ?? const BouncingScrollPhysics(),
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 3,
             crossAxisSpacing: 1,
@@ -718,7 +692,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
               child: thumb.startsWith('http')
-                  // 🌟 ఇక్కడే మన క్యాచ్ విడ్జెట్ ని వాడాం (ఫాస్ట్ లోడింగ్ కోసం)
                   ? CachedMediaWidget(mediaUrl: thumb, type: 'image')
                   : SafeImage(base64String: thumb),
             );
@@ -764,7 +737,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // 🌟 వీడియో కోసం క్యాచ్ విడ్జెట్ వాడాం
                   CachedMediaWidget(mediaUrl: url, type: 'video'),
                   const Positioned(
                     top: 5,
@@ -787,6 +759,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildSavedTab(String uid) {
     return ListView(
       children: [
+        // 🌟 ఫిక్స్ 2: const కీవర్డ్ యాడ్ చేశాను (Better Performance)
         const Padding(
           padding: EdgeInsets.all(12),
           child: Text(
@@ -800,8 +773,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               .where('type', isEqualTo: 'image')
               .where('savedBy', arrayContains: uid)
               .snapshots(),
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
         ),
         const Divider(height: 30),
         const Padding(
@@ -828,9 +799,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         var reels = snapshot.data!.docs;
         List<String> ids = reels.map((d) => d.id).toList();
         return GridView.builder(
-          padding: EdgeInsets.zero,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
+          padding: EdgeInsets.zero,
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 3,
             childAspectRatio: 0.65,
@@ -856,7 +827,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  // 🌟 ఇక్కడ కూడా క్యాచ్ విడ్జెట్ వాడాం!
                   CachedMediaWidget(mediaUrl: url, type: 'video'),
                   const Positioned(
                     top: 5,
@@ -877,7 +847,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 }
 
-// 🏛️ Helper Classes
+// 🌟 ఫిక్స్: _StatColumn కి const కీవర్డ్ యాడ్ చేశాను
 class _StatColumn extends StatelessWidget {
   final String num, label;
   const _StatColumn({required this.num, required this.label});

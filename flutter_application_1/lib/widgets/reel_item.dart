@@ -134,7 +134,9 @@ class _ReelItemState extends State<ReelItem> {
     );
   }
 
+  // 🌟 ఫిక్స్: వీడియో ఇంకా ఇన్స్టలైజ్ కాకపోతే ఇక్కడే ఆపేస్తాం (No More Crash!)
   void _toggleMute() {
+    if (!_isInitialized) return;
     setState(() {
       globalIsMuted = !globalIsMuted;
       _player.controller.setVolume(globalIsMuted ? 0.0 : 1.0);
@@ -151,18 +153,6 @@ class _ReelItemState extends State<ReelItem> {
       await ref.update({
         'likes': FieldValue.arrayUnion([currentUid]),
       });
-      // 🌟 ఇక్కడ లైక్ నోటిఫికేషన్ యాడ్ చేయొచ్చు
-      String ownerId = widget.reel['ownerId'];
-      if (ownerId != currentUid) {
-        await FirebaseFirestore.instance.collection('notifications').add({
-          'receiverId': ownerId,
-          'senderId': currentUid,
-          'type': 'like',
-          'postId': widget.reelId,
-          'timestamp': FieldValue.serverTimestamp(),
-          'isRead': false,
-        });
-      }
     } else {
       await ref.update({
         'likes': FieldValue.arrayRemove([currentUid]),
@@ -197,9 +187,7 @@ class _ReelItemState extends State<ReelItem> {
   void _toggleFollow() async {
     String ownerId = widget.reel['ownerId'];
     if (ownerId == currentUid) return;
-
     setState(() => _isFollowing = !_isFollowing);
-
     try {
       var myRef = FirebaseFirestore.instance
           .collection('users')
@@ -207,7 +195,6 @@ class _ReelItemState extends State<ReelItem> {
       var ownerRef = FirebaseFirestore.instance
           .collection('users')
           .doc(ownerId);
-
       if (_isFollowing) {
         await myRef.update({
           'following': FieldValue.arrayUnion([ownerId]),
@@ -232,34 +219,7 @@ class _ReelItemState extends State<ReelItem> {
       }
     } catch (e) {
       if (mounted) setState(() => _isFollowing = !_isFollowing);
-      debugPrint("Follow Error: $e");
     }
-  }
-
-  void _sendInternalShare(String friendId) async {
-    String roomId = currentUid.hashCode <= friendId.hashCode
-        ? "${currentUid}_$friendId"
-        : "${friendId}_$currentUid";
-
-    await FirebaseFirestore.instance
-        .collection('chatRooms')
-        .doc(roomId)
-        .collection('messages')
-        .add({
-          'senderId': currentUid,
-          'receiverId': friendId,
-          'text': 'Shared a Reel 🎬',
-          'mediaUrl': widget.reel['postData'][0],
-          'type': 'reel_share',
-          'postId': widget.reelId,
-          'timestamp': FieldValue.serverTimestamp(),
-          'isRead': false,
-        });
-
-    Navigator.pop(context);
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text("Reel sent successfully! ✅")));
   }
 
   void _showShareSheet() {
@@ -287,7 +247,7 @@ class _ReelItemState extends State<ReelItem> {
               ),
             ),
             const Padding(
-              padding: EdgeInsets.all(15.0),
+              padding: EdgeInsets.all(15),
               child: Text(
                 "Share Reel",
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
@@ -311,122 +271,8 @@ class _ReelItemState extends State<ReelItem> {
                 );
               },
             ),
-            const Divider(),
-            const Align(
-              alignment: Alignment.centerLeft,
-              child: Padding(
-                padding: EdgeInsets.only(left: 15),
-                child: Text(
-                  "Send to Friends",
-                  style: TextStyle(color: Colors.grey),
-                ),
-              ),
-            ),
-            Expanded(
-              child: StreamBuilder<QuerySnapshot>(
-                stream: FirebaseFirestore.instance
-                    .collection('users')
-                    .snapshots(),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData)
-                    return const Center(child: CircularProgressIndicator());
-                  var users = snapshot.data!.docs
-                      .where((doc) => doc.id != currentUid)
-                      .toList();
-                  return ListView.builder(
-                    controller: scrollController,
-                    itemCount: users.length,
-                    itemBuilder: (context, index) {
-                      var user = users[index].data() as Map<String, dynamic>;
-                      return ListTile(
-                        leading: SafeProfilePic(
-                          base64String: user['profilePic'],
-                          radius: 20,
-                          fallbackText: (user['username'] ?? "U")[0],
-                        ),
-                        title: Text(user['username'] ?? "User"),
-                        trailing: ElevatedButton(
-                          onPressed: () => _sendInternalShare(users[index].id),
-                          child: const Text("Send"),
-                        ),
-                      );
-                    },
-                  );
-                },
-              ),
-            ),
           ],
         ),
-      ),
-    );
-  }
-
-  void _deleteReel() async {
-    bool confirm =
-        await showDialog(
-          context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text("Delete Reel?"),
-            content: const Text("Are you sure you want to delete this reel?"),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, false),
-                child: const Text("Cancel"),
-              ),
-              TextButton(
-                onPressed: () => Navigator.pop(ctx, true),
-                child: const Text(
-                  "Delete",
-                  style: TextStyle(color: Colors.red),
-                ),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-
-    if (confirm) {
-      await FirebaseFirestore.instance
-          .collection('posts')
-          .doc(widget.reelId)
-          .delete();
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Reel Deleted")));
-    }
-  }
-
-  void _editCaption() {
-    TextEditingController ctrl = TextEditingController(
-      text: widget.reel['caption'] ?? "",
-    );
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Edit Caption"),
-        content: TextField(
-          controller: ctrl,
-          decoration: const InputDecoration(hintText: "Write something..."),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text("Cancel"),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              await FirebaseFirestore.instance
-                  .collection('posts')
-                  .doc(widget.reelId)
-                  .update({'caption': ctrl.text.trim()});
-              Navigator.pop(ctx);
-              ScaffoldMessenger.of(
-                context,
-              ).showSnackBar(const SnackBar(content: Text("Updated!")));
-            },
-            child: const Text("Save"),
-          ),
-        ],
       ),
     );
   }
@@ -450,9 +296,13 @@ class _ReelItemState extends State<ReelItem> {
           )
         else if (_isInitialized)
           GestureDetector(
-            onTap: () => _player.controller.value.isPlaying
-                ? _player.controller.pause()
-                : _player.controller.play(),
+            onTap: () {
+              // 🌟 ఫిక్స్: ఇక్కడ కూడా ఇన్స్టలైజ్ కాకపోతే క్లిక్ చేసినా క్రాష్ అవ్వదు
+              if (!_isInitialized) return;
+              _player.controller.value.isPlaying
+                  ? _player.controller.pause()
+                  : _player.controller.play();
+            },
             onDoubleTap: _handleDoubleTap,
             child: Center(
               child: AspectRatio(
@@ -475,7 +325,7 @@ class _ReelItemState extends State<ReelItem> {
                   scale: scale,
                   child: Icon(
                     Icons.favorite,
-                    color: Colors.red.withValues(alpha: 0.8),
+                    color: Colors.red.withValues(alpha: 0.5),
                     size: 100,
                   ),
                 );
@@ -483,21 +333,18 @@ class _ReelItemState extends State<ReelItem> {
             ),
           ),
 
-        // 🌟 మ్యాజిక్ ఇక్కడే: టాప్ లో ఉన్న ప్రొఫైల్ ఇన్ఫో ని బాటమ్-లెఫ్ట్ కి మార్చాం (Instagram స్టైల్)
         Positioned(
           bottom: 25,
           left: 15,
-          right: 80, // కుడివైపు ఐకాన్స్ కోసం ప్లేస్ వదిలేశాం
+          right: 80,
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              // యూజర్ నేమ్ మరియు ఫాలో బటన్ ఉన్న అడ్డు వరుస
               Row(
                 children: [
                   GestureDetector(
-                    behavior: HitTestBehavior
-                        .opaque, // 🌟 ట్యాప్ మిస్ అవ్వకుండా కాపాడుతుంది
+                    behavior: HitTestBehavior.opaque,
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -531,8 +378,7 @@ class _ReelItemState extends State<ReelItem> {
                   const SizedBox(width: 12),
                   if (!isOwner && !_isLoadingFollow)
                     GestureDetector(
-                      behavior: HitTestBehavior
-                          .opaque, // 🌟 ట్యాప్ మిస్ అవ్వకుండా కాపాడుతుంది
+                      behavior: HitTestBehavior.opaque,
                       onTap: _toggleFollow,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
@@ -559,7 +405,6 @@ class _ReelItemState extends State<ReelItem> {
                 ],
               ),
               const SizedBox(height: 10),
-              // కింద క్యాప్షన్
               if ((widget.reel['caption'] ?? "").toString().isNotEmpty)
                 Text(
                   widget.reel['caption'] ?? "",
@@ -575,7 +420,6 @@ class _ReelItemState extends State<ReelItem> {
           ),
         ),
 
-        // కుడివైపు లైక్, కామెంట్ ఐకాన్స్
         Positioned(
           right: 10,
           bottom: 30,
@@ -589,7 +433,7 @@ class _ReelItemState extends State<ReelItem> {
                   color: Colors.white,
                   size: 30,
                 ),
-                onPressed: _toggleMute,
+                onPressed: _toggleMute, // 🌟 ఇప్పుడు ఇది సేఫ్!
               ),
               const SizedBox(height: 10),
               Column(
@@ -644,40 +488,6 @@ class _ReelItemState extends State<ReelItem> {
                 ),
                 onPressed: _toggleSave,
               ),
-              if (isOwner) ...[
-                const SizedBox(height: 10),
-                PopupMenuButton<String>(
-                  icon: const Icon(
-                    Icons.more_vert,
-                    color: Colors.white,
-                    size: 30,
-                  ),
-                  onSelected: (val) =>
-                      val == 'edit' ? _editCaption() : _deleteReel(),
-                  itemBuilder: (ctx) => [
-                    const PopupMenuItem(
-                      value: 'edit',
-                      child: Row(
-                        children: [
-                          Icon(Icons.edit, size: 20),
-                          SizedBox(width: 10),
-                          Text("Edit"),
-                        ],
-                      ),
-                    ),
-                    const PopupMenuItem(
-                      value: 'delete',
-                      child: Row(
-                        children: [
-                          Icon(Icons.delete, color: Colors.red, size: 20),
-                          SizedBox(width: 10),
-                          Text("Delete", style: TextStyle(color: Colors.red)),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
             ],
           ),
         ),

@@ -18,10 +18,20 @@ import 'screens/activity_screen.dart';
 import 'screens/inbox_screen.dart';
 import 'screens/reels_screen.dart';
 
-// 🌟 థీమ్ కంట్రోలర్
+// 🌟 మన బ్రాండ్ గ్రేడియంట్ కలర్స్
+final brandGradient = const LinearGradient(
+  colors: [
+    Color(0xFF833AB4), // Purple
+    Color(0xFFFD1D1D), // Pink
+    Color(0xFFF56040), // Orange
+    Color(0xFFFFDC80), // Yellow
+  ],
+  begin: Alignment.topLeft,
+  end: Alignment.bottomRight,
+);
+
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.system);
 
-// 🌟 1. బ్యాక్‌గ్రౌండ్ లో నోటిఫికేషన్స్ రిసీవ్ చేసుకోవడానికి ఈ ఫంక్షన్
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   debugPrint("Background Message Received: ${message.notification?.title}");
@@ -29,21 +39,12 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // ఫైర్‌బేస్ స్టార్ట్ అవ్వడం
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
-  // App Check సెక్యూరిటీ
   await FirebaseAppCheck.instance.activate(
     androidProvider: AndroidProvider.playIntegrity,
   );
-
-  // 🌟 2. బ్యాక్‌గ్రౌండ్ నోటిఫికేషన్స్ హ్యాండిలర్ కనెక్ట్ చేశాం
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
-
-  // పాత నోటిఫికేషన్ సర్వీస్
   await PushNotificationService.initialize();
-
   runApp(const MySocialApp());
 }
 
@@ -59,14 +60,23 @@ class MySocialApp extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           title: 'MyBanjara',
 
+          // 🌟 Light Theme అప్‌డేట్
           theme: ThemeData(
+            useMaterial3: true,
             brightness: Brightness.light,
             primaryColor: const Color(0xFFFD1D1D),
+            colorScheme: ColorScheme.fromSeed(
+              seedColor: const Color(0xFF833AB4),
+              primary: const Color(0xFFFD1D1D),
+            ),
             scaffoldBackgroundColor: Colors.white,
             appBarTheme: const AppBarTheme(
               backgroundColor: Colors.white,
               foregroundColor: Colors.black,
-              elevation: 0.5,
+              elevation: 0,
+            ),
+            progressIndicatorTheme: const ProgressIndicatorThemeData(
+              color: Color(0xFFFD1D1D),
             ),
             bottomNavigationBarTheme: const BottomNavigationBarThemeData(
               backgroundColor: Colors.white,
@@ -78,14 +88,24 @@ class MySocialApp extends StatelessWidget {
             ),
           ),
 
+          // 🌟 Dark Theme అప్‌డేట్
           darkTheme: ThemeData(
+            useMaterial3: true,
             brightness: Brightness.dark,
             primaryColor: const Color(0xFFFD1D1D),
+            colorScheme: ColorScheme.fromSeed(
+              brightness: Brightness.dark,
+              seedColor: const Color(0xFF833AB4),
+              primary: const Color(0xFFFD1D1D),
+            ),
             scaffoldBackgroundColor: Colors.black,
             appBarTheme: const AppBarTheme(
               backgroundColor: Colors.black,
               foregroundColor: Colors.white,
-              elevation: 0.5,
+              elevation: 0,
+            ),
+            progressIndicatorTheme: const ProgressIndicatorThemeData(
+              color: Color(0xFFFD1D1D),
             ),
             bottomNavigationBarTheme: const BottomNavigationBarThemeData(
               backgroundColor: Colors.black,
@@ -97,7 +117,6 @@ class MySocialApp extends StatelessWidget {
           ),
 
           themeMode: currentMode,
-
           home: StreamBuilder<User?>(
             stream: FirebaseAuth.instance.authStateChanges(),
             builder: (context, snapshot) {
@@ -143,15 +162,20 @@ class _MainNavigationState extends State<MainNavigation> {
       appBar: _selectedIndex == 2 || _selectedIndex == 3
           ? null
           : AppBar(
-              title: Text(
-                "MyBanjara",
-                style: GoogleFonts.lobster(
-                  fontSize: 28,
-                  color: const Color(0xFFFD1D1D),
+              // 🌟 మ్యాజిక్: యాప్ పేరుకి మీ లోగో కలర్స్ గ్రేడియంట్
+              title: ShaderMask(
+                shaderCallback: (bounds) => brandGradient.createShader(
+                  Rect.fromLTWH(0, 0, bounds.width, bounds.height),
+                ),
+                child: Text(
+                  "MyBanjara",
+                  style: GoogleFonts.lobster(
+                    fontSize: 32,
+                    color: Colors.white, // ShaderMask కి ఇది వైట్ ఉండాలి
+                  ),
                 ),
               ),
               actions: [
-                // 🌟 యాక్టివిటీ (లైక్స్) నోటిఫికేషన్స్ ఐకాన్
                 StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
                       .collection('notifications')
@@ -181,8 +205,6 @@ class _MainNavigationState extends State<MainNavigation> {
                   },
                 ),
                 const SizedBox(width: 5),
-
-                // 🌟 చాట్ మెసేజ్ ఐకాన్
                 Padding(
                   padding: const EdgeInsets.only(right: 15),
                   child: UnreadChatBadge(
@@ -210,6 +232,7 @@ class _MainNavigationState extends State<MainNavigation> {
         type: BottomNavigationBarType.fixed,
         showSelectedLabels: false,
         showUnselectedLabels: false,
+        // 🌟 Bottom Nav Item కలర్ థీమ్ నుండి ఆటోమేటిక్ గా పింక్ తీసుకుంటుంది
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: "Home"),
           BottomNavigationBarItem(icon: Icon(Icons.search), label: "Search"),
@@ -227,7 +250,6 @@ class _MainNavigationState extends State<MainNavigation> {
   }
 }
 
-// 🌟 మెసేజెస్ కౌంట్ చూపించే కిరాక్ విడ్జెట్
 class UnreadChatBadge extends StatelessWidget {
   final Widget child;
   const UnreadChatBadge({super.key, required this.child});
@@ -263,7 +285,7 @@ class UnreadChatBadge extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.all(4),
                   decoration: const BoxDecoration(
-                    color: Colors.red,
+                    color: Color(0xFFFD1D1D), // 🌟 బ్రాండ్ పింక్ కలర్
                     shape: BoxShape.circle,
                   ),
                   child: Text(

@@ -17,7 +17,7 @@ import '../widgets/safe_elements.dart';
 import '../widgets/post_widget.dart';
 import 'story_view_screen.dart';
 import 'add_post_screen.dart';
-import 'video_trimmer_screen.dart'; // 🌟 ట్రిమ్మర్ స్క్రీన్ లింక్ ఇక్కడే ఉంది!
+import 'video_trimmer_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -29,6 +29,18 @@ class _HomeScreenState extends State<HomeScreen> {
   final String currentUid = FirebaseAuth.instance.currentUser!.uid;
   bool _isUploading = false;
   Key _refreshKey = UniqueKey();
+
+  // 🌟 మన బ్రాండ్ గ్రేడియంట్ (మీ లోగో కలర్స్)
+  final LinearGradient brandGradient = const LinearGradient(
+    colors: [
+      Color(0xFF833AB4), // Purple
+      Color(0xFFFD1D1D), // Pink
+      Color(0xFFF56040), // Orange
+      Color(0xFFFFDC80), // Yellow
+    ],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
 
   @override
   void initState() {
@@ -85,8 +97,11 @@ class _HomeScreenState extends State<HomeScreen> {
             child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
           ),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFD1D1D),
+            ),
             onPressed: () => Navigator.pop(ctx, captionCtrl.text.trim()),
-            child: const Text("Upload"),
+            child: const Text("Upload", style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
@@ -156,19 +171,18 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             ListTile(
-              leading: const Icon(Icons.photo_library, color: Colors.blue),
-              title: const Text("Photo Story (Multiple allowed)"),
+              leading: const Icon(
+                Icons.photo_library,
+                color: Color(0xFFFD1D1D),
+              ),
+              title: const Text("Photo Story"),
               onTap: () async {
                 Navigator.pop(bottomSheetContext);
-
                 final List<XFile> images = await picker.pickMultiImage();
-
                 if (images.isNotEmpty) {
                   String? caption = await _askForCaption();
-                  if (caption == null && images.isNotEmpty) return;
-
+                  if (caption == null) return;
                   setState(() => _isUploading = true);
-
                   for (var img in images) {
                     await _uploadSingleImageStory(
                       userData,
@@ -176,9 +190,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       caption,
                     );
                   }
-
                   if (!mounted) return;
-
                   setState(() => _isUploading = false);
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
@@ -190,17 +202,18 @@ class _HomeScreenState extends State<HomeScreen> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.video_collection, color: Colors.pink),
-              title: const Text("Video Story (Trim up to 30s)"),
+              leading: const Icon(
+                Icons.video_collection,
+                color: Color(0xFF833AB4),
+              ),
+              title: const Text("Video Story"),
               onTap: () async {
                 Navigator.pop(bottomSheetContext);
-
                 final XFile? video = await picker.pickVideo(
                   source: ImageSource.gallery,
                 );
                 if (video != null) {
                   if (!mounted) return;
-
                   Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -262,9 +275,7 @@ class _HomeScreenState extends State<HomeScreen> {
             itemCount: storyList.length + 1,
             padding: const EdgeInsets.symmetric(horizontal: 10),
             itemBuilder: (context, index) {
-              if (index == 0) {
-                return _buildMyStoryBubble(currentUserData);
-              }
+              if (index == 0) return _buildMyStoryBubble(currentUserData);
 
               var userData = storyList[index - 1];
               bool isAllSeen = userData['allSeen'] ?? false;
@@ -292,23 +303,18 @@ class _HomeScreenState extends State<HomeScreen> {
                         padding: const EdgeInsets.all(3),
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
+                          // 🌟 మ్యాజిక్: స్టోరీ బబుల్ రింగ్ మీ లోగో కలర్స్ లో!
                           gradient: isAllSeen
                               ? const LinearGradient(
                                   colors: [Colors.grey, Colors.grey],
                                 )
-                              : const LinearGradient(
-                                  colors: [
-                                    Color(0xFFf9ce34),
-                                    Color(0xFFee2a7b),
-                                    Color(0xFF6228d7),
-                                  ],
-                                ),
+                              : brandGradient,
                         ),
                         child: Container(
                           padding: const EdgeInsets.all(2),
-                          decoration: const BoxDecoration(
+                          decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: Colors.black,
+                            color: Theme.of(context).scaffoldBackgroundColor,
                           ),
                           child: SafeProfilePic(
                             base64String: userData['profilePic'],
@@ -356,7 +362,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   fallbackText: (userData['username'] ?? "U")[0],
                 ),
                 const CircleAvatar(
-                  backgroundColor: Colors.blue,
+                  backgroundColor: Color(0xFFFD1D1D), // 🌟 పింక్ యాడ్ బటన్
                   radius: 10,
                   child: Icon(Icons.add, color: Colors.white, size: 14),
                 ),
@@ -377,7 +383,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: isDark ? Colors.black : Colors.white,
       floatingActionButton: FloatingActionButton(
-        backgroundColor: const Color(0xFFFD1D1D),
+        backgroundColor: const Color(0xFFFD1D1D), // 🌟 బ్రాండ్ పింక్
         onPressed: () => Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const AddPostScreen()),
@@ -408,7 +414,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   children: [
                     RefreshIndicator(
                       onRefresh: _refreshFeed,
-                      color: const Color(0xFFFD1D1D),
+                      color: const Color(0xFFFD1D1D), // 🌟 బ్రాండ్ పింక్
                       child: StreamBuilder<QuerySnapshot>(
                         stream: FirebaseFirestore.instance
                             .collection('posts')
@@ -477,6 +483,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                   height: 15,
                                   child: CircularProgressIndicator(
                                     strokeWidth: 2,
+                                    color: Color(0xFFFD1D1D),
                                   ),
                                 ),
                                 SizedBox(width: 10),
@@ -485,7 +492,9 @@ class _HomeScreenState extends State<HomeScreen> {
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
-                                    color: Colors.blue,
+                                    color: Color(
+                                      0xFFFD1D1D,
+                                    ), // 🌟 పింక్ కలర్ టెక్స్ట్
                                   ),
                                 ),
                               ],

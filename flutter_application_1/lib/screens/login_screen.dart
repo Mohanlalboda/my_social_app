@@ -14,7 +14,24 @@ class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _passwordController = TextEditingController();
   bool _isLoading = false;
 
+  final LinearGradient brandGradient = const LinearGradient(
+    colors: [
+      Color(0xFF833AB4), // Purple
+      Color(0xFFFD1D1D), // Pink
+      Color(0xFFF56040), // Orange
+      Color(0xFFFFDC80), // Yellow
+    ],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+
   Future<void> _login() async {
+    // 🌟 ఫిక్స్ 1: ఇక్కడ ఫ్లవర్ బ్రాకెట్స్ యాడ్ చేశాను
+    if (_emailController.text.trim().isEmpty ||
+        _passwordController.text.trim().isEmpty) {
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
       await FirebaseAuth.instance.signInWithEmailAndPassword(
@@ -33,82 +50,152 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    bool isDark = Theme.of(context).brightness == Brightness.dark;
+    Color textColor = isDark ? Colors.white : Colors.black;
+
     return Scaffold(
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF833AB4), Color(0xFFFD1D1D), Color(0xFFF56040)],
-          ),
-        ),
+      backgroundColor: isDark ? Colors.black : Colors.white,
+      body: SafeArea(
         child: Center(
           child: Padding(
-            padding: const EdgeInsets.all(30),
+            padding: const EdgeInsets.symmetric(horizontal: 30),
             child: SingleChildScrollView(
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Text(
-                    "MyBanjara",
-                    style: GoogleFonts.lobster(
-                      fontSize: 45,
-                      color: Colors.white,
+                  ShaderMask(
+                    shaderCallback: (bounds) => brandGradient.createShader(
+                      Rect.fromLTWH(0, 0, bounds.width, bounds.height),
+                    ),
+                    child: Text(
+                      "MyBanjara",
+                      style: GoogleFonts.lobster(
+                        fontSize: 55,
+                        color: Colors.white,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 50),
+
                   TextField(
                     controller: _emailController,
-                    style: const TextStyle(color: Colors.white),
+                    style: TextStyle(color: textColor),
                     decoration: InputDecoration(
                       hintText: "Email",
-                      hintStyle: const TextStyle(color: Colors.white70),
+                      hintStyle: const TextStyle(color: Colors.grey),
                       filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.2),
+                      fillColor: isDark ? Colors.grey[900] : Colors.grey[100],
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(15),
                         borderSide: BorderSide.none,
+                      ),
+                      prefixIcon: const Icon(
+                        Icons.email_outlined,
+                        color: Colors.grey,
                       ),
                     ),
                   ),
                   const SizedBox(height: 15),
+
                   TextField(
                     controller: _passwordController,
                     obscureText: true,
-                    style: const TextStyle(color: Colors.white),
+                    style: TextStyle(color: textColor),
                     decoration: InputDecoration(
                       hintText: "Password",
-                      hintStyle: const TextStyle(color: Colors.white70),
+                      hintStyle: const TextStyle(color: Colors.grey),
                       filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.2),
+                      fillColor: isDark ? Colors.grey[900] : Colors.grey[100],
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(15),
                         borderSide: BorderSide.none,
                       ),
+                      prefixIcon: const Icon(
+                        Icons.lock_outline,
+                        color: Colors.grey,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 30),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton(
-                      onPressed: _isLoading ? null : _login,
+
+                  GestureDetector(
+                    onTap: _isLoading ? null : _login,
+                    child: Container(
+                      width: double.infinity,
+                      height: 55,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        gradient: brandGradient,
+                        borderRadius: BorderRadius.circular(15),
+                        boxShadow: [
+                          BoxShadow(
+                            // 🌟 ఫిక్స్ 2: withOpacity బదులు withValues వాడాను
+                            color: const Color(
+                              0xFFFD1D1D,
+                            ).withValues(alpha: 0.3),
+                            blurRadius: 10,
+                            offset: const Offset(0, 5),
+                          ),
+                        ],
+                      ),
                       child: _isLoading
                           ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                              height: 25,
+                              width: 25,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
                             )
-                          : const Text("Log In"),
+                          : const Text(
+                              "Log In",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                     ),
                   ),
-                  TextButton(
-                    onPressed: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const SignUpScreen()),
-                    ),
-                    child: const Text(
-                      "Don't have an account? Sign Up",
-                      style: TextStyle(color: Colors.white),
-                    ),
+                  const SizedBox(height: 25),
+
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        "Don't have an account? ",
+                        style: TextStyle(
+                          color: isDark ? Colors.white70 : Colors.black87,
+                        ),
+                      ),
+                      GestureDetector(
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => const SignUpScreen(),
+                          ),
+                        ),
+                        child: ShaderMask(
+                          shaderCallback: (bounds) =>
+                              brandGradient.createShader(
+                                Rect.fromLTWH(
+                                  0,
+                                  0,
+                                  bounds.width,
+                                  bounds.height,
+                                ),
+                              ),
+                          child: const Text(
+                            "Sign Up",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
