@@ -15,8 +15,14 @@ bool globalIsMuted = false;
 class ReelItem extends StatefulWidget {
   final Map<String, dynamic> reel;
   final String reelId;
+  final bool isCurrentPage;
 
-  const ReelItem({super.key, required this.reel, required this.reelId});
+  const ReelItem({
+    super.key,
+    required this.reel,
+    required this.reelId,
+    this.isCurrentPage = true,
+  });
 
   @override
   State<ReelItem> createState() => _ReelItemState();
@@ -28,10 +34,11 @@ class _ReelItemState extends State<ReelItem> {
   bool _isLiked = false;
   bool _isSaved = false;
   bool _isFollowing = false;
-  bool _isLoadingFollow = true; // 🌟 ఫాలో స్టేటస్ లోడ్ అయ్యే వరకు ఆపడానికి
+  bool _isLoadingFollow = true;
   int _likeCount = 0;
   final String currentUid = FirebaseAuth.instance.currentUser!.uid;
   bool _hasError = false;
+  bool _showBigHeart = false;
 
   @override
   void initState() {
@@ -39,6 +46,19 @@ class _ReelItemState extends State<ReelItem> {
     _syncData();
     _initializePlayer();
     _checkFollowStatus();
+  }
+
+  @override
+  void didUpdateWidget(ReelItem oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (_isInitialized) {
+      if (widget.isCurrentPage) {
+        _player.controller.play();
+      } else {
+        _player.controller.pause();
+        _player.controller.seekTo(Duration.zero);
+      }
+    }
   }
 
   void _syncData() {
@@ -49,7 +69,6 @@ class _ReelItemState extends State<ReelItem> {
     _likeCount = likes.length;
   }
 
-  // 🌟 Follow స్టేటస్ చెక్ చేసే పక్కా లాజిక్
   void _checkFollowStatus() async {
     String ownerId = widget.reel['ownerId'] ?? "";
     if (ownerId == currentUid) {
@@ -103,7 +122,10 @@ class _ReelItemState extends State<ReelItem> {
           });
           _player.controller.setLooping(true);
           _player.controller.setVolume(globalIsMuted ? 0.0 : 1.0);
-          _player.controller.play();
+
+          if (widget.isCurrentPage) {
+            _player.controller.play();
+          }
         }
       },
       onError: (e) {
@@ -129,11 +151,33 @@ class _ReelItemState extends State<ReelItem> {
       await ref.update({
         'likes': FieldValue.arrayUnion([currentUid]),
       });
+      // 🌟 ఇక్కడ లైక్ నోటిఫికేషన్ యాడ్ చేయొచ్చు
+      String ownerId = widget.reel['ownerId'];
+      if (ownerId != currentUid) {
+        await FirebaseFirestore.instance.collection('notifications').add({
+          'receiverId': ownerId,
+          'senderId': currentUid,
+          'type': 'like',
+          'postId': widget.reelId,
+          'timestamp': FieldValue.serverTimestamp(),
+          'isRead': false,
+        });
+      }
     } else {
       await ref.update({
         'likes': FieldValue.arrayRemove([currentUid]),
       });
     }
+  }
+
+  void _handleDoubleTap() {
+    _toggleLike();
+    setState(() {
+      _showBigHeart = true;
+    });
+    Future.delayed(const Duration(milliseconds: 800), () {
+      if (mounted) setState(() => _showBigHeart = false);
+    });
   }
 
   void _toggleSave() async {
@@ -150,12 +194,10 @@ class _ReelItemState extends State<ReelItem> {
     }
   }
 
-  // 🌟 Follow / Unfollow & Count Update మ్యాజిక్
   void _toggleFollow() async {
     String ownerId = widget.reel['ownerId'];
     if (ownerId == currentUid) return;
 
-    // UI వెంటనే మారడానికి (Instant Feedback)
     setState(() => _isFollowing = !_isFollowing);
 
     try {
@@ -167,16 +209,12 @@ class _ReelItemState extends State<ReelItem> {
           .doc(ownerId);
 
       if (_isFollowing) {
-        // 1. నా Following లిస్ట్ లో వాళ్ళని యాడ్ చెయ్
         await myRef.update({
           'following': FieldValue.arrayUnion([ownerId]),
         });
-        // 2. వాళ్ళ Followers లిస్ట్ లో నన్ను యాడ్ చెయ్
         await ownerRef.update({
           'followers': FieldValue.arrayUnion([currentUid]),
         });
-
-        // 3. నోటిఫికేషన్ పంపడం
         await FirebaseFirestore.instance.collection('notifications').add({
           'receiverId': ownerId,
           'senderId': currentUid,
@@ -185,7 +223,6 @@ class _ReelItemState extends State<ReelItem> {
           'isRead': false,
         });
       } else {
-        // Unfollow లాజిక్
         await myRef.update({
           'following': FieldValue.arrayRemove([ownerId]),
         });
@@ -194,10 +231,7 @@ class _ReelItemState extends State<ReelItem> {
         });
       }
     } catch (e) {
-      if (mounted)
-        setState(
-          () => _isFollowing = !_isFollowing,
-        ); // ఎర్రర్ వస్తే పాత స్థితికి
+      if (mounted) setState(() => _isFollowing = !_isFollowing);
       debugPrint("Follow Error: $e");
     }
   }
@@ -419,6 +453,7 @@ class _ReelItemState extends State<ReelItem> {
             onTap: () => _player.controller.value.isPlaying
                 ? _player.controller.pause()
                 : _player.controller.play(),
+            onDoubleTap: _handleDoubleTap,
             child: Center(
               child: AspectRatio(
                 aspectRatio: _player.controller.value.aspectRatio,
@@ -429,70 +464,118 @@ class _ReelItemState extends State<ReelItem> {
         else
           const Center(child: CircularProgressIndicator(color: Colors.white)),
 
-        Positioned(
-          top: 60,
-          left: 15,
-          right: 15,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              GestureDetector(
-                onTap: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) =>
-                        OtherUserProfileScreen(userId: widget.reel['ownerId']),
+        if (_showBigHeart)
+          Center(
+            child: TweenAnimationBuilder<double>(
+              tween: Tween<double>(begin: 0.5, end: 1.2),
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.elasticOut,
+              builder: (context, scale, child) {
+                return Transform.scale(
+                  scale: scale,
+                  child: Icon(
+                    Icons.favorite,
+                    color: Colors.red.withValues(alpha: 0.8),
+                    size: 100,
                   ),
-                ),
-                child: Row(
-                  children: [
-                    SafeProfilePic(
-                      base64String: widget.reel['profilePic'],
-                      radius: 18,
-                      fallbackText: (widget.reel['username'] ?? "U")[0],
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      widget.reel['username'] ?? "User",
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
-                        shadows: [Shadow(color: Colors.black, blurRadius: 2)],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+                );
+              },
+            ),
+          ),
 
-              // 🌟 ఫాలో బటన్!
-              if (!isOwner && !_isLoadingFollow)
-                GestureDetector(
-                  onTap: _toggleFollow,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 14,
-                      vertical: 6,
-                    ),
-                    decoration: BoxDecoration(
-                      color: _isFollowing ? Colors.white24 : Colors.transparent,
-                      border: Border.all(color: Colors.white, width: 1.5),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      _isFollowing ? "Following" : "Follow",
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
+        // 🌟 మ్యాజిక్ ఇక్కడే: టాప్ లో ఉన్న ప్రొఫైల్ ఇన్ఫో ని బాటమ్-లెఫ్ట్ కి మార్చాం (Instagram స్టైల్)
+        Positioned(
+          bottom: 25,
+          left: 15,
+          right: 80, // కుడివైపు ఐకాన్స్ కోసం ప్లేస్ వదిలేశాం
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // యూజర్ నేమ్ మరియు ఫాలో బటన్ ఉన్న అడ్డు వరుస
+              Row(
+                children: [
+                  GestureDetector(
+                    behavior: HitTestBehavior
+                        .opaque, // 🌟 ట్యాప్ మిస్ అవ్వకుండా కాపాడుతుంది
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => OtherUserProfileScreen(
+                          userId: widget.reel['ownerId'],
+                        ),
                       ),
                     ),
+                    child: Row(
+                      children: [
+                        SafeProfilePic(
+                          base64String: widget.reel['profilePic'],
+                          radius: 18,
+                          fallbackText: (widget.reel['username'] ?? "U")[0],
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          widget.reel['username'] ?? "User",
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 16,
+                            shadows: [
+                              Shadow(color: Colors.black, blurRadius: 2),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  if (!isOwner && !_isLoadingFollow)
+                    GestureDetector(
+                      behavior: HitTestBehavior
+                          .opaque, // 🌟 ట్యాప్ మిస్ అవ్వకుండా కాపాడుతుంది
+                      onTap: _toggleFollow,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _isFollowing
+                              ? Colors.white24
+                              : Colors.transparent,
+                          border: Border.all(color: Colors.white, width: 1.5),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          _isFollowing ? "Following" : "Follow",
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              // కింద క్యాప్షన్
+              if ((widget.reel['caption'] ?? "").toString().isNotEmpty)
+                Text(
+                  widget.reel['caption'] ?? "",
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 14,
+                    shadows: [Shadow(color: Colors.black, blurRadius: 2)],
                   ),
                 ),
             ],
           ),
         ),
 
+        // కుడివైపు లైక్, కామెంట్ ఐకాన్స్
         Positioned(
           right: 10,
           bottom: 30,
@@ -596,22 +679,6 @@ class _ReelItemState extends State<ReelItem> {
                 ),
               ],
             ],
-          ),
-        ),
-
-        Positioned(
-          bottom: 25,
-          left: 15,
-          right: 80,
-          child: Text(
-            widget.reel['caption'] ?? "",
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Colors.white,
-              fontSize: 14,
-              shadows: [Shadow(color: Colors.black, blurRadius: 2)],
-            ),
           ),
         ),
       ],

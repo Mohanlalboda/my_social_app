@@ -20,11 +20,12 @@ class ScrollingReelsScreen extends StatefulWidget {
 
 class _ScrollingReelsScreenState extends State<ScrollingReelsScreen> {
   late PageController _pageController;
+  late int _currentIndex; // 🌟 కరెంట్ ఇండెక్స్ ట్రాక్ చేయడానికి
 
   @override
   void initState() {
     super.initState();
-    // 🌟 ఏ రీల్ మీద క్లిక్ చేశారో, కరెక్ట్ గా అక్కడి నుండే ఓపెన్ అవుతుంది
+    _currentIndex = widget.initialIndex;
     _pageController = PageController(initialPage: widget.initialIndex);
   }
 
@@ -44,14 +45,18 @@ class _ScrollingReelsScreenState extends State<ScrollingReelsScreen> {
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      // 🌟 పైకి కిందకి స్క్రోల్ చేయడానికి PageView
       body: PageView.builder(
         controller: _pageController,
         scrollDirection: Axis.vertical,
         itemCount: widget.reelIds.length,
+        onPageChanged: (index) {
+          // 🌟 పేజీ మారినప్పుడు ఇండెక్స్ అప్‌డేట్ చేస్తున్నాం
+          setState(() {
+            _currentIndex = index;
+          });
+        },
         itemBuilder: (context, index) {
           return FutureBuilder<DocumentSnapshot>(
-            // 🌟 మ్యాజిక్ ఇక్కడే జరిగింది: 'reels' బదులు 'posts' వాడాం!
             future: FirebaseFirestore.instance
                 .collection('posts')
                 .doc(widget.reelIds[index])
@@ -70,10 +75,13 @@ class _ScrollingReelsScreenState extends State<ScrollingReelsScreen> {
                 );
 
               var reelData = snapshot.data!.data() as Map<String, dynamic>;
-              // 🌟 సేఫ్టీ కోసం postId ని డేటాలోకి పంపుతున్నాం
               reelData['postId'] = widget.reelIds[index];
 
-              return ReelItem(reel: reelData, reelId: widget.reelIds[index]);
+              return ReelItem(
+                reel: reelData,
+                reelId: widget.reelIds[index],
+                isCurrentPage: _currentIndex == index, // 🌟 మ్యాజిక్ ఇక్కడే!
+              );
             },
           );
         },
