@@ -6,6 +6,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_app_check/firebase_app_check.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+
 import 'services/notification_service.dart';
 import 'firebase_options.dart';
 import 'screens/login_screen.dart';
@@ -19,15 +21,29 @@ import 'screens/reels_screen.dart';
 // 🌟 థీమ్ కంట్రోలర్
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.system);
 
+// 🌟 1. బ్యాక్‌గ్రౌండ్ లో నోటిఫికేషన్స్ రిసీవ్ చేసుకోవడానికి ఈ ఫంక్షన్
+Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  debugPrint("Background Message Received: ${message.notification?.title}");
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // ఫైర్‌బేస్ స్టార్ట్ అవ్వడం
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
+  // App Check సెక్యూరిటీ
   await FirebaseAppCheck.instance.activate(
     androidProvider: AndroidProvider.playIntegrity,
   );
+
+  // 🌟 2. బ్యాక్‌గ్రౌండ్ నోటిఫికేషన్స్ హ్యాండిలర్ కనెక్ట్ చేశాం
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
+  // పాత నోటిఫికేషన్ సర్వీస్
   await PushNotificationService.initialize();
+
   runApp(const MySocialApp());
 }
 
@@ -166,7 +182,7 @@ class _MainNavigationState extends State<MainNavigation> {
                 ),
                 const SizedBox(width: 5),
 
-                // 🌟 ఇక్కడ మనం మెసేజ్ ఐకాన్ కి 'UnreadChatBadge' ని లింక్ చేశాం!
+                // 🌟 చాట్ మెసేజ్ ఐకాన్
                 Padding(
                   padding: const EdgeInsets.only(right: 15),
                   child: UnreadChatBadge(
@@ -231,7 +247,6 @@ class UnreadChatBadge extends StatelessWidget {
         if (snapshot.hasData) {
           for (var doc in snapshot.data!.docs) {
             var data = doc.data() as Map<String, dynamic>;
-            // మనకు వచ్చిన అన్‌రీడ్ మెసేజెస్ ని కౌంట్ చేస్తున్నాం
             totalUnread += (data['unread_$currentUid'] as int?) ?? 0;
           }
         }
@@ -240,11 +255,11 @@ class UnreadChatBadge extends StatelessWidget {
           clipBehavior: Clip.none,
           alignment: Alignment.center,
           children: [
-            child, // ఇది మీ నార్మల్ సెండ్ ఐకాన్
+            child,
             if (totalUnread > 0)
               Positioned(
                 right: 0,
-                top: 5, // ఐకాన్ కి కరెక్ట్ గా సెట్ అయ్యేలా పొజిషన్ మార్చాను
+                top: 5,
                 child: Container(
                   padding: const EdgeInsets.all(4),
                   decoration: const BoxDecoration(

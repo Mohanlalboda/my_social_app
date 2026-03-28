@@ -3,11 +3,9 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-import 'package:cached_video_player_plus/cached_video_player_plus.dart';
-import 'package:video_player/video_player.dart';
 
 import '../widgets/safe_elements.dart';
+import '../widgets/cached_media_widget.dart'; // 🌟 మన బ్రహ్మాస్త్రం!
 import 'other_user_profile_screen.dart';
 import 'scrolling_posts_screen.dart';
 import 'scrolling_reels_screen.dart';
@@ -290,16 +288,13 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   // ----------------------------------------------------
-  // 📸 POSTS GRID (Filtering Videos Out)
+  // 📸 POSTS GRID (Using CachedMediaWidget)
   // ----------------------------------------------------
   Widget _buildPostsGrid() {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('posts')
-          .where(
-            'type',
-            isEqualTo: 'image',
-          ) // 🌟 FIXED: Broken image problem solved!
+          .where('type', isEqualTo: 'image')
           .orderBy('timestamp', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
@@ -350,19 +345,11 @@ class _SearchScreenState extends State<SearchScreen> {
                   fit: StackFit.expand,
                   children: [
                     Positioned.fill(
+                      // 🌟 ఇక్కడ క్యాచ్ విడ్జెట్ యాడ్ చేశాం!
                       child: thumbnail.startsWith('http')
-                          ? CachedNetworkImage(
-                              imageUrl: thumbnail,
-                              fit: BoxFit.cover,
-                              placeholder: (c, u) =>
-                                  Container(color: Colors.grey[800]),
-                              errorWidget: (c, e, s) => Container(
-                                color: Colors.grey[900],
-                                child: const Icon(
-                                  Icons.broken_image,
-                                  color: Colors.grey,
-                                ),
-                              ),
+                          ? CachedMediaWidget(
+                              mediaUrl: thumbnail,
+                              type: 'image',
                             )
                           : SafeImage(
                               base64String: thumbnail,
@@ -391,16 +378,13 @@ class _SearchScreenState extends State<SearchScreen> {
   }
 
   // ----------------------------------------------------
-  // 🎬 REELS GRID (Fetching from 'posts' collection now)
+  // 🎬 REELS GRID (Using CachedMediaWidget for Videos)
   // ----------------------------------------------------
   Widget _buildReelsGrid() {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
-          .collection('posts') // 🌟 FIXED: Reels are now in 'posts' collection
-          .where(
-            'type',
-            isEqualTo: 'video',
-          ) // 🌟 FIXED: Only fetching video types
+          .collection('posts')
+          .where('type', isEqualTo: 'video')
           .orderBy('timestamp', descending: true)
           .snapshots(),
       builder: (context, snapshot) {
@@ -424,13 +408,11 @@ class _SearchScreenState extends State<SearchScreen> {
             crossAxisCount: 3,
             crossAxisSpacing: 2,
             mainAxisSpacing: 2,
-            childAspectRatio: 0.65, // రీల్స్ కాబట్టి కొంచెం నిలువుగా బాగుంటుంది
+            childAspectRatio: 0.65,
           ),
           itemCount: reels.length,
           itemBuilder: (context, index) {
             var data = reels[index].data() as Map<String, dynamic>;
-
-            // రీల్స్ కి థంబ్ నెయిల్ లింక్ తీసుకోవడం
             String videoUrl =
                 (data['postData'] is List &&
                     (data['postData'] as List).isNotEmpty)
@@ -452,7 +434,13 @@ class _SearchScreenState extends State<SearchScreen> {
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    Positioned.fill(child: ReelGridPreview(videoUrl: videoUrl)),
+                    // 🌟 ఇక్కడ క్యాచ్ విడ్జెట్ యాడ్ చేశాం!
+                    Positioned.fill(
+                      child: CachedMediaWidget(
+                        mediaUrl: videoUrl,
+                        type: 'video',
+                      ),
+                    ),
                     const Positioned(
                       top: 5,
                       right: 5,
@@ -470,60 +458,5 @@ class _SearchScreenState extends State<SearchScreen> {
         );
       },
     );
-  }
-}
-
-class ReelGridPreview extends StatefulWidget {
-  final String videoUrl;
-  const ReelGridPreview({super.key, required this.videoUrl});
-  @override
-  State<ReelGridPreview> createState() => _ReelGridPreviewState();
-}
-
-class _ReelGridPreviewState extends State<ReelGridPreview> {
-  late CachedVideoPlayerPlus _player;
-  bool _isInitialized = false;
-  @override
-  void initState() {
-    super.initState();
-    if (widget.videoUrl.isNotEmpty && widget.videoUrl.startsWith('http')) {
-      _player = CachedVideoPlayerPlus.networkUrl(Uri.parse(widget.videoUrl));
-      _player.initialize().then((_) {
-        if (mounted) setState(() => _isInitialized = true);
-      });
-    }
-  }
-
-  @override
-  void dispose() {
-    if (widget.videoUrl.isNotEmpty && widget.videoUrl.startsWith('http'))
-      _player.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (widget.videoUrl.isEmpty || !widget.videoUrl.startsWith('http'))
-      return Container(color: Colors.grey[900]);
-    return _isInitialized
-        ? SizedBox.expand(
-            child: FittedBox(
-              fit: BoxFit.cover,
-              child: SizedBox(
-                width: _player.controller.value.size.width,
-                height: _player.controller.value.size.height,
-                child: VideoPlayer(_player.controller),
-              ),
-            ),
-          )
-        : Container(
-            color: Colors.grey[900],
-            child: const Center(
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: Colors.grey,
-              ),
-            ),
-          );
   }
 }

@@ -8,9 +8,8 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:cached_network_image/cached_network_image.dart';
-
 import 'safe_elements.dart';
+import 'cached_media_widget.dart'; // 🌟 మనం కొత్తగా చేసిన విడ్జెట్ ఇంపోర్ట్
 import '../screens/comments_screen.dart';
 import '../screens/other_user_profile_screen.dart';
 import '../screens/user_list_screen.dart';
@@ -60,7 +59,6 @@ class _PostWidgetState extends State<PostWidget> {
     }
   }
 
-  // 🌟 ఇక్కడే మనం నోటిఫికేషన్ లాజిక్ యాడ్ చేశాం!
   void _handleLike() async {
     setState(() {
       isLiked = !isLiked;
@@ -76,7 +74,6 @@ class _PostWidgetState extends State<PostWidget> {
           'likes': FieldValue.arrayUnion([currentUid]),
         });
 
-        // 🌟 నోటిఫికేషన్ పంపడం
         String postOwnerId = widget.post['ownerId'];
         if (currentUid != postOwnerId) {
           await FirebaseFirestore.instance.collection('notifications').add({
@@ -93,7 +90,6 @@ class _PostWidgetState extends State<PostWidget> {
           'likes': FieldValue.arrayRemove([currentUid]),
         });
 
-        // 🌟 అన్‌లైక్ చేస్తే పాత నోటిఫికేషన్ డిలీట్ చేయడం
         String postOwnerId = widget.post['ownerId'];
         if (currentUid != postOwnerId) {
           var notifs = await FirebaseFirestore.instance
@@ -371,6 +367,8 @@ class _PostWidgetState extends State<PostWidget> {
     String timeStr = widget.post['timestamp'] != null
         ? timeago.format((widget.post['timestamp'] as Timestamp).toDate())
         : "Just now";
+    String postType =
+        widget.post['type'] ?? 'image'; // 🌟 పోస్ట్ టైప్ ని లాగుతున్నాం
 
     List<String> images = [];
     if (widget.post['postData'] is List) {
@@ -442,20 +440,10 @@ class _PostWidgetState extends State<PostWidget> {
                         return GestureDetector(
                           onDoubleTap: _handleLike,
                           child: imgData.startsWith('http')
-                              ? CachedNetworkImage(
-                                  imageUrl: imgData,
-                                  fit: BoxFit.cover,
-                                  placeholder: (context, url) => const Center(
-                                    child: CircularProgressIndicator(),
-                                  ),
-                                  errorWidget: (context, url, error) =>
-                                      const Center(
-                                        child: Icon(
-                                          Icons.broken_image,
-                                          size: 50,
-                                          color: Colors.grey,
-                                        ),
-                                      ),
+                              // 🌟 ఇక్కడే మనం ఫాస్ట్ ఇమేజ్/వీడియో క్యాచ్ వాడాం!
+                              ? CachedMediaWidget(
+                                  mediaUrl: imgData,
+                                  type: postType,
                                 )
                               : SafeImage(base64String: imgData),
                         );
@@ -534,14 +522,12 @@ class _PostWidgetState extends State<PostWidget> {
                           Icons.comment_outlined,
                           color: isDark ? Colors.white : Colors.black,
                         ),
-                        // 🌟 కామెంట్ ఐకాన్ క్లిక్ చేసినప్పుడు మనం postOwnerId ని కూడా పంపుతున్నాం
                         onPressed: () => Navigator.push(
                           context,
                           MaterialPageRoute(
                             builder: (_) => CommentsScreen(
                               postId: widget.post['postId'],
-                              postOwnerId:
-                                  widget.post['ownerId'], // ఇది ముఖ్యం!
+                              postOwnerId: widget.post['ownerId'],
                             ),
                           ),
                         ),

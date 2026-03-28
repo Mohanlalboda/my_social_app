@@ -7,12 +7,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:video_player/video_player.dart';
-import 'package:cached_video_player_plus/cached_video_player_plus.dart';
 
 import 'scrolling_posts_screen.dart';
 import 'scrolling_reels_screen.dart';
 import '../widgets/safe_elements.dart';
+import '../widgets/cached_media_widget.dart'; // 🌟 మన బ్రహ్మాస్త్రం ఇక్కడే ఉంది!
 import 'user_list_screen.dart';
 import 'add_post_screen.dart';
 
@@ -718,7 +717,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ScrollingPostsScreen(postIds: ids, initialIndex: i),
                 ),
               ),
-              child: SafeImage(base64String: thumb),
+              child: thumb.startsWith('http')
+                  // 🌟 ఇక్కడే మన క్యాచ్ విడ్జెట్ ని వాడాం (ఫాస్ట్ లోడింగ్ కోసం)
+                  ? CachedMediaWidget(mediaUrl: thumb, type: 'image')
+                  : SafeImage(base64String: thumb),
             );
           },
         );
@@ -762,7 +764,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  ReelGridPreview(videoUrl: url),
+                  // 🌟 వీడియో కోసం క్యాచ్ విడ్జెట్ వాడాం
+                  CachedMediaWidget(mediaUrl: url, type: 'video'),
                   const Positioned(
                     top: 5,
                     right: 5,
@@ -834,7 +837,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             crossAxisSpacing: 2,
             mainAxisSpacing: 2,
           ),
-          itemCount: reels.length, // 🌟 FIXED: Removed duplicate itemCount
+          itemCount: reels.length,
           itemBuilder: (context, i) {
             var data = reels[i].data() as Map<String, dynamic>;
             String url =
@@ -850,7 +853,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ScrollingReelsScreen(reelIds: ids, initialIndex: i),
                 ),
               ),
-              child: ReelGridPreview(videoUrl: url),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // 🌟 ఇక్కడ కూడా క్యాచ్ విడ్జెట్ వాడాం!
+                  CachedMediaWidget(mediaUrl: url, type: 'video'),
+                  const Positioned(
+                    top: 5,
+                    right: 5,
+                    child: Icon(
+                      Icons.play_arrow_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  ),
+                ],
+              ),
             );
           },
         );
@@ -889,48 +907,4 @@ class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
       Container(color: _color, child: _tabBar);
   @override
   bool shouldRebuild(_SliverAppBarDelegate old) => false;
-}
-
-// 🌟 REELS PREVIEW (Thumbnail Logic)
-class ReelGridPreview extends StatefulWidget {
-  final String videoUrl;
-  const ReelGridPreview({super.key, required this.videoUrl});
-  @override
-  State<ReelGridPreview> createState() => _ReelGridPreviewState();
-}
-
-class _ReelGridPreviewState extends State<ReelGridPreview> {
-  late CachedVideoPlayerPlus _player;
-  bool _init = false;
-  @override
-  void initState() {
-    super.initState();
-    if (widget.videoUrl.isNotEmpty) {
-      _player = CachedVideoPlayerPlus.networkUrl(Uri.parse(widget.videoUrl))
-        ..initialize().then((_) {
-          if (mounted) setState(() => _init = true);
-        });
-    }
-  }
-
-  @override
-  void dispose() {
-    if (_init) _player.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => _init
-      ? FittedBox(
-          fit: BoxFit.cover,
-          child: SizedBox(
-            width: _player.controller.value.size.width,
-            height: _player.controller.value.size.height,
-            child: VideoPlayer(_player.controller),
-          ),
-        )
-      : Container(
-          color: Colors.grey[900],
-          child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-        );
 }

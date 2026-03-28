@@ -28,9 +28,10 @@ class _ReelItemState extends State<ReelItem> {
   bool _isLiked = false;
   bool _isSaved = false;
   bool _isFollowing = false;
+  bool _isLoadingFollow = true; // 🌟 ఫాలో స్టేటస్ లోడ్ అయ్యే వరకు ఆపడానికి
   int _likeCount = 0;
   final String currentUid = FirebaseAuth.instance.currentUser!.uid;
-  bool _hasError = false; // 🌟 ఎర్రర్ వస్తే UIలో చూపించడానికి వాడుతున్నాం
+  bool _hasError = false;
 
   @override
   void initState() {
@@ -48,19 +49,31 @@ class _ReelItemState extends State<ReelItem> {
     _likeCount = likes.length;
   }
 
-  // 🌟 FIXED: userId ఎర్రర్ పోయింది
+  // 🌟 Follow స్టేటస్ చెక్ చేసే పక్కా లాజిక్
   void _checkFollowStatus() async {
     String ownerId = widget.reel['ownerId'] ?? "";
-    if (ownerId == currentUid) return;
+    if (ownerId == currentUid) {
+      if (mounted) setState(() => _isLoadingFollow = false);
+      return;
+    }
 
-    var myDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(currentUid)
-        .get();
-
-    if (myDoc.exists) {
-      List following = myDoc.data()?['following'] ?? [];
-      if (mounted) setState(() => _isFollowing = following.contains(ownerId));
+    try {
+      var myDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUid)
+          .get();
+      if (myDoc.exists) {
+        List followingList = myDoc.data()?['following'] ?? [];
+        if (mounted) {
+          setState(() {
+            _isFollowing = followingList.contains(ownerId);
+            _isLoadingFollow = false;
+          });
+        }
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoadingFollow = false);
+      debugPrint("Follow Check Error: $e");
     }
   }
 
@@ -94,7 +107,6 @@ class _ReelItemState extends State<ReelItem> {
         }
       },
       onError: (e) {
-        // 🌟 FIXED: catchError ఎర్రర్ పోయింది
         if (mounted) setState(() => _hasError = true);
       },
     );
@@ -138,24 +150,42 @@ class _ReelItemState extends State<ReelItem> {
     }
   }
 
+  // 🌟 Follow / Unfollow & Count Update మ్యాజిక్
   void _toggleFollow() async {
     String ownerId = widget.reel['ownerId'];
     if (ownerId == currentUid) return;
 
-    var myRef = FirebaseFirestore.instance.collection('users').doc(currentUid);
-    var ownerRef = FirebaseFirestore.instance.collection('users').doc(ownerId);
-
+    // UI వెంటనే మారడానికి (Instant Feedback)
     setState(() => _isFollowing = !_isFollowing);
 
     try {
+      var myRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUid);
+      var ownerRef = FirebaseFirestore.instance
+          .collection('users')
+          .doc(ownerId);
+
       if (_isFollowing) {
+        // 1. నా Following లిస్ట్ లో వాళ్ళని యాడ్ చెయ్
         await myRef.update({
           'following': FieldValue.arrayUnion([ownerId]),
         });
+        // 2. వాళ్ళ Followers లిస్ట్ లో నన్ను యాడ్ చెయ్
         await ownerRef.update({
           'followers': FieldValue.arrayUnion([currentUid]),
         });
+
+        // 3. నోటిఫికేషన్ పంపడం
+        await FirebaseFirestore.instance.collection('notifications').add({
+          'receiverId': ownerId,
+          'senderId': currentUid,
+          'type': 'follow',
+          'timestamp': FieldValue.serverTimestamp(),
+          'isRead': false,
+        });
       } else {
+        // Unfollow లాజిక్
         await myRef.update({
           'following': FieldValue.arrayRemove([ownerId]),
         });
@@ -164,6 +194,10 @@ class _ReelItemState extends State<ReelItem> {
         });
       }
     } catch (e) {
+      if (mounted)
+        setState(
+          () => _isFollowing = !_isFollowing,
+        ); // ఎర్రర్ వస్తే పాత స్థితికి
       debugPrint("Follow Error: $e");
     }
   }
@@ -376,7 +410,6 @@ class _ReelItemState extends State<ReelItem> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // 🌟 FIXED: _hasError ని ఇక్కడ వాడుతున్నాం
         if (_hasError)
           const Center(
             child: Icon(Icons.broken_image, color: Colors.grey, size: 50),
@@ -425,25 +458,25 @@ class _ReelItemState extends State<ReelItem> {
                         color: Colors.white,
                         fontWeight: FontWeight.bold,
                         fontSize: 16,
+                        shadows: [Shadow(color: Colors.black, blurRadius: 2)],
                       ),
                     ),
                   ],
                 ),
               ),
-              if (!isOwner)
+
+              // 🌟 ఫాలో బటన్!
+              if (!isOwner && !_isLoadingFollow)
                 GestureDetector(
                   onTap: _toggleFollow,
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 18,
+                      horizontal: 14,
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: _isFollowing ? Colors.transparent : Colors.blue,
-                      border: Border.all(
-                        color: _isFollowing ? Colors.white : Colors.blue,
-                        width: 1,
-                      ),
+                      color: _isFollowing ? Colors.white24 : Colors.transparent,
+                      border: Border.all(color: Colors.white, width: 1.5),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
@@ -528,7 +561,6 @@ class _ReelItemState extends State<ReelItem> {
                 ),
                 onPressed: _toggleSave,
               ),
-
               if (isOwner) ...[
                 const SizedBox(height: 10),
                 PopupMenuButton<String>(
@@ -575,7 +607,11 @@ class _ReelItemState extends State<ReelItem> {
             widget.reel['caption'] ?? "",
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(color: Colors.white, fontSize: 14),
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 14,
+              shadows: [Shadow(color: Colors.black, blurRadius: 2)],
+            ),
           ),
         ),
       ],

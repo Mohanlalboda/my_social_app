@@ -8,6 +8,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:uuid/uuid.dart';
 
+// 🌟 కొత్తగా యాడ్ చేసిన కంప్రెషన్ ప్యాకేజీలు
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:video_compress/video_compress.dart';
+import 'package:path_provider/path_provider.dart';
+
 class AddPostScreen extends StatefulWidget {
   const AddPostScreen({super.key});
 
@@ -28,11 +33,12 @@ class _AddPostScreenState extends State<AddPostScreen> {
   bool _isUploadingReel = false;
   bool _isReelPublic = true;
 
-  // 🌟 Pick Multiple Images for Post (HD Quality)
+  // 🌟 Pick Multiple Images for Post
   Future<void> _pickImages() async {
     final picker = ImagePicker();
-    // 🌟 మ్యాజిక్ ఇక్కడే: క్వాలిటీ 85% కి పెంచాం. సైజు స్టోరేజ్ చూసుకుంటుంది, క్వాలిటీ సూపర్ వస్తుంది!
-    final pickedFiles = await picker.pickMultiImage(imageQuality: 85);
+    final pickedFiles = await picker.pickMultiImage(
+      imageQuality: 100,
+    ); // కంప్రెషన్ కింద చేస్తాం కాబట్టి ఇక్కడ 100 ఇవ్వొచ్చు
 
     if (pickedFiles.isNotEmpty) {
       setState(() {
@@ -50,7 +56,7 @@ class _AddPostScreenState extends State<AddPostScreen> {
     }
   }
 
-  // 🌟 Upload Post with Multiple Images
+  // 🌟 Upload Post with Multiple Images (Compression Added)
   Future<void> _uploadPost() async {
     if (_selectedImages.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -60,7 +66,7 @@ class _AddPostScreenState extends State<AddPostScreen> {
     }
     setState(() => _isUploadingPost = true);
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Uploading HD Images... Please wait ⏳")),
+      const SnackBar(content: Text("Compressing & Uploading Images... ⏳")),
     );
 
     try {
@@ -73,15 +79,31 @@ class _AddPostScreenState extends State<AddPostScreen> {
       String profilePic = userDoc.data()?['profilePic'] ?? '';
 
       List<String> imageUrls = [];
+      final tempDir = await getTemporaryDirectory();
+
       for (var file in _selectedImages) {
         String imageId = const Uuid().v4();
+
+        // 📸 1. IMAGE COMPRESSION (70% Quality for Posts)
+        final outPath = "${tempDir.path}/post_$imageId.jpg";
+        var compressedImage = await FlutterImageCompress.compressAndGetFile(
+          file.path,
+          outPath,
+          quality: 70, // పోస్ట్‌లు కాబట్టి క్వాలిటీ 70% ఉంచాం
+          minWidth: 1080,
+          minHeight: 1080,
+        );
+
+        File fileToUpload = compressedImage != null
+            ? File(compressedImage.path)
+            : file;
+
         Reference ref = FirebaseStorage.instance
             .ref()
             .child('posts')
             .child(uid)
             .child('$imageId.jpg');
-
-        UploadTask uploadTask = ref.putFile(file);
+        UploadTask uploadTask = ref.putFile(fileToUpload);
         TaskSnapshot snapshot = await uploadTask;
         String downloadUrl = await snapshot.ref.getDownloadURL();
         imageUrls.add(downloadUrl);
@@ -94,7 +116,7 @@ class _AddPostScreenState extends State<AddPostScreen> {
         'ownerId': uid,
         'username': username,
         'profilePic': profilePic,
-        'postData': imageUrls, // 🌟 ఇక్కడ హై క్వాలిటీ లింక్స్ సేవ్ అవుతాయి
+        'postData': imageUrls,
         'type': 'image',
         'caption': _postCaptionController.text.trim(),
         'likes': [],
@@ -112,7 +134,7 @@ class _AddPostScreenState extends State<AddPostScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text("Post uploaded successfully in HD! ✅"),
+            content: Text("Post uploaded successfully! ✅"),
             backgroundColor: Colors.green,
           ),
         );
@@ -129,12 +151,12 @@ class _AddPostScreenState extends State<AddPostScreen> {
             backgroundColor: Colors.red,
           ),
         );
+    } finally {
+      if (mounted) setState(() => _isUploadingPost = false);
     }
-
-    if (mounted) setState(() => _isUploadingPost = false);
   }
 
-  // 🌟 Upload Reel to Firebase Storage
+  // 🌟 Upload Reel with Video Compression
   Future<void> _uploadReel() async {
     if (_selectedVideo == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -144,7 +166,7 @@ class _AddPostScreenState extends State<AddPostScreen> {
     }
     setState(() => _isUploadingReel = true);
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text("Uploading Video... Please wait ⏳")),
+      const SnackBar(content: Text("Compressing Video... Please wait ⏳")),
     );
 
     try {
@@ -158,11 +180,22 @@ class _AddPostScreenState extends State<AddPostScreen> {
 
       String postId = const Uuid().v4();
 
+      // 🎥 2. VIDEO COMPRESSION
+      MediaInfo? mediaInfo = await VideoCompress.compressVideo(
+        _selectedVideo!.path,
+        quality: VideoQuality.MediumQuality,
+        includeAudio: true,
+      );
+
+      File fileToUpload = (mediaInfo != null && mediaInfo.file != null)
+          ? mediaInfo.file!
+          : _selectedVideo!;
+
       Reference storageRef = FirebaseStorage.instance
           .ref()
           .child('reels')
           .child('$postId.mp4');
-      UploadTask uploadTask = storageRef.putFile(_selectedVideo!);
+      UploadTask uploadTask = storageRef.putFile(fileToUpload);
       TaskSnapshot snapshot = await uploadTask;
       String videoUrl = await snapshot.ref.getDownloadURL();
 
@@ -207,9 +240,10 @@ class _AddPostScreenState extends State<AddPostScreen> {
             backgroundColor: Colors.red,
           ),
         );
+    } finally {
+      VideoCompress.deleteAllCache(); // 🌟 అప్‌లోడ్ అయ్యాక చెత్త క్లీన్ చేయాలి
+      if (mounted) setState(() => _isUploadingReel = false);
     }
-
-    if (mounted) setState(() => _isUploadingReel = false);
   }
 
   @override
@@ -302,7 +336,27 @@ class _AddPostScreenState extends State<AddPostScreen> {
               style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
               onPressed: _isUploadingPost ? null : _uploadPost,
               child: _isUploadingPost
-                  ? const CircularProgressIndicator(color: Colors.white)
+                  ? const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        ),
+                        SizedBox(width: 10),
+                        Text(
+                          "Processing...",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    )
                   : const Text(
                       "Share Post",
                       style: TextStyle(
@@ -373,7 +427,27 @@ class _AddPostScreenState extends State<AddPostScreen> {
               style: ElevatedButton.styleFrom(backgroundColor: Colors.pink),
               onPressed: _isUploadingReel ? null : _uploadReel,
               child: _isUploadingReel
-                  ? const CircularProgressIndicator(color: Colors.white)
+                  ? const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        ),
+                        SizedBox(width: 10),
+                        Text(
+                          "Compressing...",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    )
                   : const Text(
                       "Share Reel",
                       style: TextStyle(

@@ -2,7 +2,6 @@
 
 import 'dart:io';
 import 'dart:async';
-import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -11,10 +10,14 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:uuid/uuid.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
+import 'package:flutter_image_compress/flutter_image_compress.dart';
+import 'package:path_provider/path_provider.dart';
+
 import '../widgets/safe_elements.dart';
 import '../widgets/post_widget.dart';
 import 'story_view_screen.dart';
 import 'add_post_screen.dart';
+import 'video_trimmer_screen.dart'; // 🌟 ట్రిమ్మర్ స్క్రీన్ లింక్ ఇక్కడే ఉంది!
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -61,12 +64,11 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // 🌟 మ్యాజిక్ ఇక్కడే: స్టోరీ సెలెక్ట్ చేశాక క్యాప్షన్ అడిగే పాప్-అప్
   Future<String?> _askForCaption() async {
     TextEditingController captionCtrl = TextEditingController();
     return showDialog<String>(
       context: context,
-      barrierDismissible: false, // బయట నొక్కితే క్లోజ్ అవ్వదు
+      barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         title: const Text("Add Caption"),
         content: TextField(
@@ -79,93 +81,71 @@ class _HomeScreenState extends State<HomeScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () =>
-                Navigator.pop(ctx, null), // Cancel నొక్కితే null వెళ్తుంది
+            onPressed: () => Navigator.pop(ctx, null),
             child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
           ),
           ElevatedButton(
-            onPressed: () => Navigator.pop(
-              ctx,
-              captionCtrl.text.trim(),
-            ), // Upload నొక్కితే టెక్స్ట్ వెళ్తుంది
-            child: const Text("Upload Story"),
+            onPressed: () => Navigator.pop(ctx, captionCtrl.text.trim()),
+            child: const Text("Upload"),
           ),
         ],
       ),
     );
   }
 
-  // 🌟 STORY UPLOAD LOGIC (With Caption)
-  Future<void> _uploadStory(Map<String, dynamic> userData, bool isVideo) async {
-    final ImagePicker picker = ImagePicker();
+  Future<void> _uploadSingleImageStory(
+    Map<String, dynamic> userData,
+    File file,
+    String? caption,
+  ) async {
+    try {
+      final tempDir = await getTemporaryDirectory();
+      final outPath = "${tempDir.path}/story_${const Uuid().v4()}.jpg";
 
-    // 1. ఫైల్ సెలెక్ట్ చేసుకోవడం
-    XFile? file;
-    if (isVideo) {
-      file = await picker.pickVideo(source: ImageSource.gallery);
-    } else {
-      // స్టోరీకి సింగిల్ ఇమేజ్ బెస్ట్, కాబట్టి pickImage వాడాను (క్వాలిటీ 60)
-      file = await picker.pickImage(
-        source: ImageSource.gallery,
-        imageQuality: 60,
+      var comp = await FlutterImageCompress.compressAndGetFile(
+        file.path,
+        outPath,
+        quality: 60,
+        minWidth: 1080,
+        minHeight: 1920,
       );
-    }
 
-    if (file != null) {
-      // 2. ఫైల్ వచ్చాక క్యాప్షన్ అడగడం
-      String? caption = await _askForCaption();
+      File fileToUpload = comp != null ? File(comp.path) : file;
+      String storyId = const Uuid().v4();
+      Reference ref = FirebaseStorage.instance
+          .ref()
+          .child('stories')
+          .child(currentUid)
+          .child('$storyId.jpg');
 
-      // ఒకవేళ యూజర్ Cancel నొక్కితే ఇక్కడే ఆగిపోతుంది
-      if (caption == null) return;
+      await ref.putFile(fileToUpload);
+      String downloadUrl = await ref.getDownloadURL();
 
-      setState(() => _isUploading = true);
-      try {
-        String storyId = const Uuid().v4();
-        Reference ref = FirebaseStorage.instance
-            .ref()
-            .child('stories')
-            .child(currentUid)
-            .child('$storyId${isVideo ? ".mp4" : ".jpg"}');
-
-        await ref.putFile(File(file.path));
-        String downloadUrl = await ref.getDownloadURL();
-
-        // 3. క్యాప్షన్ తో పాటు డేటాబేస్ లో సేవ్ చేయడం
-        await FirebaseFirestore.instance.collection('stories').add({
-          "uid": currentUid,
-          "ownerId": currentUid,
-          "username": userData['username'] ?? "User",
-          "profilePic": userData['profilePic'] ?? "",
-          "storyUrl": downloadUrl,
-          "type": isVideo ? "video" : "image",
-          "caption": caption, // 🌟 క్యాప్షన్ ఇక్కడ యాడ్ అవుతుంది
-          "timestamp": FieldValue.serverTimestamp(),
-          "viewers": [],
-        });
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Story Uploaded Successfully! ✅"),
-              backgroundColor: Colors.green,
-            ),
-          );
-        }
-      } catch (e) {
-        debugPrint("Upload Error: $e");
-      } finally {
-        if (mounted) setState(() => _isUploading = false);
-      }
+      await FirebaseFirestore.instance.collection('stories').add({
+        "uid": currentUid,
+        "ownerId": currentUid,
+        "username": userData['username'] ?? "User",
+        "profilePic": userData['profilePic'] ?? "",
+        "storyUrl": downloadUrl,
+        "type": "image",
+        "caption": caption ?? "",
+        "timestamp": FieldValue.serverTimestamp(),
+        "viewers": [],
+      });
+    } catch (e) {
+      debugPrint("Image Upload Error: $e");
     }
   }
 
   void _showStoryPicker(Map<String, dynamic> userData) {
+    final ImagePicker picker = ImagePicker();
+
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (context) => SafeArea(
+      builder: (bottomSheetContext) => SafeArea(
         child: Wrap(
           children: [
             const Padding(
@@ -177,18 +157,60 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
             ListTile(
               leading: const Icon(Icons.photo_library, color: Colors.blue),
-              title: const Text("Photo Story"),
-              onTap: () {
-                Navigator.pop(context);
-                _uploadStory(userData, false);
+              title: const Text("Photo Story (Multiple allowed)"),
+              onTap: () async {
+                Navigator.pop(bottomSheetContext);
+
+                final List<XFile> images = await picker.pickMultiImage();
+
+                if (images.isNotEmpty) {
+                  String? caption = await _askForCaption();
+                  if (caption == null && images.isNotEmpty) return;
+
+                  setState(() => _isUploading = true);
+
+                  for (var img in images) {
+                    await _uploadSingleImageStory(
+                      userData,
+                      File(img.path),
+                      caption,
+                    );
+                  }
+
+                  if (!mounted) return;
+
+                  setState(() => _isUploading = false);
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text("Stories Uploaded! ✅"),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
               },
             ),
             ListTile(
               leading: const Icon(Icons.video_collection, color: Colors.pink),
-              title: const Text("Video Story"),
-              onTap: () {
-                Navigator.pop(context);
-                _uploadStory(userData, true);
+              title: const Text("Video Story (Trim up to 30s)"),
+              onTap: () async {
+                Navigator.pop(bottomSheetContext);
+
+                final XFile? video = await picker.pickVideo(
+                  source: ImageSource.gallery,
+                );
+                if (video != null) {
+                  if (!mounted) return;
+
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => VideoTrimmerScreen(
+                        file: File(video.path),
+                        userData: userData,
+                      ),
+                    ),
+                  );
+                }
               },
             ),
           ],
@@ -390,7 +412,6 @@ class _HomeScreenState extends State<HomeScreen> {
                       child: StreamBuilder<QuerySnapshot>(
                         stream: FirebaseFirestore.instance
                             .collection('posts')
-                            .where('type', isEqualTo: 'image')
                             .orderBy('timestamp', descending: true)
                             .limit(30)
                             .snapshots(),
@@ -403,8 +424,10 @@ class _HomeScreenState extends State<HomeScreen> {
                           var allPosts = snapshot.data!.docs.where((doc) {
                             var data = doc.data() as Map<String, dynamic>;
                             bool isPublic = data['isPublic'] != false;
-                            return isPublic ||
-                                following.contains(data['ownerId']);
+                            bool isNotReel = data['type'] != 'video';
+                            return (isPublic ||
+                                    following.contains(data['ownerId'])) &&
+                                isNotReel;
                           }).toList();
 
                           if (allPosts.isEmpty)
@@ -458,7 +481,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ),
                                 SizedBox(width: 10),
                                 Text(
-                                  "Uploading Story...",
+                                  "Compressing & Uploading...",
                                   style: TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,

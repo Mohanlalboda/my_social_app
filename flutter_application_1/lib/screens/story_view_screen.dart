@@ -4,8 +4,9 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:timeago/timeago.dart' as timeago;
+
+import '../widgets/cached_media_widget.dart'; // 🌟 మన కొత్త మ్యాజిక్ విడ్జెట్!
 import '../widgets/safe_elements.dart';
 
 class StoryViewScreen extends StatefulWidget {
@@ -26,7 +27,6 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
   late int currentUserIndex;
   int currentStoryIndex = 0;
 
-  // 🌟 మ్యాజిక్ 1: డాక్యుమెంట్స్ ని డైరెక్ట్ గా కాకుండా, ఎడిట్ చేసుకోవడానికి వీలుగా Map లిస్ట్ లాగా మార్చుకున్నాం
   List<Map<String, dynamic>> currentStoryItems = [];
 
   Timer? _timer;
@@ -51,10 +51,9 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
 
     if (mounted) {
       setState(() {
-        // 🌟 డేటాని మనకు కావాల్సినట్టు కన్వర్ట్ చేసి పెట్టుకుంటున్నాం
         currentStoryItems = snap.docs.map((doc) {
           var data = doc.data();
-          data['storyId'] = doc.id; // ఐడీని కూడా లోపలే సేవ్ చేస్తున్నాం
+          data['storyId'] = doc.id;
           return data;
         }).toList();
 
@@ -66,9 +65,18 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
     }
   }
 
+  // 🌟 వీడియో ఉన్నప్పుడు టైమర్ స్లో అవ్వడానికి చిన్న లాజిక్ (ఆప్షనల్)
   void _startTimer() {
     _timer?.cancel();
-    _timer = Timer.periodic(const Duration(milliseconds: 50), (timer) {
+
+    // ఒకవేళ ప్రస్తుతం ప్లే అవుతున్నది వీడియో అయితే 15 సెకన్లు, ఫోటో అయితే 5 సెకన్లు ఉండడానికి టైమర్ అడ్జస్ట్మెంట్.
+    int durationMs = 50;
+    if (currentStoryItems.isNotEmpty) {
+      String type = currentStoryItems[currentStoryIndex]['type'] ?? 'image';
+      if (type == 'video') durationMs = 150; // వీడియో అయితే స్లోగా వెళ్తుంది
+    }
+
+    _timer = Timer.periodic(Duration(milliseconds: durationMs), (timer) {
       if (!_isPaused) {
         setState(() {
           if (_percent < 1.0) {
@@ -131,9 +139,8 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
     });
   }
 
-  // 🌟 మ్యాజిక్ 2: బాటమ్ షీట్ లో ఏ ఆప్షన్ నొక్కారో తెలుసుకొని దాని ప్రకారం పాజ్ ని కంట్రోల్ చేస్తున్నాం
   void _showStoryMenu(String currentCaption) async {
-    setState(() => _isPaused = true); // మెనూ ఓపెన్ అవ్వగానే ఆగిపోతుంది
+    setState(() => _isPaused = true);
 
     String? action = await showModalBottomSheet<String>(
       context: context,
@@ -151,7 +158,7 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
                 "Edit Caption",
                 style: TextStyle(color: Colors.white),
               ),
-              onTap: () => Navigator.pop(ctx, 'edit'), // ఎడిట్ పంపుతాం
+              onTap: () => Navigator.pop(ctx, 'edit'),
             ),
             ListTile(
               leading: const Icon(Icons.delete, color: Colors.red),
@@ -159,27 +166,23 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
                 "Delete Story",
                 style: TextStyle(color: Colors.red),
               ),
-              onTap: () => Navigator.pop(ctx, 'delete'), // డిలీట్ పంపుతాం
+              onTap: () => Navigator.pop(ctx, 'delete'),
             ),
           ],
         ),
       ),
     );
 
-    // షీట్ క్లోజ్ అయ్యాక ఏం చేయాలో ఇక్కడ డిసైడ్ అవుతుంది
     if (action == 'edit') {
       _editCaption(currentCaption);
     } else if (action == 'delete') {
       _deleteStory();
     } else {
-      // ఒకవేళ పక్కన నొక్కి క్యాన్సిల్ చేస్తే, అప్పుడు మళ్ళీ స్టోరీ ప్లే అవ్వాలి
       if (mounted) setState(() => _isPaused = false);
     }
   }
 
-  // 🌟 3. EDIT CAPTION LOGIC (UI Update Fixed)
   void _editCaption(String currentCaption) async {
-    // ఇక్కడికి వచ్చేసరికి ఆల్రెడీ _isPaused = true లోనే ఉంది కాబట్టి స్టోరీ బ్యాక్‌గ్రౌండ్ లో ప్లే అవ్వదు.
     TextEditingController captionCtrl = TextEditingController(
       text: currentCaption,
     );
@@ -210,7 +213,6 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
       String storyId = currentStoryItems[currentStoryIndex]['storyId'];
       String newCaption = captionCtrl.text.trim();
 
-      // డేటాబేస్ లో సేవ్ చేయడం
       await FirebaseFirestore.instance
           .collection('stories')
           .doc(storyId)
@@ -218,7 +220,6 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
 
       if (mounted) {
         setState(() {
-          // 🌟 UI లో వెంటనే అప్‌డేట్ అవ్వడానికి మన లోకల్ లిస్ట్ ని మారుస్తున్నాం
           currentStoryItems[currentStoryIndex]['caption'] = newCaption;
         });
         ScaffoldMessenger.of(
@@ -227,11 +228,9 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
       }
     }
 
-    // డైలాగ్ సేవ్ చేసినా, క్యాన్సిల్ చేసినా మళ్ళీ స్టోరీ ప్లే అవ్వాలి
     if (mounted) setState(() => _isPaused = false);
   }
 
-  // 🌟 4. DELETE STORY LOGIC
   void _deleteStory() async {
     bool confirm =
         await showDialog(
@@ -288,6 +287,7 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
 
     var storyData = currentStoryItems[currentStoryIndex];
     bool isOwner = storyData['ownerId'] == currentUid;
+    String type = storyData['type'] ?? 'image'; // 🌟 టైప్ తీసుకుంటున్నాం
 
     String timeStr = "Just now";
     if (storyData['timestamp'] != null) {
@@ -312,17 +312,18 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // IMAGE (ZOOMABLE)
+            // 🌟 1. బగ్ ఫిక్స్: ఇక్కడ మన మ్యాజిక్ విడ్జెట్ ని వాడాం (ఫోటో అయినా, వీడియో అయినా సెట్ అవుతుంది)
             Center(
               child: InteractiveViewer(
                 minScale: 1.0,
                 maxScale: 4.0,
                 onInteractionStart: (_) => setState(() => _isPaused = true),
                 onInteractionEnd: (_) => setState(() => _isPaused = false),
-                child: CachedNetworkImage(
-                  imageUrl: storyData['storyUrl'],
-                  fit: BoxFit.contain,
-                  width: double.infinity,
+                child: CachedMediaWidget(
+                  mediaUrl: storyData['storyUrl'],
+                  type: type,
+                  showAudioControl:
+                      true, // 🌟 ఇక్కడ true పెడితే బటన్ వస్తుంది, ఆడియో ప్లే అవుతుంది
                 ),
               ),
             ),
