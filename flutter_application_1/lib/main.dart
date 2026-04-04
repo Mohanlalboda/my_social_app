@@ -12,6 +12,7 @@ import 'services/notification_service.dart';
 import 'firebase_options.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/home/home_screen.dart';
+import 'screens/home/near_me_screen.dart'; // 🌟 NEW: రాడార్ స్క్రీన్ ఇంపోర్ట్
 import 'screens/search/search_screen.dart';
 import 'screens/profile/profile_screen.dart';
 import 'screens/activity/activity_screen.dart';
@@ -210,6 +211,20 @@ class _MainNavigationState extends State<MainNavigation> {
                       );
                     },
                   ),
+
+                const SizedBox(width: 5),
+
+                // 📡 రాడార్ (Near Me) బటన్
+                IconButton(
+                  icon: const Icon(Icons.radar, color: Colors.blue, size: 28),
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const NearMeScreen()),
+                    );
+                  },
+                ),
+
                 const SizedBox(width: 5),
                 Padding(
                   padding: const EdgeInsets.only(right: 15),
