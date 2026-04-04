@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-import '../widgets/reel_item.dart';
+import '../../widgets/reel_item.dart';
 
 class ReelsScreen extends StatefulWidget {
   const ReelsScreen({super.key});

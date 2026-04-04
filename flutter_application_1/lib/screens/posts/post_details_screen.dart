@@ -2,7 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../widgets/post_widget.dart';
+import '../../widgets/post_widget.dart';
 
 class PostDetailsScreen extends StatelessWidget {
   final String postId;

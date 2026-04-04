@@ -27,7 +27,12 @@ class _SignUpScreenState extends State<SignUpScreen> {
   );
 
   Future<void> _signUp() async {
-    if (_emailController.text.isEmpty || _passwordController.text.isEmpty) {
+    if (_emailController.text.isEmpty ||
+        _passwordController.text.isEmpty ||
+        _usernameController.text.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please fill all fields! ⚠️")),
+      );
       return;
     }
     setState(() => _isLoading = true);

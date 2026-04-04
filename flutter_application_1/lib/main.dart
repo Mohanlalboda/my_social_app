@@ -10,13 +10,13 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 
 import 'services/notification_service.dart';
 import 'firebase_options.dart';
-import 'screens/login_screen.dart';
-import 'screens/home_screen.dart';
-import 'screens/search_screen.dart';
-import 'screens/profile_screen.dart';
-import 'screens/activity_screen.dart';
-import 'screens/inbox_screen.dart';
-import 'screens/reels_screen.dart';
+import 'screens/auth/login_screen.dart';
+import 'screens/home/home_screen.dart';
+import 'screens/search/search_screen.dart';
+import 'screens/profile/profile_screen.dart';
+import 'screens/activity/activity_screen.dart';
+import 'screens/chat/inbox_screen.dart';
+import 'screens/reels/reels_screen.dart';
 
 // 🌟 మన బ్రాండ్ గ్రేడియంట్ కలర్స్
 final brandGradient = const LinearGradient(
@@ -32,6 +32,7 @@ final brandGradient = const LinearGradient(
 
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.system);
 
+@pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   debugPrint("Background Message Received: ${message.notification?.title}");
@@ -60,7 +61,6 @@ class MySocialApp extends StatelessWidget {
           debugShowCheckedModeBanner: false,
           title: 'MyBanjara',
 
-          // 🌟 Light Theme అప్‌డేట్
           theme: ThemeData(
             useMaterial3: true,
             brightness: Brightness.light,
@@ -83,12 +83,9 @@ class MySocialApp extends StatelessWidget {
               selectedItemColor: Color(0xFFFD1D1D),
               unselectedItemColor: Colors.grey,
             ),
-            textTheme: GoogleFonts.poppinsTextTheme(
-              ThemeData.light().textTheme,
-            ),
+            textTheme: GoogleFonts.outfitTextTheme(ThemeData.light().textTheme),
           ),
 
-          // 🌟 Dark Theme అప్‌డేట్
           darkTheme: ThemeData(
             useMaterial3: true,
             brightness: Brightness.dark,
@@ -112,7 +109,7 @@ class MySocialApp extends StatelessWidget {
               selectedItemColor: Color(0xFFFD1D1D),
               unselectedItemColor: Colors.white54,
             ),
-            textTheme: GoogleFonts.poppinsTextTheme(ThemeData.dark().textTheme),
+            textTheme: GoogleFonts.outfitTextTheme(ThemeData.dark().textTheme),
             cardColor: Colors.grey[900],
           ),
 
@@ -162,48 +159,57 @@ class _MainNavigationState extends State<MainNavigation> {
       appBar: _selectedIndex == 2 || _selectedIndex == 3
           ? null
           : AppBar(
-              // 🌟 మ్యాజిక్: యాప్ పేరుకి మీ లోగో కలర్స్ గ్రేడియంట్
               title: ShaderMask(
                 shaderCallback: (bounds) => brandGradient.createShader(
                   Rect.fromLTWH(0, 0, bounds.width, bounds.height),
                 ),
                 child: Text(
                   "MyBanjara",
-                  style: GoogleFonts.lobster(
+                  style: GoogleFonts.righteous(
                     fontSize: 32,
-                    color: Colors.white, // ShaderMask కి ఇది వైట్ ఉండాలి
+                    color: Colors.white,
+                    letterSpacing: 1.0,
                   ),
                 ),
               ),
               actions: [
-                StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('notifications')
-                      .where('receiverId', isEqualTo: currentUser?.uid)
-                      .where('isRead', isEqualTo: false)
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    int unreadCount = snapshot.hasData
-                        ? snapshot.data!.docs.length
-                        : 0;
-                    return Badge(
-                      isLabelVisible: unreadCount > 0,
-                      label: Text(unreadCount.toString()),
-                      child: IconButton(
-                        icon: Icon(
-                          Icons.favorite_border,
-                          color: isDarkMode ? Colors.white : Colors.black,
-                        ),
-                        onPressed: () => Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => const ActivityScreen(),
+                // 🌟 అప్‌డేటెడ్ క్వెరీ: ఇక్కడ మన కొత్త నోటిఫికేషన్స్ పాత్ ఇచ్చాం
+                if (currentUser != null)
+                  StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('users')
+                        .doc(currentUser.uid)
+                        .collection('notifications')
+                        .where(
+                          'isRead',
+                          isEqualTo: false,
+                        ) // అన్-రీడ్ మాత్రమే లెక్కపెట్టాలి
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      int unreadCount = snapshot.hasData
+                          ? snapshot.data!.docs.length
+                          : 0;
+
+                      return Badge(
+                        isLabelVisible: unreadCount > 0,
+                        label: Text(
+                          unreadCount > 9 ? '9+' : unreadCount.toString(),
+                        ), // 🌟 9 కన్నా ఎక్కువైతే 9+
+                        child: IconButton(
+                          icon: Icon(
+                            Icons.favorite_border,
+                            color: isDarkMode ? Colors.white : Colors.black,
+                          ),
+                          onPressed: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const ActivityScreen(),
+                            ),
                           ),
                         ),
-                      ),
-                    );
-                  },
-                ),
+                      );
+                    },
+                  ),
                 const SizedBox(width: 5),
                 Padding(
                   padding: const EdgeInsets.only(right: 15),
@@ -232,7 +238,6 @@ class _MainNavigationState extends State<MainNavigation> {
         type: BottomNavigationBarType.fixed,
         showSelectedLabels: false,
         showUnselectedLabels: false,
-        // 🌟 Bottom Nav Item కలర్ థీమ్ నుండి ఆటోమేటిక్ గా పింక్ తీసుకుంటుంది
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: "Home"),
           BottomNavigationBarItem(icon: Icon(Icons.search), label: "Search"),
@@ -285,7 +290,7 @@ class UnreadChatBadge extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.all(4),
                   decoration: const BoxDecoration(
-                    color: Color(0xFFFD1D1D), // 🌟 బ్రాండ్ పింక్ కలర్
+                    color: Color(0xFFFD1D1D),
                     shape: BoxShape.circle,
                   ),
                   child: Text(

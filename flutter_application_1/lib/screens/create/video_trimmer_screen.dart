@@ -9,6 +9,8 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:uuid/uuid.dart';
 import 'package:video_compress/video_compress.dart';
 
+import 'add_post_screen.dart'; // 🌟 UploadManager కోసం దీన్ని ఇంపోర్ట్ చేశాం
+
 class VideoTrimmerScreen extends StatefulWidget {
   final File file;
   final Map<String, dynamic> userData;
@@ -28,8 +30,6 @@ class _VideoTrimmerScreenState extends State<VideoTrimmerScreen> {
   double _startValue = 0.0;
   double _endValue = 0.0;
   bool _isPlaying = false;
-  bool _progressVisibility = false;
-  String _progressText = "Trimming video...";
   final String currentUid = FirebaseAuth.instance.currentUser!.uid;
 
   @override
@@ -63,8 +63,14 @@ class _VideoTrimmerScreenState extends State<VideoTrimmerScreen> {
             child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
           ),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFFFD1D1D),
+            ),
             onPressed: () => Navigator.pop(ctx, captionCtrl.text.trim()),
-            child: const Text("Share Story"),
+            child: const Text(
+              "Share Story",
+              style: TextStyle(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -91,14 +97,14 @@ class _VideoTrimmerScreenState extends State<VideoTrimmerScreen> {
     }
 
     String? caption = await _askForCaption();
-    if (caption == null) {
-      return; // 🌟 ఫ్లవర్ బ్రాకెట్స్ యాడ్ చేశాం!
-    }
+    if (caption == null) return;
 
-    setState(() {
-      _progressVisibility = true;
-      _progressText = "Cutting video... ✂️";
-    });
+    // 🌟 మ్యాజిక్: అప్‌లోడ్ మేనేజర్‌కి డేటా ఇచ్చేసి స్క్రీన్ ని వెంటనే పాప్ చేస్తాం (మాయం)
+    UploadManager().isUploading.value = true;
+    UploadManager().uploadProgress.value = 0.1; // స్టార్టింగ్ ప్రోగ్రెస్
+    UploadManager().uploadStatus.value = "Trimming video... ✂️";
+
+    Navigator.of(context).pop(); // 🌟 ఇక్కడ స్క్రీన్ మాయం అయిపోతుంది
 
     try {
       await _trimmer.saveTrimmedVideo(
@@ -108,31 +114,16 @@ class _VideoTrimmerScreenState extends State<VideoTrimmerScreen> {
         storageDir: StorageDir.temporaryDirectory,
         onSave: (String? outputPath) async {
           if (outputPath == null) {
-            if (mounted) {
-              setState(() {
-                _progressVisibility = false;
-              });
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text(
-                    "Error: Trimmer failed (Video format might not be supported) ❌",
-                  ),
-                  backgroundColor: Colors.red,
-                ),
-              );
-            }
+            UploadManager().isUploading.value = false;
             return;
           }
 
+          // 🌟 కట్ అవ్వగానే బ్యాక్‌గ్రౌండ్ లో కంప్రెసింగ్ స్టార్ట్ అవుతుంది
           try {
+            UploadManager().uploadStatus.value = "Compressing... ⚡";
+            UploadManager().uploadProgress.value = 0.3;
+
             File fileToUpload = File(outputPath);
-
-            if (mounted) {
-              setState(() {
-                _progressText = "Compressing for fast upload... ⚡";
-              });
-            } // 🌟 ఫ్లవర్ బ్రాకెట్స్ యాడ్ చేశాం!
-
             MediaInfo? info = await VideoCompress.compressVideo(
               outputPath,
               quality: VideoQuality.MediumQuality,
@@ -143,11 +134,8 @@ class _VideoTrimmerScreenState extends State<VideoTrimmerScreen> {
               fileToUpload = info.file!;
             }
 
-            if (mounted) {
-              setState(() {
-                _progressText = "Uploading to Cloud... ☁️";
-              });
-            } // 🌟 ఫ్లవర్ బ్రాకెట్స్ యాడ్ చేశాం!
+            UploadManager().uploadStatus.value = "Uploading to Cloud... ☁️";
+            UploadManager().uploadProgress.value = 0.4;
 
             String storyId = const Uuid().v4();
             Reference ref = FirebaseStorage.instance
@@ -156,9 +144,24 @@ class _VideoTrimmerScreenState extends State<VideoTrimmerScreen> {
                 .child(currentUid)
                 .child('$storyId.mp4');
 
-            await ref.putFile(fileToUpload);
+            UploadTask uploadTask = ref.putFile(fileToUpload);
+
+            // 🌟 ప్రోగ్రెస్ బార్ అప్‌డేట్
+            uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
+              double p = snapshot.bytesTransferred / snapshot.totalBytes;
+              UploadManager().uploadProgress.value =
+                  0.4 + (p * 0.5); // 40% నుండి 90% వరకు
+              UploadManager().uploadStatus.value =
+                  "Uploading Story... ${(p * 100).toInt()}%";
+            });
+
+            await uploadTask;
             String downloadUrl = await ref.getDownloadURL();
 
+            UploadManager().uploadStatus.value = "Finishing up...";
+            UploadManager().uploadProgress.value = 0.95;
+
+            // 🌟 ఫైర్‌బేస్ లో సేవ్ చేయడం
             await FirebaseFirestore.instance.collection('stories').add({
               "uid": currentUid,
               "ownerId": currentUid,
@@ -170,51 +173,18 @@ class _VideoTrimmerScreenState extends State<VideoTrimmerScreen> {
               "timestamp": FieldValue.serverTimestamp(),
               "viewers": [],
             });
-
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text("Story Uploaded Successfully! ✅"),
-                  backgroundColor: Colors.green,
-                ),
-              );
-              Navigator.of(context).pop();
-            }
           } catch (e) {
-            debugPrint("Trim Upload Error: $e");
-            if (mounted) {
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text("Upload Error: $e"),
-                  backgroundColor: Colors.red,
-                ),
-              );
-            }
+            debugPrint("Background Trimmer Upload Error: $e");
           } finally {
             VideoCompress.deleteAllCache();
-            if (mounted) {
-              setState(() {
-                _progressVisibility = false;
-              });
-            } // 🌟 ఫ్లవర్ బ్రాకెట్స్ యాడ్ చేశాం!
+            UploadManager().isUploading.value =
+                false; // 🌟 పూర్తయ్యాక బార్ మాయం
           }
         },
       );
     } catch (e) {
       debugPrint("Trimmer save error: $e");
-      if (mounted) {
-        setState(() {
-          _progressVisibility = false;
-        }); // 🌟 ఫ్లవర్ బ్రాకెట్స్ యాడ్ చేశాం!
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Exact Error: ${e.toString()}"),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
-          ),
-        );
-      }
+      UploadManager().isUploading.value = false;
     }
   }
 
@@ -227,18 +197,17 @@ class _VideoTrimmerScreenState extends State<VideoTrimmerScreen> {
         backgroundColor: Colors.black,
         foregroundColor: Colors.white,
         actions: [
-          if (!_progressVisibility)
-            TextButton(
-              onPressed: _saveVideo,
-              child: const Text(
-                "Done",
-                style: TextStyle(
-                  color: Colors.blue,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                ),
+          TextButton(
+            onPressed: _saveVideo,
+            child: const Text(
+              "Done",
+              style: TextStyle(
+                color: Colors.blue,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
               ),
             ),
+          ),
         ],
       ),
       body: Stack(
@@ -257,12 +226,8 @@ class _VideoTrimmerScreenState extends State<VideoTrimmerScreen> {
                       viewerHeight: 50.0,
                       viewerWidth: MediaQuery.of(context).size.width,
                       maxVideoLength: const Duration(seconds: 30),
-                      onChangeStart: (value) {
-                        _startValue = value;
-                      },
-                      onChangeEnd: (value) {
-                        _endValue = value;
-                      },
+                      onChangeStart: (value) => _startValue = value,
+                      onChangeEnd: (value) => _endValue = value,
                       onChangePlaybackState: (value) {
                         setState(() {
                           _isPlaying = value;
@@ -292,28 +257,7 @@ class _VideoTrimmerScreenState extends State<VideoTrimmerScreen> {
               ),
             ),
           ),
-
-          if (_progressVisibility)
-            Container(
-              color: Colors.black87,
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const CircularProgressIndicator(color: Colors.blue),
-                    const SizedBox(height: 20),
-                    Text(
-                      _progressText,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+          // 🌟 పాత ఫుల్-స్క్రీన్ లోడింగ్ స్పిన్నర్ ని పీకేసాం! (No more blocking screen)
         ],
       ),
     );

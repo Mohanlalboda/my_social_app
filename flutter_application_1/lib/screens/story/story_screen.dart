@@ -6,7 +6,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart'; // 🌟 ఓనర్ ఎవరో తెలుసుకోవడానికి
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:cached_network_image/cached_network_image.dart';
-import '../widgets/safe_elements.dart';
+import '../../widgets/safe_elements.dart';
 
 class StoryScreen extends StatefulWidget {
   final Map<String, dynamic> user;

@@ -17,7 +17,7 @@ Uint8List? _safeDecode(String? base64String) {
 
 // 👤 సేఫ్ ప్రొఫైల్ పిక్చర్ (SafeProfilePic)
 class SafeProfilePic extends StatelessWidget {
-  final String? base64String; // ఇప్పుడు ఇందులో లింక్ కూడా వస్తుంది
+  final String? base64String;
   final double radius;
   final String fallbackText;
 
@@ -32,7 +32,7 @@ class SafeProfilePic extends StatelessWidget {
   Widget build(BuildContext context) {
     if (base64String == null || base64String!.isEmpty) return _buildFallback();
 
-    // 🌟 కొత్త లాజిక్: ఒకవేళ అది లింక్ (URL) అయితే Cache చేసి ఫాస్ట్ గా లోడ్ చేస్తాం
+    // 🌟 నెట్వర్క్ లింక్ (URL) అయితే Cache చేసి ఫాస్ట్ గా లోడ్ చేస్తాం
     if (base64String!.startsWith('http')) {
       return CachedNetworkImage(
         imageUrl: base64String!,
@@ -93,9 +93,20 @@ class SafeImage extends StatelessWidget {
       return CachedNetworkImage(
         imageUrl: base64String!,
         fit: fit,
+        // 🌟 PRO ఫీచర్: ఇమేజ్ లోడ్ అయ్యేటప్పుడు జస్ట్ బ్లాక్ స్క్రీన్ కాకుండా ఒక చిన్న స్పిన్నర్ చూపిస్తాం
         placeholder: (context, url) => Container(
           color: Colors.grey[900],
-        ), // లోడ్ అయ్యేటప్పుడు బ్లాక్ స్క్రీన్
+          child: const Center(
+            child: SizedBox(
+              width: 30,
+              height: 30,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.blueGrey,
+              ),
+            ),
+          ),
+        ),
         errorWidget: (context, url, error) => _buildFallback(),
       );
     }

@@ -6,17 +6,19 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:uuid/uuid.dart';
 
-import '../widgets/safe_elements.dart'; // 🌟 ప్రొఫైల్ పిక్ క్రాష్ అవ్వకుండా ఇది వాడుతున్నాం
+import '../../widgets/safe_elements.dart';
 
 class CommentsScreen extends StatefulWidget {
   final String postId;
   final String postOwnerId;
-  final bool isReel; // 🌟 ఇది రీల్ ఆ లేక నార్మల్ పోస్ట్ ఆ అని తెలుసుకోవడానికి
+  final String mediaUrl; // 🌟 పోస్ట్ థంబ్‌నెయిల్ కోసం
+  final bool isReel;
 
   const CommentsScreen({
     super.key,
     required this.postId,
     required this.postOwnerId,
+    this.mediaUrl = "",
     this.isReel = false,
   });
 
@@ -29,7 +31,8 @@ class _CommentsScreenState extends State<CommentsScreen> {
   bool _isPosting = false;
   final String currentUserUid = FirebaseAuth.instance.currentUser!.uid;
 
-  // 🌟 కామెంట్ పోస్ట్ చేసే మ్యాజిక్ ఫంక్షన్
+  // 🌟 మ్యాజిక్ 2: కామెంట్ పెట్టగానే నోటిఫికేషన్ పంపడం (Updated Path)
+  // 🌟 మ్యాజిక్ 2: కామెంట్ పెట్టగానే నోటిఫికేషన్ పంపడం (Fixed: isRead added)
   void _postComment() async {
     String text = _commentController.text.trim();
     if (text.isEmpty) return;
@@ -37,7 +40,6 @@ class _CommentsScreenState extends State<CommentsScreen> {
     setState(() => _isPosting = true);
 
     try {
-      // 1. ముందుగా కామెంట్ పెడుతున్న యూజర్ (మన) డీటెయిల్స్ తెచ్చుకుందాం
       var userDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(currentUserUid)
@@ -45,10 +47,8 @@ class _CommentsScreenState extends State<CommentsScreen> {
       String username = userDoc.data()?['username'] ?? "User";
       String profilePic = userDoc.data()?['profilePic'] ?? "";
 
-      // 2. కామెంట్ కి ఒక ఐడీ క్రియేట్ చేద్దాం
       String commentId = const Uuid().v4();
 
-      // 3. ఫైర్‌బేస్ లో సేవ్ చేద్దాం (posts -> postId -> comments -> commentId)
       await FirebaseFirestore.instance
           .collection('posts')
           .doc(widget.postId)
@@ -63,21 +63,24 @@ class _CommentsScreenState extends State<CommentsScreen> {
             'timestamp': FieldValue.serverTimestamp(),
           });
 
-      // 🌟 4. మ్యాజిక్ ఇక్కడే! కామెంట్ పెట్టింది మన పోస్ట్‌కి కాకపోతే నోటిఫికేషన్ పంపుతాం
       if (widget.postOwnerId != currentUserUid) {
-        await FirebaseFirestore.instance.collection('notifications').add({
-          'receiverId':
-              widget.postOwnerId, // ఎవరి పోస్ట్ కి కామెంట్ పెట్టామో వాళ్ళకి
-          'senderId': currentUserUid, // పెట్టింది నేను
-          'type': 'comment', // 🌟 రకం: కామెంట్
-          'postId': widget.postId,
-          'text': text, // వాళ్ళు ఏం కామెంట్ పెట్టారో అది ఇక్కడ సేవ్ అవుతుంది
-          'timestamp': FieldValue.serverTimestamp(),
-          'isRead': false,
-        });
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(widget.postOwnerId)
+            .collection('notifications')
+            .add({
+              'senderId': currentUserUid,
+              'senderName': username,
+              'senderPic': profilePic,
+              'type': 'comment',
+              'postId': widget.postId,
+              'mediaUrl': widget.mediaUrl,
+              'text': text,
+              'isRead': false, // 🌟 ఫిక్స్: ఇది మర్చిపోయాం!
+              'timestamp': FieldValue.serverTimestamp(),
+            });
       }
 
-      // 5. టెక్స్ట్ బాక్స్ క్లియర్ చేద్దాం
       _commentController.clear();
     } catch (e) {
       ScaffoldMessenger.of(
@@ -113,14 +116,13 @@ class _CommentsScreenState extends State<CommentsScreen> {
       ),
       body: Column(
         children: [
-          // 🌟 పై భాగం: కామెంట్స్ లిస్ట్
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('posts')
                   .doc(widget.postId)
                   .collection('comments')
-                  .orderBy('timestamp', descending: true) // కొత్తవి పైన వస్తాయి
+                  .orderBy('timestamp', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.hasError)
@@ -144,8 +146,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
                 }
 
                 return ListView.builder(
-                  reverse:
-                      true, // 🌟 వాట్సాప్ లాగా కొత్త కామెంట్స్ కింద నుండి రావడానికి
+                  reverse: true,
                   itemCount: comments.length,
                   itemBuilder: (context, index) {
                     var data = comments[index].data() as Map<String, dynamic>;
@@ -191,7 +192,6 @@ class _CommentsScreenState extends State<CommentsScreen> {
             ),
           ),
 
-          // 🌟 కింద భాగం: కామెంట్ టైప్ చేసే బాక్స్
           SafeArea(
             child: Container(
               padding: const EdgeInsets.only(
@@ -217,7 +217,7 @@ class _CommentsScreenState extends State<CommentsScreen> {
                         hintStyle: TextStyle(color: Colors.grey.shade500),
                         border: InputBorder.none,
                       ),
-                      maxLines: null, // ఎన్ని లైన్స్ అయినా టైప్ చేసుకోవచ్చు
+                      maxLines: null,
                     ),
                   ),
                   _isPosting

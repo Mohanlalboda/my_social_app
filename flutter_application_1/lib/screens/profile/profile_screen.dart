@@ -1,4 +1,4 @@
-// ignore_for_file: curly_braces_in_flow_control_structures, use_build_context_synchronously
+// ignore_for_file: use_build_context_synchronously
 
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -7,13 +7,15 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:image_cropper/image_cropper.dart';
+import 'package:uuid/uuid.dart';
 
-import 'scrolling_posts_screen.dart';
-import 'scrolling_reels_screen.dart';
-import '../widgets/safe_elements.dart';
-import '../widgets/cached_media_widget.dart';
+import '../create/add_post_screen.dart';
+import '../posts/scrolling_posts_screen.dart';
+import '../reels/scrolling_reels_screen.dart';
+import '../../widgets/safe_elements.dart';
+import '../../widgets/cached_media_widget.dart';
 import 'user_list_screen.dart';
-import 'add_post_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -60,7 +62,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               secondary: const Icon(Icons.lock_outline),
               title: const Text("Private Account"),
               value: currentPrivateStatus,
-              // 🌟 ఫిక్స్ 1: activeColor బదులు activeThumbColor వాడాను
               activeThumbColor: const Color(0xFFFD1D1D),
               onChanged: (val) async {
                 Navigator.pop(ctx);
@@ -190,7 +191,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     "username": nameCtrl.text.trim(),
                     "bio": bioCtrl.text.trim(),
                   });
-              Navigator.pop(ctx);
+              if (ctx.mounted) Navigator.pop(ctx);
             },
             child: const Text("Save", style: TextStyle(color: Colors.white)),
           ),
@@ -205,20 +206,61 @@ class _ProfileScreenState extends State<ProfileScreen> {
       source: ImageSource.gallery,
       imageQuality: 85,
     );
+
     if (image != null) {
-      try {
-        var storageRef = FirebaseStorage.instance
-            .ref()
-            .child('profile_pics')
-            .child('$uid.jpg');
-        await storageRef.putFile(File(image.path));
-        String downloadUrl = await storageRef.getDownloadURL();
-        await FirebaseFirestore.instance.collection('users').doc(uid).update({
-          "profilePic": downloadUrl,
-        });
-      } catch (e) {
-        debugPrint("Upload Error: $e");
+      CroppedFile? croppedFile = await ImageCropper().cropImage(
+        sourcePath: image.path,
+        uiSettings: [
+          AndroidUiSettings(
+            toolbarTitle: 'Crop Profile Picture',
+            toolbarColor: Colors.black,
+            toolbarWidgetColor: Colors.white,
+            initAspectRatio: CropAspectRatioPreset.square,
+            lockAspectRatio: true,
+            cropStyle: CropStyle.circle,
+          ),
+          IOSUiSettings(
+            title: 'Crop Profile Picture',
+            cropStyle: CropStyle.circle,
+            aspectRatioPresets: [CropAspectRatioPreset.square],
+          ),
+        ],
+      );
+
+      if (croppedFile != null) {
+        _backgroundUploadProfilePic(File(croppedFile.path));
       }
+    }
+  }
+
+  Future<void> _backgroundUploadProfilePic(File file) async {
+    UploadManager().isUploading.value = true;
+    UploadManager().uploadProgress.value = 0.0;
+    UploadManager().uploadStatus.value = "Updating Profile Picture...";
+
+    try {
+      var storageRef = FirebaseStorage.instance
+          .ref()
+          .child('profile_pics')
+          .child('$uid.jpg');
+
+      UploadTask uploadTask = storageRef.putFile(file);
+
+      uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
+        double progress = snapshot.bytesTransferred / snapshot.totalBytes;
+        UploadManager().uploadProgress.value = progress;
+      });
+
+      TaskSnapshot snapshot = await uploadTask;
+      String downloadUrl = await snapshot.ref.getDownloadURL();
+
+      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        "profilePic": downloadUrl,
+      });
+    } catch (e) {
+      debugPrint("Profile Pic Upload Error: $e");
+    } finally {
+      UploadManager().isUploading.value = false;
     }
   }
 
@@ -294,16 +336,34 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final XFile? file = isVideo
         ? await picker.pickVideo(source: ImageSource.gallery)
         : await picker.pickImage(source: ImageSource.gallery);
+
     if (file != null) {
+      UploadManager().isUploading.value = true;
+      UploadManager().uploadProgress.value = 0.0;
+      UploadManager().uploadStatus.value = isVideo
+          ? "Compressing Video Story..."
+          : "Uploading Photo Story...";
+
       try {
-        String storyId = DateTime.now().millisecondsSinceEpoch.toString();
+        String storyId = const Uuid().v4();
         Reference ref = FirebaseStorage.instance
             .ref()
             .child('stories')
             .child(uid)
             .child(storyId);
-        await ref.putFile(File(file.path));
-        String downloadUrl = await ref.getDownloadURL();
+
+        UploadTask uploadTask = ref.putFile(File(file.path));
+
+        uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
+          double progress = snapshot.bytesTransferred / snapshot.totalBytes;
+          UploadManager().uploadProgress.value = progress;
+        });
+
+        TaskSnapshot snapshot = await uploadTask;
+        String downloadUrl = await snapshot.ref.getDownloadURL();
+
+        UploadManager().uploadStatus.value = "Finishing up...";
+
         await FirebaseFirestore.instance.collection('stories').add({
           "uid": uid,
           "ownerId": uid,
@@ -316,6 +376,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
         });
       } catch (e) {
         debugPrint("Story Error: $e");
+      } finally {
+        UploadManager().isUploading.value = false;
       }
     }
   }
@@ -332,8 +394,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             .doc(uid)
             .snapshots(),
         builder: (context, userSnapshot) {
-          if (!userSnapshot.hasData)
+          if (!userSnapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
+          }
 
           var userData =
               userSnapshot.data!.data() as Map<String, dynamic>? ?? {};
@@ -659,16 +722,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildPostGrid(Stream<QuerySnapshot> stream) {
+  Widget _buildPostGrid(
+    Stream<QuerySnapshot> stream, {
+    bool isScrollable = true,
+  }) {
     return StreamBuilder<QuerySnapshot>(
       stream: stream,
       builder: (context, snapshot) {
-        if (!snapshot.hasData)
+        if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
         var posts = snapshot.data!.docs;
         List<String> ids = posts.map((d) => d.id).toList();
         if (posts.isEmpty) return const Center(child: Text("No posts yet."));
         return GridView.builder(
+          shrinkWrap: !isScrollable,
+          physics: isScrollable
+              ? const AlwaysScrollableScrollPhysics()
+              : const NeverScrollableScrollPhysics(),
           padding: EdgeInsets.zero,
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 3,
@@ -692,7 +763,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
               child: thumb.startsWith('http')
-                  ? CachedMediaWidget(mediaUrl: thumb, type: 'image')
+                  ? CachedMediaWidget(
+                      mediaUrl: thumb,
+                      type: 'image',
+                      isGrid: true,
+                    )
                   : SafeImage(base64String: thumb),
             );
           },
@@ -701,16 +776,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildReelsGrid(Stream<QuerySnapshot> stream) {
+  Widget _buildReelsGrid(
+    Stream<QuerySnapshot> stream, {
+    bool isScrollable = true,
+  }) {
     return StreamBuilder<QuerySnapshot>(
       stream: stream,
       builder: (context, snapshot) {
-        if (!snapshot.hasData)
+        if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
         var reels = snapshot.data!.docs;
         List<String> ids = reels.map((d) => d.id).toList();
         if (reels.isEmpty) return const Center(child: Text("No Reels yet."));
         return GridView.builder(
+          shrinkWrap: !isScrollable,
+          physics: isScrollable
+              ? const AlwaysScrollableScrollPhysics()
+              : const NeverScrollableScrollPhysics(),
           padding: EdgeInsets.zero,
           gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 3,
@@ -737,16 +820,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  CachedMediaWidget(mediaUrl: url, type: 'video'),
-                  const Positioned(
-                    top: 5,
-                    right: 5,
-                    child: Icon(
-                      Icons.play_arrow_rounded,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                  ),
+                  CachedMediaWidget(mediaUrl: url, type: 'video', isGrid: true),
                 ],
               ),
             );
@@ -759,7 +833,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildSavedTab(String uid) {
     return ListView(
       children: [
-        // 🌟 ఫిక్స్ 2: const కీవర్డ్ యాడ్ చేశాను (Better Performance)
         const Padding(
           padding: EdgeInsets.all(12),
           child: Text(
@@ -773,6 +846,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               .where('type', isEqualTo: 'image')
               .where('savedBy', arrayContains: uid)
               .snapshots(),
+          isScrollable: false,
         ),
         const Divider(height: 30),
         const Padding(
@@ -782,72 +856,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
         ),
-        _buildSavedReelsGrid(uid),
+        _buildReelsGrid(
+          FirebaseFirestore.instance
+              .collection('posts')
+              .where('type', isEqualTo: 'video')
+              .where('savedBy', arrayContains: uid)
+              .snapshots(),
+          isScrollable: false,
+        ),
       ],
-    );
-  }
-
-  Widget _buildSavedReelsGrid(String currentUid) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('posts')
-          .where('type', isEqualTo: 'video')
-          .where('savedBy', arrayContains: currentUid)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) return const SizedBox();
-        var reels = snapshot.data!.docs;
-        List<String> ids = reels.map((d) => d.id).toList();
-        return GridView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          padding: EdgeInsets.zero,
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            childAspectRatio: 0.65,
-            crossAxisSpacing: 2,
-            mainAxisSpacing: 2,
-          ),
-          itemCount: reels.length,
-          itemBuilder: (context, i) {
-            var data = reels[i].data() as Map<String, dynamic>;
-            String url =
-                (data['postData'] is List &&
-                    (data['postData'] as List).isNotEmpty)
-                ? data['postData'][0]
-                : "";
-            return GestureDetector(
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) =>
-                      ScrollingReelsScreen(reelIds: ids, initialIndex: i),
-                ),
-              ),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  CachedMediaWidget(mediaUrl: url, type: 'video'),
-                  const Positioned(
-                    top: 5,
-                    right: 5,
-                    child: Icon(
-                      Icons.play_arrow_rounded,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
     );
   }
 }
 
-// 🌟 ఫిక్స్: _StatColumn కి const కీవర్డ్ యాడ్ చేశాను
 class _StatColumn extends StatelessWidget {
   final String num, label;
   const _StatColumn({required this.num, required this.label});

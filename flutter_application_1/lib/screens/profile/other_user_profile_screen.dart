@@ -4,11 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-import 'single_reel_screen.dart';
-import 'scrolling_posts_screen.dart';
-import '../widgets/safe_elements.dart';
+import '../reels/single_reel_screen.dart';
+import '../posts/scrolling_posts_screen.dart';
+import '../../widgets/safe_elements.dart';
 import 'user_list_screen.dart';
-import 'chat_screen.dart';
+import '../chat/chat_screen.dart';
 
 class OtherUserProfileScreen extends StatefulWidget {
   final String userId;

@@ -26,7 +26,6 @@ class _LoginScreenState extends State<LoginScreen> {
   );
 
   Future<void> _login() async {
-    // 🌟 ఫిక్స్ 1: ఇక్కడ ఫ్లవర్ బ్రాకెట్స్ యాడ్ చేశాను
     if (_emailController.text.trim().isEmpty ||
         _passwordController.text.trim().isEmpty) {
       return;
@@ -129,10 +128,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         borderRadius: BorderRadius.circular(15),
                         boxShadow: [
                           BoxShadow(
-                            // 🌟 ఫిక్స్ 2: withOpacity బదులు withValues వాడాను
                             color: const Color(
                               0xFFFD1D1D,
-                            ).withValues(alpha: 0.3),
+                            ).withValues(alpha: 0.3), // 🌟 withValues వాడాను
                             blurRadius: 10,
                             offset: const Offset(0, 5),
                           ),

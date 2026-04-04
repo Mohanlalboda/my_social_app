@@ -2,7 +2,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../widgets/reel_item.dart';
+import '../../widgets/reel_item.dart';
 
 class SingleReelScreen extends StatelessWidget {
   final String reelId;

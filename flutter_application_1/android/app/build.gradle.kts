@@ -10,26 +10,28 @@ plugins {
 
 android {
     namespace = "com.example.flutter_application_1"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
-        isCoreLibraryDesugaringEnabled = true // 🌟 FIX: ఇక్కడ 'is' యాడ్ చేశాం
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
+        jvmTarget = "17" // 🌟 ఎర్రర్ ఫిక్స్: ఇక్కడ డైరెక్ట్ గా "17" అని ఇచ్చేశాం
     }
 
     defaultConfig {
         applicationId = "com.example.flutter_application_1"
-        minSdk = 24 
-        targetSdk = flutter.targetSdkVersion
+        minSdk = flutter.minSdkVersion  
+        targetSdk = 34 
+        // 🌟 మెయిన్ ఎర్రర్ ఫిక్స్: ఇక్కడ కొట్లిన్ సింటాక్స్ వాడాం
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         multiDexEnabled = true 
+        ndk { abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")) }
     }
 
     buildTypes {
@@ -47,5 +49,5 @@ flutter {
 
 dependencies {
     implementation("androidx.multidex:multidex:2.0.1")
-    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4") // 🌟 ఇక్కడ 2.1.4 అని మార్చండి
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

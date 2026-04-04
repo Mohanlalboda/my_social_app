@@ -6,8 +6,8 @@ import 'package:video_player/video_player.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:share_plus/share_plus.dart';
-import '../screens/comments_screen.dart';
-import '../screens/other_user_profile_screen.dart';
+import '../screens/posts/comments_screen.dart';
+import '../screens/profile/other_user_profile_screen.dart';
 import 'safe_elements.dart';
 
 bool globalIsMuted = false;
@@ -48,14 +48,19 @@ class _ReelItemState extends State<ReelItem> {
     _checkFollowStatus();
   }
 
+  // 🌟 మ్యాజిక్: పెర్ఫార్మన్స్ బూస్ట్ & ఆడియో బగ్ ఫిక్స్
   @override
   void didUpdateWidget(ReelItem oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (_isInitialized) {
       if (widget.isCurrentPage) {
         _player.controller.play();
+        // 🌟 పేజీ లోకి రాగానే గ్లోబల్ సెట్టింగ్ బట్టి వాల్యూమ్ సెట్ అవుతుంది
+        _player.controller.setVolume(globalIsMuted ? 0.0 : 1.0);
       } else {
         _player.controller.pause();
+        // 🌟 పేజీ దాటి కిందకు వెళ్ళగానే పూర్తిగా సైలెంట్ అయిపోతుంది
+        _player.controller.setVolume(0.0);
         _player.controller.seekTo(Duration.zero);
       }
     }
@@ -134,7 +139,6 @@ class _ReelItemState extends State<ReelItem> {
     );
   }
 
-  // 🌟 ఫిక్స్: వీడియో ఇంకా ఇన్స్టలైజ్ కాకపోతే ఇక్కడే ఆపేస్తాం (No More Crash!)
   void _toggleMute() {
     if (!_isInitialized) return;
     setState(() {
@@ -202,13 +206,6 @@ class _ReelItemState extends State<ReelItem> {
         await ownerRef.update({
           'followers': FieldValue.arrayUnion([currentUid]),
         });
-        await FirebaseFirestore.instance.collection('notifications').add({
-          'receiverId': ownerId,
-          'senderId': currentUid,
-          'type': 'follow',
-          'timestamp': FieldValue.serverTimestamp(),
-          'isRead': false,
-        });
       } else {
         await myRef.update({
           'following': FieldValue.arrayRemove([ownerId]),
@@ -222,6 +219,53 @@ class _ReelItemState extends State<ReelItem> {
     }
   }
 
+  void _sendReelToUser(String receiverId, String receiverName) async {
+    String url =
+        (widget.reel['postData'] is List && widget.reel['postData'].isNotEmpty)
+        ? widget.reel['postData'][0]
+        : (widget.reel['storyUrl'] ?? "");
+
+    String roomId = currentUid.hashCode <= receiverId.hashCode
+        ? "${currentUid}_$receiverId"
+        : "${receiverId}_$currentUid";
+
+    var timestamp = FieldValue.serverTimestamp();
+
+    await FirebaseFirestore.instance
+        .collection('chatRooms')
+        .doc(roomId)
+        .collection('messages')
+        .add({
+          'senderId': currentUid,
+          'receiverId': receiverId,
+          'text': "Sent a Reel",
+          'type': 'shared_reel',
+          'mediaUrl': url,
+          'sharedPostId': widget.reelId,
+          'ownerName': widget.reel['username'] ?? 'User',
+          'isRead': false,
+          'timestamp': timestamp,
+          'isEdited': false,
+          'isDeleted': false,
+          'deletedBy': [],
+        });
+
+    await FirebaseFirestore.instance.collection('chatRooms').doc(roomId).set({
+      'users': [currentUid, receiverId],
+      'lastMessage': "🎬 Sent a Reel",
+      'timestamp': timestamp,
+      'unread_$receiverId': FieldValue.increment(1),
+    }, SetOptions(merge: true));
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("Sent to $receiverName ✅"),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
   void _showShareSheet() {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
     showModalBottomSheet(
@@ -229,10 +273,11 @@ class _ReelItemState extends State<ReelItem> {
       isScrollControlled: true,
       backgroundColor: isDark ? Colors.grey[900] : Colors.white,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(25)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (context) => DraggableScrollableSheet(
         initialChildSize: 0.6,
+        minChildSize: 0.4,
         maxChildSize: 0.9,
         expand: false,
         builder: (context, scrollController) => Column(
@@ -249,16 +294,102 @@ class _ReelItemState extends State<ReelItem> {
             const Padding(
               padding: EdgeInsets.all(15),
               child: Text(
-                "Share Reel",
+                "Share to...",
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ),
+
+            Expanded(
+              child: FutureBuilder<DocumentSnapshot>(
+                future: FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(currentUid)
+                    .get(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData)
+                    return const Center(child: CircularProgressIndicator());
+                  List following =
+                      (snapshot.data!.data()
+                          as Map<String, dynamic>)['following'] ??
+                      [];
+
+                  if (following.isEmpty) {
+                    return const Center(
+                      child: Text(
+                        "Follow someone to share with them!",
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    );
+                  }
+
+                  return ListView.builder(
+                    controller: scrollController,
+                    itemCount: following.length,
+                    itemBuilder: (context, index) {
+                      return FutureBuilder<DocumentSnapshot>(
+                        future: FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(following[index])
+                            .get(),
+                        builder: (context, userSnap) {
+                          if (!userSnap.hasData || !userSnap.data!.exists)
+                            return const SizedBox();
+                          var userData =
+                              userSnap.data!.data() as Map<String, dynamic>;
+
+                          return ListTile(
+                            leading: SafeProfilePic(
+                              base64String: userData['profilePic'],
+                              radius: 20,
+                              fallbackText: userData['username'][0],
+                            ),
+                            title: Text(
+                              userData['username'],
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            trailing: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF007AFF),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                              ),
+                              onPressed: () {
+                                Navigator.pop(context);
+                                _sendReelToUser(
+                                  following[index],
+                                  userData['username'],
+                                );
+                              },
+                              child: const Text(
+                                "Send",
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  );
+                },
+              ),
+            ),
+            const Divider(),
+
             ListTile(
               leading: const CircleAvatar(
-                backgroundColor: Colors.blue,
+                backgroundColor: Colors.green,
                 child: Icon(Icons.share, color: Colors.white),
               ),
-              title: const Text("Share to External Apps"),
+              title: const Text(
+                "Share via External Apps",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
               onTap: () {
                 Navigator.pop(context);
                 String url =
@@ -271,6 +402,7 @@ class _ReelItemState extends State<ReelItem> {
                 );
               },
             ),
+            const SizedBox(height: 10),
           ],
         ),
       ),
@@ -297,7 +429,6 @@ class _ReelItemState extends State<ReelItem> {
         else if (_isInitialized)
           GestureDetector(
             onTap: () {
-              // 🌟 ఫిక్స్: ఇక్కడ కూడా ఇన్స్టలైజ్ కాకపోతే క్లిక్ చేసినా క్రాష్ అవ్వదు
               if (!_isInitialized) return;
               _player.controller.value.isPlaying
                   ? _player.controller.pause()
@@ -433,7 +564,7 @@ class _ReelItemState extends State<ReelItem> {
                   color: Colors.white,
                   size: 30,
                 ),
-                onPressed: _toggleMute, // 🌟 ఇప్పుడు ఇది సేఫ్!
+                onPressed: _toggleMute,
               ),
               const SizedBox(height: 10),
               Column(

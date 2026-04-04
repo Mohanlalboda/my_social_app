@@ -4,11 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
-import '../widgets/safe_elements.dart';
-import '../widgets/cached_media_widget.dart';
-import 'other_user_profile_screen.dart';
-import 'scrolling_posts_screen.dart';
-import 'scrolling_reels_screen.dart';
+import '../../widgets/safe_elements.dart';
+import '../../widgets/cached_media_widget.dart';
+import '../profile/other_user_profile_screen.dart';
+import '../posts/scrolling_posts_screen.dart';
+import '../reels/scrolling_reels_screen.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -185,14 +185,13 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  // 🌟 1. Mutual Friends లాజిక్ ఇక్కడ యాడ్ చేశాం
   Widget _buildSuggestedFriends(List myFollowing) {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
 
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('users')
-          .limit(30) // కొంచెం ఎక్కువ మందిని తీసుకుందాం ఫిల్టర్ చేయడానికి
+          .limit(30)
           .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const SizedBox();
@@ -205,7 +204,6 @@ class _SearchScreenState extends State<SearchScreen> {
 
         if (suggestedUsers.isEmpty) return const SizedBox();
 
-        // 🌟 మ్యూచువల్ ఫ్రెండ్స్ ని బట్టి సార్టింగ్ (ఎవరికి ఎక్కువ మ్యూచువల్స్ ఉంటే వాళ్ళు ముందుకి వస్తారు)
         suggestedUsers.sort((a, b) {
           var aData = a.data() as Map<String, dynamic>;
           var bData = b.data() as Map<String, dynamic>;
@@ -220,9 +218,7 @@ class _SearchScreenState extends State<SearchScreen> {
               .where((id) => myFollowing.contains(id))
               .length;
 
-          return bMutuals.compareTo(
-            aMutuals,
-          ); // ఎక్కువ ఉన్నవాళ్లు ముందు వస్తారు
+          return bMutuals.compareTo(aMutuals);
         });
 
         return Column(
@@ -236,19 +232,18 @@ class _SearchScreenState extends State<SearchScreen> {
               ),
             ),
             SizedBox(
-              height: 165, // మ్యూచువల్ టెక్స్ట్ కి ప్లేస్ కోసం పెంచాం
+              height: 165,
               child: ListView.builder(
                 scrollDirection: Axis.horizontal,
                 padding: const EdgeInsets.symmetric(horizontal: 10),
                 itemCount: suggestedUsers.length > 15
                     ? 15
-                    : suggestedUsers.length, // టాప్ 15 మందిని చూపిస్తాం
+                    : suggestedUsers.length,
                 itemBuilder: (context, index) {
                   var userData =
                       suggestedUsers[index].data() as Map<String, dynamic>;
                   String username = userData['username'] ?? 'User';
 
-                  // మ్యూచువల్ ఫ్రెండ్స్ లెక్క
                   List userFollowers = userData['followers'] ?? [];
                   int mutualCount = userFollowers
                       .where((id) => myFollowing.contains(id))
@@ -290,7 +285,6 @@ class _SearchScreenState extends State<SearchScreen> {
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(fontWeight: FontWeight.bold),
                           ),
-                          // 🌟 కింద "2 mutual friends" అని చూపిస్తుంది
                           Text(
                             mutualCount > 0
                                 ? "$mutualCount mutuals"
@@ -341,7 +335,7 @@ class _SearchScreenState extends State<SearchScreen> {
       stream: FirebaseFirestore.instance
           .collection('posts')
           .where('type', isEqualTo: 'image')
-          .snapshots(), // టైమ్‌స్టాంప్ తీసేసి అన్నీ తెచ్చుకుని లైక్స్ బట్టి సార్ట్ చేద్దాం
+          .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
@@ -354,13 +348,12 @@ class _SearchScreenState extends State<SearchScreen> {
           return isPublic || myFollowing.contains(ownerId);
         }).toList();
 
-        // 🌟 బ్రహ్మాస్త్రం: లైక్స్ ని బట్టి సార్టింగ్ (ఎక్కువ లైక్స్ ఉన్నవి ముందు వస్తాయి)
         posts.sort((a, b) {
           var aData = a.data() as Map<String, dynamic>;
           var bData = b.data() as Map<String, dynamic>;
           int aLikes = (aData['likes'] as List?)?.length ?? 0;
           int bLikes = (bData['likes'] as List?)?.length ?? 0;
-          return bLikes.compareTo(aLikes); // Descending order
+          return bLikes.compareTo(aLikes);
         });
 
         List<String> postIds = posts.map((p) => p.id).toList();
@@ -414,14 +407,13 @@ class _SearchScreenState extends State<SearchScreen> {
                           ? CachedMediaWidget(
                               mediaUrl: thumbnail,
                               type: 'image',
+                              isGrid: true, // 🌟 NEW: Safe loading
                             )
                           : SafeImage(
                               base64String: thumbnail,
                               fit: BoxFit.cover,
                             ),
                     ),
-
-                    // 🌟 ఎన్ని లైక్స్ ఉన్నాయో బొమ్మ మీద చిన్నగా చూపిద్దాం
                     Positioned(
                       bottom: 5,
                       left: 5,
@@ -444,7 +436,6 @@ class _SearchScreenState extends State<SearchScreen> {
                         ],
                       ),
                     ),
-
                     if (data['postData'] is List &&
                         (data['postData'] as List).length > 1)
                       const Positioned(
@@ -487,7 +478,6 @@ class _SearchScreenState extends State<SearchScreen> {
           return isPublic || myFollowing.contains(ownerId);
         }).toList();
 
-        // 🌟 రీల్స్ ని కూడా లైక్స్ బట్టి సార్ట్ చేస్తున్నాం
         reels.sort((a, b) {
           var aData = a.data() as Map<String, dynamic>;
           var bData = b.data() as Map<String, dynamic>;
@@ -546,10 +536,9 @@ class _SearchScreenState extends State<SearchScreen> {
                       child: CachedMediaWidget(
                         mediaUrl: videoUrl,
                         type: 'video',
+                        isGrid: true, // 🌟 NEW: Prevents media codec crash
                       ),
                     ),
-
-                    // 🌟 ఎన్ని లైక్స్ ఉన్నాయో కింద చూపిద్దాం
                     Positioned(
                       bottom: 5,
                       left: 5,
@@ -572,7 +561,6 @@ class _SearchScreenState extends State<SearchScreen> {
                         ],
                       ),
                     ),
-
                     const Positioned(
                       top: 5,
                       right: 5,

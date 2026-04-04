@@ -13,11 +13,11 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:path_provider/path_provider.dart';
 
-import '../widgets/safe_elements.dart';
-import '../widgets/post_widget.dart';
-import 'story_view_screen.dart';
-import 'add_post_screen.dart';
-import 'video_trimmer_screen.dart';
+import '../../widgets/safe_elements.dart';
+import '../../widgets/post_widget.dart';
+import '../story/story_view_screen.dart';
+import '../create/add_post_screen.dart'; // 🌟 UploadManager కోసం
+import '../create/video_trimmer_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -27,10 +27,9 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   final String currentUid = FirebaseAuth.instance.currentUser!.uid;
-  bool _isUploading = false;
   Key _refreshKey = UniqueKey();
 
-  // 🌟 మన బ్రాండ్ గ్రేడియంట్ (మీ లోగో కలర్స్)
+  // 🌟 మన బ్రాండ్ గ్రేడియంట్
   final LinearGradient brandGradient = const LinearGradient(
     colors: [
       Color(0xFF833AB4), // Purple
@@ -46,6 +45,40 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     updateFCMToken();
+    _cleanupOldStories(); // 🌟 యాప్ ఓపెన్ చేయగానే 24 గంటల పాత స్టోరీస్ డిలీట్ అవుతాయి
+  }
+
+  // 🌟 NEW: 24 గంటల పాత స్టోరీస్ ని ఆటోమేటిక్ గా డిలీట్ చేసే ఫంక్షన్
+  Future<void> _cleanupOldStories() async {
+    try {
+      DateTime yesterday = DateTime.now().subtract(const Duration(hours: 24));
+
+      // మన (కరెంట్ యూజర్) పాత స్టోరీస్ మాత్రమే తెస్తాం
+      var snapshot = await FirebaseFirestore.instance
+          .collection('stories')
+          .where('uid', isEqualTo: currentUid)
+          .where('timestamp', isLessThan: yesterday)
+          .get();
+
+      for (var doc in snapshot.docs) {
+        String storyUrl = doc.data()['storyUrl'] ?? '';
+
+        // 1. స్టోరేజ్ లో ఉన్న ఫోటో/వీడియో ని డిలీట్ చేయడం
+        if (storyUrl.isNotEmpty && storyUrl.contains('firebase')) {
+          try {
+            await FirebaseStorage.instance.refFromURL(storyUrl).delete();
+          } catch (e) {
+            debugPrint("Storage delete error: $e");
+          }
+        }
+
+        // 2. డేటాబేస్ నుండి డాక్యుమెంట్ ని డిలీట్ చేయడం
+        await doc.reference.delete();
+      }
+      debugPrint("✅ Old stories cleaned up successfully!");
+    } catch (e) {
+      debugPrint("Cleanup error: $e");
+    }
   }
 
   Future<void> updateFCMToken() async {
@@ -69,6 +102,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<void> _refreshFeed() async {
     await Future.delayed(const Duration(milliseconds: 800));
+    _cleanupOldStories(); // 🌟 ఫీడ్ రీఫ్రెష్ చేసినప్పుడు కూడా ఒకసారి క్లీన్ చేస్తాం
     if (mounted) {
       setState(() {
         _refreshKey = UniqueKey();
@@ -108,47 +142,69 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Future<void> _uploadSingleImageStory(
+  Future<void> _backgroundUploadPhotoStories(
     Map<String, dynamic> userData,
-    File file,
+    List<XFile> images,
     String? caption,
   ) async {
+    UploadManager().isUploading.value = true;
+    UploadManager().uploadProgress.value = 0.0;
+    UploadManager().uploadStatus.value = "Compressing Stories...";
+
     try {
       final tempDir = await getTemporaryDirectory();
-      final outPath = "${tempDir.path}/story_${const Uuid().v4()}.jpg";
 
-      var comp = await FlutterImageCompress.compressAndGetFile(
-        file.path,
-        outPath,
-        quality: 60,
-        minWidth: 1080,
-        minHeight: 1920,
-      );
+      for (int i = 0; i < images.length; i++) {
+        UploadManager().uploadStatus.value =
+            "Uploading Story ${i + 1} of ${images.length}...";
 
-      File fileToUpload = comp != null ? File(comp.path) : file;
-      String storyId = const Uuid().v4();
-      Reference ref = FirebaseStorage.instance
-          .ref()
-          .child('stories')
-          .child(currentUid)
-          .child('$storyId.jpg');
+        final outPath = "${tempDir.path}/story_${const Uuid().v4()}.jpg";
+        var comp = await FlutterImageCompress.compressAndGetFile(
+          images[i].path,
+          outPath,
+          quality: 60,
+          minWidth: 1080,
+          minHeight: 1920,
+        );
 
-      await ref.putFile(fileToUpload);
-      String downloadUrl = await ref.getDownloadURL();
+        File fileToUpload = comp != null
+            ? File(comp.path)
+            : File(images[i].path);
+        String storyId = const Uuid().v4();
+        Reference ref = FirebaseStorage.instance
+            .ref()
+            .child('stories')
+            .child(currentUid)
+            .child('$storyId.jpg');
 
-      await FirebaseFirestore.instance.collection('stories').add({
-        "uid": currentUid,
-        "ownerId": currentUid,
-        "username": userData['username'] ?? "User",
-        "profilePic": userData['profilePic'] ?? "",
-        "storyUrl": downloadUrl,
-        "type": "image",
-        "caption": caption ?? "",
-        "timestamp": FieldValue.serverTimestamp(),
-        "viewers": [],
-      });
+        UploadTask uploadTask = ref.putFile(fileToUpload);
+
+        uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
+          double progress = snapshot.bytesTransferred / snapshot.totalBytes;
+          double overallProgress = (i + progress) / images.length;
+          UploadManager().uploadProgress.value = overallProgress;
+        });
+
+        await uploadTask;
+        String downloadUrl = await ref.getDownloadURL();
+
+        await FirebaseFirestore.instance.collection('stories').add({
+          "uid": currentUid,
+          "ownerId": currentUid,
+          "username": userData['username'] ?? "User",
+          "profilePic": userData['profilePic'] ?? "",
+          "storyUrl": downloadUrl,
+          "type": "image",
+          "caption": caption ?? "",
+          "timestamp": FieldValue.serverTimestamp(),
+          "viewers": [],
+        });
+      }
+      UploadManager().uploadStatus.value = "Done!";
     } catch (e) {
       debugPrint("Image Upload Error: $e");
+    } finally {
+      UploadManager().isUploading.value = false;
     }
   }
 
@@ -182,22 +238,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 if (images.isNotEmpty) {
                   String? caption = await _askForCaption();
                   if (caption == null) return;
-                  setState(() => _isUploading = true);
-                  for (var img in images) {
-                    await _uploadSingleImageStory(
-                      userData,
-                      File(img.path),
-                      caption,
-                    );
-                  }
-                  if (!mounted) return;
-                  setState(() => _isUploading = false);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text("Stories Uploaded! ✅"),
-                      backgroundColor: Colors.green,
-                    ),
-                  );
+                  _backgroundUploadPhotoStories(userData, images, caption);
                 }
               },
             ),
@@ -238,6 +279,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('stories')
+          // 🌟 24 గంటల పాతవి స్క్రీన్ మీద కనపడకుండా ఈ లైన్ ఆపుతుంది.
           .where('timestamp', isGreaterThanOrEqualTo: yesterday)
           .snapshots(),
       builder: (context, snapshot) {
@@ -269,7 +311,7 @@ class _HomeScreenState extends State<HomeScreen> {
         });
 
         return SizedBox(
-          height: 110,
+          height: 130,
           child: ListView.builder(
             scrollDirection: Axis.horizontal,
             itemCount: storyList.length + 1,
@@ -303,7 +345,6 @@ class _HomeScreenState extends State<HomeScreen> {
                         padding: const EdgeInsets.all(3),
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          // 🌟 మ్యాజిక్: స్టోరీ బబుల్ రింగ్ మీ లోగో కలర్స్ లో!
                           gradient: isAllSeen
                               ? const LinearGradient(
                                   colors: [Colors.grey, Colors.grey],
@@ -362,7 +403,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   fallbackText: (userData['username'] ?? "U")[0],
                 ),
                 const CircleAvatar(
-                  backgroundColor: Color(0xFFFD1D1D), // 🌟 పింక్ యాడ్ బటన్
+                  backgroundColor: Color(0xFFFD1D1D),
                   radius: 10,
                   child: Icon(Icons.add, color: Colors.white, size: 14),
                 ),
@@ -383,7 +424,7 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: isDark ? Colors.black : Colors.white,
       floatingActionButton: FloatingActionButton(
-        backgroundColor: const Color(0xFFFD1D1D), // 🌟 బ్రాండ్ పింక్
+        backgroundColor: const Color(0xFFFD1D1D),
         onPressed: () => Navigator.push(
           context,
           MaterialPageRoute(builder: (_) => const AddPostScreen()),
@@ -409,100 +450,102 @@ class _HomeScreenState extends State<HomeScreen> {
             children: [
               _buildStoriesSection(userData),
               const Divider(height: 1),
-              Expanded(
-                child: Stack(
-                  children: [
-                    RefreshIndicator(
-                      onRefresh: _refreshFeed,
-                      color: const Color(0xFFFD1D1D), // 🌟 బ్రాండ్ పింక్
-                      child: StreamBuilder<QuerySnapshot>(
-                        stream: FirebaseFirestore.instance
-                            .collection('posts')
-                            .orderBy('timestamp', descending: true)
-                            .limit(30)
-                            .snapshots(),
-                        builder: (context, snapshot) {
-                          if (!snapshot.hasData)
-                            return const Center(
-                              child: CircularProgressIndicator(),
-                            );
 
-                          var allPosts = snapshot.data!.docs.where((doc) {
-                            var data = doc.data() as Map<String, dynamic>;
-                            bool isPublic = data['isPublic'] != false;
-                            bool isNotReel = data['type'] != 'video';
-                            return (isPublic ||
-                                    following.contains(data['ownerId'])) &&
-                                isNotReel;
-                          }).toList();
+              ValueListenableBuilder<bool>(
+                valueListenable: UploadManager().isUploading,
+                builder: (context, isUploading, child) {
+                  if (!isUploading) return const SizedBox.shrink();
 
-                          if (allPosts.isEmpty)
-                            return const Center(
-                              child: Text("No posts found. 👇"),
-                            );
-
-                          return ListView.builder(
-                            physics: const AlwaysScrollableScrollPhysics(
-                              parent: BouncingScrollPhysics(),
-                            ),
-                            itemCount: allPosts.length,
-                            itemBuilder: (context, index) {
-                              var post =
-                                  allPosts[index].data()
-                                      as Map<String, dynamic>;
-                              post['postId'] = allPosts[index].id;
-                              return PostWidget(post: post);
-                            },
-                          );
-                        },
-                      ),
-                    ),
-                    if (_isUploading)
-                      Positioned(
-                        top: 10,
-                        left: 0,
-                        right: 0,
-                        child: Center(
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 15,
-                              vertical: 8,
-                            ),
-                            decoration: BoxDecoration(
-                              color: isDark ? Colors.grey[900] : Colors.white,
-                              borderRadius: BorderRadius.circular(20),
-                              boxShadow: const [
-                                BoxShadow(color: Colors.black26, blurRadius: 4),
-                              ],
-                            ),
-                            child: const Row(
-                              mainAxisSize: MainAxisSize.min,
+                  return ValueListenableBuilder<double>(
+                    valueListenable: UploadManager().uploadProgress,
+                    builder: (context, progress, child) {
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 15,
+                          vertical: 8,
+                        ),
+                        color: isDark ? Colors.grey[900] : Colors.grey[100],
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                SizedBox(
-                                  width: 15,
-                                  height: 15,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Color(0xFFFD1D1D),
+                                ValueListenableBuilder<String>(
+                                  valueListenable: UploadManager().uploadStatus,
+                                  builder: (context, status, child) => Text(
+                                    status,
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                    ),
                                   ),
                                 ),
-                                SizedBox(width: 10),
                                 Text(
-                                  "Compressing & Uploading...",
-                                  style: TextStyle(
+                                  "${(progress * 100).toInt()}%",
+                                  style: const TextStyle(
                                     fontSize: 12,
                                     fontWeight: FontWeight.bold,
-                                    color: Color(
-                                      0xFFFD1D1D,
-                                    ), // 🌟 పింక్ కలర్ టెక్స్ట్
+                                    color: Colors.blue,
                                   ),
                                 ),
                               ],
                             ),
-                          ),
+                            const SizedBox(height: 5),
+                            LinearProgressIndicator(
+                              value: progress,
+                              backgroundColor: Colors.grey[300],
+                              color: const Color(0xFFFD1D1D),
+                              minHeight: 4,
+                            ),
+                          ],
                         ),
-                      ),
-                  ],
+                      );
+                    },
+                  );
+                },
+              ),
+
+              Expanded(
+                child: RefreshIndicator(
+                  onRefresh: _refreshFeed,
+                  color: const Color(0xFFFD1D1D),
+                  child: StreamBuilder<QuerySnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('posts')
+                        .orderBy('timestamp', descending: true)
+                        .limit(30)
+                        .snapshots(),
+                    builder: (context, snapshot) {
+                      if (!snapshot.hasData)
+                        return const Center(child: CircularProgressIndicator());
+
+                      var allPosts = snapshot.data!.docs.where((doc) {
+                        var data = doc.data() as Map<String, dynamic>;
+                        bool isPublic = data['isPublic'] != false;
+                        bool isNotReel = data['type'] != 'video';
+                        return (isPublic ||
+                                following.contains(data['ownerId'])) &&
+                            isNotReel;
+                      }).toList();
+
+                      if (allPosts.isEmpty)
+                        return const Center(child: Text("No posts found. 👇"));
+
+                      return ListView.builder(
+                        physics: const AlwaysScrollableScrollPhysics(
+                          parent: BouncingScrollPhysics(),
+                        ),
+                        itemCount: allPosts.length,
+                        itemBuilder: (context, index) {
+                          var post =
+                              allPosts[index].data() as Map<String, dynamic>;
+                          post['postId'] = allPosts[index].id;
+                          return PostWidget(post: post);
+                        },
+                      );
+                    },
+                  ),
                 ),
               ),
             ],

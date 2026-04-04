@@ -10,10 +10,10 @@ import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
 
 import 'safe_elements.dart';
-import 'cached_media_widget.dart'; // 🌟 మనం కొత్తగా చేసిన విడ్జెట్ ఇంపోర్ట్
-import '../screens/comments_screen.dart';
-import '../screens/other_user_profile_screen.dart';
-import '../screens/user_list_screen.dart';
+import 'cached_media_widget.dart';
+import '../screens/posts/comments_screen.dart';
+import '../screens/profile/other_user_profile_screen.dart';
+import '../screens/profile/user_list_screen.dart';
 
 class PostWidget extends StatefulWidget {
   final Map<String, dynamic> post;
@@ -29,6 +29,9 @@ class _PostWidgetState extends State<PostWidget> {
   int likeCount = 0;
   int _currentImageIndex = 0;
   final String currentUid = FirebaseAuth.instance.currentUser!.uid;
+
+  // 🌟 కొత్త ఫీచర్: డబుల్ ట్యాప్ యానిమేషన్ కోసం
+  bool _showBigHeart = false;
 
   @override
   void initState() {
@@ -60,7 +63,6 @@ class _PostWidgetState extends State<PostWidget> {
     }
   }
 
-  // 🌟 లైక్ చేసినప్పుడు నోటిఫికేషన్ పంపే మ్యాజిక్
   void _handleLike() async {
     setState(() {
       isLiked = !isLiked;
@@ -71,48 +73,71 @@ class _PostWidgetState extends State<PostWidget> {
       var ref = FirebaseFirestore.instance
           .collection('posts')
           .doc(widget.post['postId']);
+      String postOwnerId = widget.post['ownerId'];
 
       if (isLiked) {
         await ref.update({
           'likes': FieldValue.arrayUnion([currentUid]),
         });
 
-        String postOwnerId = widget.post['ownerId'];
-        // మన పోస్ట్ కి మనం లైక్ కొట్టుకుంటే నోటిఫికేషన్ వద్దు
         if (currentUid != postOwnerId) {
-          await FirebaseFirestore.instance.collection('notifications').add({
-            'receiverId': postOwnerId,
-            'senderId': currentUid,
-            'type': 'like',
-            'postId': widget.post['postId'],
-            'timestamp': FieldValue.serverTimestamp(),
-            'isRead': false,
-          });
+          var myDoc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(currentUid)
+              .get();
+          String myName = myDoc.data()?['username'] ?? 'User';
+          String myPic = myDoc.data()?['profilePic'] ?? '';
+
+          String mediaUrl =
+              (widget.post['postData'] is List &&
+                  widget.post['postData'].isNotEmpty)
+              ? widget.post['postData'][0]
+              : (widget.post['storyUrl'] ?? "");
+
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(postOwnerId)
+              .collection('notifications')
+              .add({
+                'senderId': currentUid,
+                'senderName': myName,
+                'senderPic': myPic,
+                'type': 'like',
+                'postId': widget.post['postId'],
+                'mediaUrl': mediaUrl,
+                'isRead': false,
+                'timestamp': FieldValue.serverTimestamp(),
+              });
         }
       } else {
         await ref.update({
           'likes': FieldValue.arrayRemove([currentUid]),
         });
 
-        String postOwnerId = widget.post['ownerId'];
-        // అన్‌లైక్ చేసినప్పుడు నోటిఫికేషన్ డిలీట్ చేద్దాం
         if (currentUid != postOwnerId) {
           var notifs = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(postOwnerId)
               .collection('notifications')
-              .where('receiverId', isEqualTo: postOwnerId)
               .where('senderId', isEqualTo: currentUid)
               .where('type', isEqualTo: 'like')
               .where('postId', isEqualTo: widget.post['postId'])
               .get();
-
-          for (var doc in notifs.docs) {
-            await doc.reference.delete();
-          }
+          for (var doc in notifs.docs) await doc.reference.delete();
         }
       }
     } catch (e) {
       debugPrint("Like Error: $e");
     }
+  }
+
+  // 🌟 కొత్త ఫీచర్: డబుల్ ట్యాప్ హ్యాండిలర్
+  void _handleDoubleTap() {
+    if (!isLiked) _handleLike(); // లైక్ లేకపోతేనే లైక్ చేస్తుంది
+    setState(() => _showBigHeart = true);
+    Future.delayed(const Duration(milliseconds: 800), () {
+      if (mounted) setState(() => _showBigHeart = false);
+    });
   }
 
   void _handleSave() async {
@@ -174,123 +199,184 @@ class _PostWidgetState extends State<PostWidget> {
     }
   }
 
-  void _sendPostInternally(BuildContext sheetContext, String receiverId) async {
-    try {
-      await FirebaseFirestore.instance.collection('messages').add({
-        'senderId': currentUid,
-        'receiverId': receiverId,
-        'postId': widget.post['postId'],
-        'text': 'Shared a post',
-        'type': 'post_share',
-        'timestamp': FieldValue.serverTimestamp(),
-        'isRead': false,
-      });
+  void _sendPostInternally(
+    BuildContext sheetContext,
+    String receiverId,
+    String receiverName,
+  ) async {
+    String url =
+        (widget.post['postData'] is List && widget.post['postData'].isNotEmpty)
+        ? widget.post['postData'][0]
+        : "";
+    String roomId = currentUid.hashCode <= receiverId.hashCode
+        ? "${currentUid}_$receiverId"
+        : "${receiverId}_$currentUid";
+    var timestamp = FieldValue.serverTimestamp();
 
-      String roomId = currentUid.hashCode <= receiverId.hashCode
-          ? "${currentUid}_$receiverId"
-          : "${receiverId}_$currentUid";
-      await FirebaseFirestore.instance.collection('chatRooms').doc(roomId).set({
-        'users': [currentUid, receiverId],
-        'lastMessage': "Shared a post",
-        'timestamp': FieldValue.serverTimestamp(),
-        'hasUnread_$receiverId': true,
-      }, SetOptions(merge: true));
+    await FirebaseFirestore.instance
+        .collection('chatRooms')
+        .doc(roomId)
+        .collection('messages')
+        .add({
+          'senderId': currentUid,
+          'receiverId': receiverId,
+          'text': "Sent a Post",
+          'type': 'shared_post',
+          'mediaUrl': url,
+          'sharedPostId': widget.post['postId'],
+          'ownerName': widget.post['username'] ?? 'User',
+          'isRead': false,
+          'timestamp': timestamp,
+          'isEdited': false,
+          'isDeleted': false,
+          'deletedBy': [],
+        });
 
-      if (!sheetContext.mounted) return;
-      Navigator.pop(sheetContext);
+    await FirebaseFirestore.instance.collection('chatRooms').doc(roomId).set({
+      'users': [currentUid, receiverId],
+      'lastMessage': "📷 Sent a Post",
+      'timestamp': timestamp,
+      'unread_$receiverId': FieldValue.increment(1),
+    }, SetOptions(merge: true));
 
-      if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Sent to inbox! ✅")));
-    } catch (e) {}
+    if (!sheetContext.mounted) return;
+    Navigator.pop(sheetContext);
+
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("Sent to $receiverName ✅"),
+        backgroundColor: Colors.green,
+      ),
+    );
   }
 
   void _showShareMenu() {
+    bool isDark = Theme.of(context).brightness == Brightness.dark;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
+      backgroundColor: isDark ? Colors.grey[900] : Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (ctx) {
-        return Container(
-          height: MediaQuery.of(context).size.height * 0.6,
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          child: Column(
-            children: [
-              const Text(
-                "Share Post",
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.6,
+        minChildSize: 0.4,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (context, scrollController) => Column(
+          children: [
+            const SizedBox(height: 10),
+            Container(
+              width: 40,
+              height: 4,
+              decoration: BoxDecoration(
+                color: Colors.grey,
+                borderRadius: BorderRadius.circular(10),
               ),
-              const SizedBox(height: 10),
-              ListTile(
-                leading: const CircleAvatar(
-                  backgroundColor: Colors.green,
-                  child: Icon(Icons.share, color: Colors.white),
-                ),
-                title: const Text("Share to WhatsApp / Others"),
-                onTap: () {
-                  Navigator.pop(ctx);
-                  _shareExternally();
+            ),
+            const Padding(
+              padding: EdgeInsets.all(15),
+              child: Text(
+                "Share Post",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+            ),
+            Expanded(
+              child: FutureBuilder<DocumentSnapshot>(
+                future: FirebaseFirestore.instance
+                    .collection('users')
+                    .doc(currentUid)
+                    .get(),
+                builder: (context, snapshot) {
+                  if (!snapshot.hasData)
+                    return const Center(child: CircularProgressIndicator());
+                  List following =
+                      (snapshot.data!.data()
+                          as Map<String, dynamic>)['following'] ??
+                      [];
+                  if (following.isEmpty)
+                    return const Center(
+                      child: Text(
+                        "Follow someone to share with them!",
+                        style: TextStyle(color: Colors.grey),
+                      ),
+                    );
+
+                  return ListView.builder(
+                    controller: scrollController,
+                    itemCount: following.length,
+                    itemBuilder: (context, index) {
+                      return FutureBuilder<DocumentSnapshot>(
+                        future: FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(following[index])
+                            .get(),
+                        builder: (context, userSnap) {
+                          if (!userSnap.hasData || !userSnap.data!.exists)
+                            return const SizedBox();
+                          var userData =
+                              userSnap.data!.data() as Map<String, dynamic>;
+                          return ListTile(
+                            leading: SafeProfilePic(
+                              base64String: userData['profilePic'],
+                              radius: 20,
+                              fallbackText: userData['username'][0],
+                            ),
+                            title: Text(
+                              userData['username'],
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            trailing: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: const Color(0xFF007AFF),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                              ),
+                              onPressed: () => _sendPostInternally(
+                                ctx,
+                                following[index],
+                                userData['username'],
+                              ),
+                              child: const Text(
+                                "Send",
+                                style: TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  );
                 },
               ),
-              const Divider(),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 15, vertical: 5),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    "Send to Friends",
-                    style: TextStyle(
-                      color: Colors.grey,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
+            ),
+            const Divider(),
+            ListTile(
+              leading: const CircleAvatar(
+                backgroundColor: Colors.green,
+                child: Icon(Icons.share, color: Colors.white),
               ),
-              Expanded(
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('users')
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    if (!snapshot.hasData)
-                      return const Center(child: CircularProgressIndicator());
-                    var users = snapshot.data!.docs
-                        .where((doc) => doc.id != currentUid)
-                        .toList();
-                    return ListView.builder(
-                      itemCount: users.length,
-                      itemBuilder: (context, index) {
-                        var user = users[index].data() as Map<String, dynamic>;
-                        String uName = user['username'] ?? "User";
-                        return ListTile(
-                          leading: SafeProfilePic(
-                            base64String: user['profilePic'],
-                            radius: 20,
-                            fallbackText: uName.isNotEmpty ? uName[0] : "U",
-                          ),
-                          title: Text(uName),
-                          trailing: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.blue,
-                              foregroundColor: Colors.white,
-                            ),
-                            onPressed: () =>
-                                _sendPostInternally(ctx, users[index].id),
-                            child: const Text("Send"),
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
+              title: const Text(
+                "Share to External Apps",
+                style: TextStyle(fontWeight: FontWeight.bold),
               ),
-            ],
-          ),
-        );
-      },
+              onTap: () {
+                Navigator.pop(ctx);
+                _shareExternally();
+              },
+            ),
+            const SizedBox(height: 10),
+          ],
+        ),
+      ),
     );
   }
 
@@ -441,14 +527,39 @@ class _PostWidgetState extends State<PostWidget> {
                       itemCount: images.length,
                       itemBuilder: (context, index) {
                         String imgData = images[index];
+                        // 🌟 మ్యాజిక్: ఇక్కడ Stack యాడ్ చేసాము యానిమేషన్ కోసం
                         return GestureDetector(
-                          onDoubleTap: _handleLike,
-                          child: imgData.startsWith('http')
-                              ? CachedMediaWidget(
-                                  mediaUrl: imgData,
-                                  type: postType,
-                                )
-                              : SafeImage(base64String: imgData),
+                          onDoubleTap: _handleDoubleTap,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              imgData.startsWith('http')
+                                  ? CachedMediaWidget(
+                                      mediaUrl: imgData,
+                                      type: postType,
+                                    )
+                                  : SafeImage(base64String: imgData),
+
+                              // 🌟 గుండెకాయ యానిమేషన్
+                              if (_showBigHeart)
+                                TweenAnimationBuilder<double>(
+                                  tween: Tween<double>(begin: 0.5, end: 1.2),
+                                  duration: const Duration(milliseconds: 300),
+                                  curve: Curves.elasticOut,
+                                  builder: (context, scale, child) =>
+                                      Transform.scale(
+                                        scale: scale,
+                                        child: Icon(
+                                          Icons.favorite,
+                                          color: Colors.white.withValues(
+                                            alpha: 0.9,
+                                          ),
+                                          size: 100,
+                                        ),
+                                      ),
+                                ),
+                            ],
+                          ),
                         );
                       },
                     ),
@@ -531,6 +642,7 @@ class _PostWidgetState extends State<PostWidget> {
                             builder: (_) => CommentsScreen(
                               postId: widget.post['postId'],
                               postOwnerId: widget.post['ownerId'],
+                              mediaUrl: images.isNotEmpty ? images[0] : "",
                             ),
                           ),
                         ),

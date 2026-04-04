@@ -5,7 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:video_player/video_player.dart';
-import '../services/firestore_methods.dart';
+import '../../services/firestore_methods.dart';
 
 class AddReelScreen extends StatefulWidget {
   const AddReelScreen({super.key});
