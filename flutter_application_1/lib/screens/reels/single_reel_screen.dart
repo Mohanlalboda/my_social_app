@@ -1,8 +1,6 @@
-// ignore_for_file: curly_braces_in_flow_control_structures
-
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../../widgets/reel_item.dart';
+import 'scrolling_reels_screen.dart';
 
 class SingleReelScreen extends StatelessWidget {
   final String reelId;
@@ -12,42 +10,36 @@ class SingleReelScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      // 🌟 పైన యాప్ బార్ కింద నుండి వీడియో ప్లే అవ్వడానికి
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, color: Colors.white, size: 30),
-          onPressed: () => Navigator.pop(context), // బ్యాక్ వెళ్ళడానికి
+          icon: const Icon(Icons.arrow_back_ios, color: Colors.white),
+          onPressed: () => Navigator.pop(context),
         ),
       ),
       body: FutureBuilder<DocumentSnapshot>(
-        // 🌟 మ్యాజిక్ ఇక్కడే జరిగింది: 'reels' బదులు 'posts' వాడాం!
         future: FirebaseFirestore.instance
-            .collection('posts')
+            .collection('reels')
             .doc(reelId)
             .get(),
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (!snapshot.hasData) {
             return const Center(
               child: CircularProgressIndicator(color: Colors.white),
             );
           }
-          if (!snapshot.hasData || !snapshot.data!.exists) {
+          if (!snapshot.data!.exists) {
             return const Center(
               child: Text(
-                "This Reel is unavailable or deleted. 🎬",
+                "Reel not found",
                 style: TextStyle(color: Colors.white),
               ),
             );
           }
 
-          var reelData = snapshot.data!.data() as Map<String, dynamic>;
-          // 🌟 సేఫ్టీ కోసం postId ని డేటాలోకి పంపుతున్నాం (లైక్/కామెంట్ కోసం యూజ్ అవుతుంది)
-          reelData['postId'] = reelId;
-
-          return ReelItem(reel: reelData, reelId: reelId);
+          return ScrollingReelsScreen(reelIds: [reelId]);
         },
       ),
     );

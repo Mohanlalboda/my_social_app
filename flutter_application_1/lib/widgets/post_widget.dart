@@ -1,6 +1,7 @@
 // ignore_for_file: curly_braces_in_flow_control_structures, empty_catches
 
 import 'dart:io';
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -8,6 +9,9 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+
+import 'package:audioplayers/audioplayers.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 import 'safe_elements.dart';
 import 'cached_media_widget.dart';
@@ -30,7 +34,6 @@ class _PostWidgetState extends State<PostWidget> {
   int _currentImageIndex = 0;
   final String currentUid = FirebaseAuth.instance.currentUser!.uid;
 
-  // 🌟 కొత్త ఫీచర్: డబుల్ ట్యాప్ యానిమేషన్ కోసం
   bool _showBigHeart = false;
 
   @override
@@ -79,7 +82,6 @@ class _PostWidgetState extends State<PostWidget> {
         await ref.update({
           'likes': FieldValue.arrayUnion([currentUid]),
         });
-
         if (currentUid != postOwnerId) {
           var myDoc = await FirebaseFirestore.instance
               .collection('users')
@@ -87,7 +89,6 @@ class _PostWidgetState extends State<PostWidget> {
               .get();
           String myName = myDoc.data()?['username'] ?? 'User';
           String myPic = myDoc.data()?['profilePic'] ?? '';
-
           String mediaUrl =
               (widget.post['postData'] is List &&
                   widget.post['postData'].isNotEmpty)
@@ -113,7 +114,6 @@ class _PostWidgetState extends State<PostWidget> {
         await ref.update({
           'likes': FieldValue.arrayRemove([currentUid]),
         });
-
         if (currentUid != postOwnerId) {
           var notifs = await FirebaseFirestore.instance
               .collection('users')
@@ -126,14 +126,11 @@ class _PostWidgetState extends State<PostWidget> {
           for (var doc in notifs.docs) await doc.reference.delete();
         }
       }
-    } catch (e) {
-      debugPrint("Like Error: $e");
-    }
+    } catch (e) {}
   }
 
-  // 🌟 కొత్త ఫీచర్: డబుల్ ట్యాప్ హ్యాండిలర్
   void _handleDoubleTap() {
-    if (!isLiked) _handleLike(); // లైక్ లేకపోతేనే లైక్ చేస్తుంది
+    if (!isLiked) _handleLike();
     setState(() => _showBigHeart = true);
     Future.delayed(const Duration(milliseconds: 800), () {
       if (mounted) setState(() => _showBigHeart = false);
@@ -165,14 +162,13 @@ class _PostWidgetState extends State<PostWidget> {
       } else {
         imageData = widget.post['postData']?.toString() ?? "";
       }
-
       if (imageData.isEmpty) return;
 
       if (imageData.startsWith('http')) {
         await SharePlus.instance.share(
           ShareParams(
             text:
-                "${widget.post['caption'] ?? 'Check out this post on MyBanjara!'}\n\n$imageData",
+                "${widget.post['caption'] ?? 'Check out this post!'}\n\n$imageData",
           ),
         );
       } else {
@@ -187,16 +183,13 @@ class _PostWidgetState extends State<PostWidget> {
           final xFile = XFile(file.path, mimeType: 'image/png');
           await SharePlus.instance.share(
             ShareParams(
-              text:
-                  widget.post['caption'] ?? "Check out this post on MyBanjara!",
+              text: widget.post['caption'] ?? "Check out this post!",
               files: [xFile],
             ),
           );
         }
       }
-    } catch (e) {
-      debugPrint("External share error: $e");
-    }
+    } catch (e) {}
   }
 
   void _sendPostInternally(
@@ -513,7 +506,32 @@ class _PostWidgetState extends State<PostWidget> {
                 : null,
           ),
 
-          if (images.isNotEmpty)
+          if (postType == 'auto_reel' && images.isNotEmpty)
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                AutoReelPlayerForFeed(
+                  imageUrls: images,
+                  audioUrl: widget.post['audioUrl'] ?? '',
+                  onDoubleTap: _handleDoubleTap,
+                ),
+                if (_showBigHeart)
+                  TweenAnimationBuilder<double>(
+                    tween: Tween<double>(begin: 0.5, end: 1.2),
+                    duration: const Duration(milliseconds: 300),
+                    curve: Curves.elasticOut,
+                    builder: (context, scale, child) => Transform.scale(
+                      scale: scale,
+                      child: Icon(
+                        Icons.favorite,
+                        color: Colors.white.withValues(alpha: 0.9),
+                        size: 100,
+                      ), // 🌟 FIXED HERE
+                    ),
+                  ),
+              ],
+            )
+          else if (images.isNotEmpty)
             Stack(
               alignment: Alignment.topRight,
               children: [
@@ -527,7 +545,6 @@ class _PostWidgetState extends State<PostWidget> {
                       itemCount: images.length,
                       itemBuilder: (context, index) {
                         String imgData = images[index];
-                        // 🌟 మ్యాజిక్: ఇక్కడ Stack యాడ్ చేసాము యానిమేషన్ కోసం
                         return GestureDetector(
                           onDoubleTap: _handleDoubleTap,
                           child: Stack(
@@ -539,8 +556,6 @@ class _PostWidgetState extends State<PostWidget> {
                                       type: postType,
                                     )
                                   : SafeImage(base64String: imgData),
-
-                              // 🌟 గుండెకాయ యానిమేషన్
                               if (_showBigHeart)
                                 TweenAnimationBuilder<double>(
                                   tween: Tween<double>(begin: 0.5, end: 1.2),
@@ -555,7 +570,7 @@ class _PostWidgetState extends State<PostWidget> {
                                             alpha: 0.9,
                                           ),
                                           size: 100,
-                                        ),
+                                        ), // 🌟 FIXED HERE
                                       ),
                                 ),
                             ],
@@ -577,7 +592,7 @@ class _PostWidgetState extends State<PostWidget> {
                       decoration: BoxDecoration(
                         color: Colors.black.withValues(alpha: 0.7),
                         borderRadius: BorderRadius.circular(15),
-                      ),
+                      ), // 🌟 FIXED HERE
                       child: Text(
                         "${_currentImageIndex + 1}/${images.length}",
                         style: const TextStyle(
@@ -591,7 +606,7 @@ class _PostWidgetState extends State<PostWidget> {
               ],
             ),
 
-          if (images.length > 1)
+          if (postType != 'auto_reel' && images.length > 1)
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: List.generate(
@@ -605,7 +620,7 @@ class _PostWidgetState extends State<PostWidget> {
                     color: _currentImageIndex == index
                         ? const Color(0xFFFD1D1D)
                         : Colors.grey.withValues(alpha: 0.5),
-                  ),
+                  ), // 🌟 FIXED HERE
                 ),
               ),
             ),
@@ -680,7 +695,7 @@ class _PostWidgetState extends State<PostWidget> {
                 List<String> likers = List<String>.from(
                   widget.post['likes'] ?? [],
                 );
-                if (likers.isNotEmpty) {
+                if (likers.isNotEmpty)
                   Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -688,7 +703,6 @@ class _PostWidgetState extends State<PostWidget> {
                           UserListScreen(title: "Likes", userIds: likers),
                     ),
                   );
-                }
               },
               child: Text(
                 "$likeCount likes",
@@ -709,6 +723,153 @@ class _PostWidgetState extends State<PostWidget> {
               ),
             ),
           const SizedBox(height: 10),
+        ],
+      ),
+    );
+  }
+}
+
+class AutoReelPlayerForFeed extends StatefulWidget {
+  final List<String> imageUrls;
+  final String audioUrl;
+  final VoidCallback onDoubleTap;
+
+  const AutoReelPlayerForFeed({
+    super.key,
+    required this.imageUrls,
+    required this.audioUrl,
+    required this.onDoubleTap,
+  });
+
+  @override
+  State<AutoReelPlayerForFeed> createState() => _AutoReelPlayerForFeedState();
+}
+
+class _AutoReelPlayerForFeedState extends State<AutoReelPlayerForFeed> {
+  late AudioPlayer _audioPlayer;
+  int _currentIndex = 0;
+  Timer? _timer;
+  bool _isPlaying = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _audioPlayer = AudioPlayer();
+    _audioPlayer.setAudioContext(
+      AudioContext(
+        iOS: AudioContextIOS(
+          category: AVAudioSessionCategory.playback,
+          options: {AVAudioSessionOptions.mixWithOthers},
+        ),
+        android: const AudioContextAndroid(audioFocus: AndroidAudioFocus.gain),
+      ),
+    );
+  }
+
+  void _togglePlay() async {
+    setState(() {
+      _isPlaying = !_isPlaying;
+    });
+
+    if (_isPlaying) {
+      try {
+        if (widget.audioUrl.isNotEmpty) {
+          await _audioPlayer.setVolume(1.0);
+          await _audioPlayer.setReleaseMode(ReleaseMode.loop);
+          await _audioPlayer.play(UrlSource(widget.audioUrl));
+        }
+      } catch (e) {}
+
+      _timer?.cancel();
+      _timer = Timer.periodic(const Duration(milliseconds: 1500), (t) {
+        if (mounted && widget.imageUrls.isNotEmpty) {
+          setState(() {
+            _currentIndex = (_currentIndex + 1) % widget.imageUrls.length;
+          });
+        }
+      });
+    } else {
+      _timer?.cancel();
+      _audioPlayer.pause();
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    _audioPlayer.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (widget.imageUrls.isEmpty) return const SizedBox.shrink();
+
+    return GestureDetector(
+      onTap: _togglePlay,
+      onDoubleTap: widget.onDoubleTap,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          AnimatedSwitcher(
+            duration: const Duration(milliseconds: 500),
+            child: CachedNetworkImage(
+              key: ValueKey<int>(_currentIndex),
+              imageUrl: widget.imageUrls[_currentIndex],
+              fit: BoxFit.cover,
+              width: double.infinity,
+              height: MediaQuery.of(context).size.width,
+              placeholder: (c, u) => Container(
+                color: Colors.black12,
+                height: MediaQuery.of(context).size.width,
+              ),
+              errorWidget: (c, u, e) => Container(
+                color: Colors.black12,
+                height: MediaQuery.of(context).size.width,
+                child: const Icon(Icons.broken_image),
+              ),
+            ),
+          ),
+          if (!_isPlaying)
+            Container(
+              padding: const EdgeInsets.all(15),
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.white, width: 2),
+              ),
+              child: const Icon(
+                Icons.play_arrow,
+                color: Colors.white,
+                size: 40,
+              ),
+            ),
+          if (_isPlaying)
+            Positioned(
+              top: 10,
+              right: 10,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 5,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.black54,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.music_note, color: Colors.white, size: 14),
+                    SizedBox(width: 4),
+                    Text(
+                      "Auto-Sync Audio",
+                      style: TextStyle(color: Colors.white, fontSize: 10),
+                    ),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );

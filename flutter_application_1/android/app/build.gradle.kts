@@ -1,12 +1,11 @@
 plugins {
     id("com.android.application")
-    // START: FlutterFire Configuration
     id("com.google.gms.google-services")
-    // END: FlutterFire Configuration
     id("kotlin-android")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
+
+
 
 android {
     namespace = "com.example.flutter_application_1"
@@ -20,14 +19,16 @@ android {
     }
 
     kotlinOptions {
-        jvmTarget = "17" // 🌟 ఎర్రర్ ఫిక్స్: ఇక్కడ డైరెక్ట్ గా "17" అని ఇచ్చేశాం
+        jvmTarget = "17"
     }
 
     defaultConfig {
         applicationId = "com.example.flutter_application_1"
+        
+        // 🌟 FIX 2: ffmpeg కి ఖచ్చితంగా 24 కావాలి, కాబట్టి డైరెక్ట్ గా 24 ఇచ్చేస్తున్నాం
         minSdk = flutter.minSdkVersion  
+        
         targetSdk = 34 
-        // 🌟 మెయిన్ ఎర్రర్ ఫిక్స్: ఇక్కడ కొట్లిన్ సింటాక్స్ వాడాం
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         multiDexEnabled = true 
@@ -36,8 +37,6 @@ android {
 
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
         }
     }
@@ -50,4 +49,5 @@ flutter {
 dependencies {
     implementation("androidx.multidex:multidex:2.0.1")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+    
 }

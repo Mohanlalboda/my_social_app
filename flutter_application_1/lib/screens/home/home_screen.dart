@@ -16,7 +16,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../widgets/safe_elements.dart';
 import '../../widgets/post_widget.dart';
 import '../story/story_view_screen.dart';
-import '../create/add_post_screen.dart'; // 🌟 UploadManager కోసం
+import '../create/add_post_screen.dart';
 import '../create/video_trimmer_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -29,7 +29,6 @@ class _HomeScreenState extends State<HomeScreen> {
   final String currentUid = FirebaseAuth.instance.currentUser!.uid;
   Key _refreshKey = UniqueKey();
 
-  // 🌟 మన బ్రాండ్ గ్రేడియంట్
   final LinearGradient brandGradient = const LinearGradient(
     colors: [
       Color(0xFF833AB4), // Purple
@@ -45,15 +44,46 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     updateFCMToken();
-    _cleanupOldStories(); // 🌟 యాప్ ఓపెన్ చేయగానే 24 గంటల పాత స్టోరీస్ డిలీట్ అవుతాయి
+    _cleanupOldStories();
   }
 
-  // 🌟 NEW: 24 గంటల పాత స్టోరీస్ ని ఆటోమేటిక్ గా డిలీట్ చేసే ఫంక్షన్
+  Future<void> migrateVideosToReels() async {
+    debugPrint("🚀 డేటా మైగ్రేషన్ స్టార్ట్ అయింది...");
+    try {
+      var snapshot = await FirebaseFirestore.instance
+          .collection('posts')
+          .where('type', isEqualTo: 'video')
+          .get();
+
+      if (snapshot.docs.isEmpty) return;
+
+      for (var doc in snapshot.docs) {
+        Map<String, dynamic> data = doc.data();
+        String postId = doc.id;
+        await FirebaseFirestore.instance
+            .collection('reels')
+            .doc(postId)
+            .set(data);
+      }
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              "పాత రీల్స్ అన్నీ సక్సెస్ ఫుల్ గా మారాయి! 🎬 (ఇప్పుడు కోడ్ తీసేయండి)",
+            ),
+            duration: Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint("❌ మైగ్రేషన్ ఎర్రర్: $e");
+    }
+  }
+
   Future<void> _cleanupOldStories() async {
     try {
       DateTime yesterday = DateTime.now().subtract(const Duration(hours: 24));
-
-      // మన (కరెంట్ యూజర్) పాత స్టోరీస్ మాత్రమే తెస్తాం
       var snapshot = await FirebaseFirestore.instance
           .collection('stories')
           .where('uid', isEqualTo: currentUid)
@@ -62,22 +92,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
       for (var doc in snapshot.docs) {
         String storyUrl = doc.data()['storyUrl'] ?? '';
-
-        // 1. స్టోరేజ్ లో ఉన్న ఫోటో/వీడియో ని డిలీట్ చేయడం
         if (storyUrl.isNotEmpty && storyUrl.contains('firebase')) {
           try {
             await FirebaseStorage.instance.refFromURL(storyUrl).delete();
           } catch (e) {
-            debugPrint("Storage delete error: $e");
+            debugPrint("Story media delete error: $e"); // 🌟 FIX 1
           }
         }
-
-        // 2. డేటాబేస్ నుండి డాక్యుమెంట్ ని డిలీట్ చేయడం
         await doc.reference.delete();
       }
-      debugPrint("✅ Old stories cleaned up successfully!");
     } catch (e) {
-      debugPrint("Cleanup error: $e");
+      debugPrint("Cleanup old stories error: $e"); // 🌟 FIX 2
     }
   }
 
@@ -85,7 +110,6 @@ class _HomeScreenState extends State<HomeScreen> {
     try {
       NotificationSettings settings = await FirebaseMessaging.instance
           .requestPermission(alert: true, badge: true, sound: true);
-
       if (settings.authorizationStatus == AuthorizationStatus.authorized) {
         String? token = await FirebaseMessaging.instance.getToken();
         if (token != null) {
@@ -96,13 +120,13 @@ class _HomeScreenState extends State<HomeScreen> {
         }
       }
     } catch (e) {
-      debugPrint("❌ Token Error: $e");
+      debugPrint("Update FCM Token error: $e"); // 🌟 FIX 3
     }
   }
 
   Future<void> _refreshFeed() async {
     await Future.delayed(const Duration(milliseconds: 800));
-    _cleanupOldStories(); // 🌟 ఫీడ్ రీఫ్రెష్ చేసినప్పుడు కూడా ఒకసారి క్లీన్ చేస్తాం
+    _cleanupOldStories();
     if (mounted) {
       setState(() {
         _refreshKey = UniqueKey();
@@ -153,11 +177,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
     try {
       final tempDir = await getTemporaryDirectory();
-
       for (int i = 0; i < images.length; i++) {
         UploadManager().uploadStatus.value =
             "Uploading Story ${i + 1} of ${images.length}...";
-
         final outPath = "${tempDir.path}/story_${const Uuid().v4()}.jpg";
         var comp = await FlutterImageCompress.compressAndGetFile(
           images[i].path,
@@ -176,13 +198,12 @@ class _HomeScreenState extends State<HomeScreen> {
             .child('stories')
             .child(currentUid)
             .child('$storyId.jpg');
-
         UploadTask uploadTask = ref.putFile(fileToUpload);
 
         uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
-          double progress = snapshot.bytesTransferred / snapshot.totalBytes;
-          double overallProgress = (i + progress) / images.length;
-          UploadManager().uploadProgress.value = overallProgress;
+          UploadManager().uploadProgress.value =
+              (i + (snapshot.bytesTransferred / snapshot.totalBytes)) /
+              images.length;
         });
 
         await uploadTask;
@@ -202,7 +223,7 @@ class _HomeScreenState extends State<HomeScreen> {
       }
       UploadManager().uploadStatus.value = "Done!";
     } catch (e) {
-      debugPrint("Image Upload Error: $e");
+      debugPrint("Background story upload error: $e"); // 🌟 FIX 4
     } finally {
       UploadManager().isUploading.value = false;
     }
@@ -210,7 +231,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _showStoryPicker(Map<String, dynamic> userData) {
     final ImagePicker picker = ImagePicker();
-
     showModalBottomSheet(
       context: context,
       shape: const RoundedRectangleBorder(
@@ -237,8 +257,8 @@ class _HomeScreenState extends State<HomeScreen> {
                 final List<XFile> images = await picker.pickMultiImage();
                 if (images.isNotEmpty) {
                   String? caption = await _askForCaption();
-                  if (caption == null) return;
-                  _backgroundUploadPhotoStories(userData, images, caption);
+                  if (caption != null)
+                    _backgroundUploadPhotoStories(userData, images, caption);
                 }
               },
             ),
@@ -253,8 +273,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 final XFile? video = await picker.pickVideo(
                   source: ImageSource.gallery,
                 );
-                if (video != null) {
-                  if (!mounted) return;
+                if (video != null && mounted) {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -275,23 +294,18 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildStoriesSection(Map<String, dynamic> currentUserData) {
     DateTime yesterday = DateTime.now().subtract(const Duration(hours: 24));
-
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance
           .collection('stories')
-          // 🌟 24 గంటల పాతవి స్క్రీన్ మీద కనపడకుండా ఈ లైన్ ఆపుతుంది.
           .where('timestamp', isGreaterThanOrEqualTo: yesterday)
           .snapshots(),
       builder: (context, snapshot) {
         if (!snapshot.hasData) return const SizedBox(height: 110);
-
         Map<String, Map<String, dynamic>> usersMap = {};
         for (var doc in snapshot.data!.docs) {
           var data = doc.data() as Map<String, dynamic>;
           String uid = data['uid'];
-          List viewers = data['viewers'] ?? [];
-          bool seen = viewers.contains(currentUid);
-
+          bool seen = (data['viewers'] ?? []).contains(currentUid);
           if (!usersMap.containsKey(uid)) {
             usersMap[uid] = {
               'uid': uid,
@@ -299,16 +313,15 @@ class _HomeScreenState extends State<HomeScreen> {
               'profilePic': data['profilePic'],
               'allSeen': seen,
             };
-          } else {
-            if (!seen) usersMap[uid]!['allSeen'] = false;
+          } else if (!seen) {
+            usersMap[uid]!['allSeen'] = false;
           }
         }
-
-        var storyList = usersMap.values.toList();
-        storyList.sort((a, b) {
-          if (a['allSeen'] == b['allSeen']) return 0;
-          return a['allSeen'] ? 1 : -1;
-        });
+        var storyList = usersMap.values.toList()
+          ..sort(
+            (a, b) =>
+                a['allSeen'] == b['allSeen'] ? 0 : (a['allSeen'] ? 1 : -1),
+          );
 
         return SizedBox(
           height: 130,
@@ -318,22 +331,17 @@ class _HomeScreenState extends State<HomeScreen> {
             padding: const EdgeInsets.symmetric(horizontal: 10),
             itemBuilder: (context, index) {
               if (index == 0) return _buildMyStoryBubble(currentUserData);
-
               var userData = storyList[index - 1];
-              bool isAllSeen = userData['allSeen'] ?? false;
-
               return GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => StoryViewScreen(
-                        usersWithStories: storyList,
-                        initialUserIndex: index - 1,
-                      ),
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => StoryViewScreen(
+                      usersWithStories: storyList,
+                      initialUserIndex: index - 1,
                     ),
-                  );
-                },
+                  ),
+                ),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 8,
@@ -345,7 +353,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         padding: const EdgeInsets.all(3),
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          gradient: isAllSeen
+                          gradient: userData['allSeen']
                               ? const LinearGradient(
                                   colors: [Colors.grey, Colors.grey],
                                 )
@@ -420,7 +428,6 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
-
     return Scaffold(
       backgroundColor: isDark ? Colors.black : Colors.white,
       floatingActionButton: FloatingActionButton(
@@ -440,7 +447,6 @@ class _HomeScreenState extends State<HomeScreen> {
         builder: (context, userSnapshot) {
           if (!userSnapshot.hasData)
             return const Center(child: CircularProgressIndicator());
-
           var userData =
               userSnapshot.data!.data() as Map<String, dynamic>? ?? {};
           List following = List.from(userData['following'] ?? [])
@@ -455,7 +461,6 @@ class _HomeScreenState extends State<HomeScreen> {
                 valueListenable: UploadManager().isUploading,
                 builder: (context, isUploading, child) {
                   if (!isUploading) return const SizedBox.shrink();
-
                   return ValueListenableBuilder<double>(
                     valueListenable: UploadManager().uploadProgress,
                     builder: (context, progress, child) {

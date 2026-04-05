@@ -12,10 +12,9 @@ import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:video_compress/video_compress.dart';
 import 'package:path_provider/path_provider.dart';
 import '../../widgets/safe_elements.dart';
-import 'package:geolocator/geolocator.dart'; // 🌟 GPS కోసం
+import 'package:geolocator/geolocator.dart';
+import 'auto_reel_screen.dart';
 
-// 🌟 బ్యాక్‌గ్రౌండ్ అప్‌లోడ్స్ మేనేజర్
-// 🌟 బ్యాక్‌గ్రౌండ్ అప్‌లోడ్స్ మేనేజర్ (With GPS Location)
 class UploadManager {
   static final UploadManager _instance = UploadManager._internal();
   factory UploadManager() => _instance;
@@ -25,21 +24,19 @@ class UploadManager {
   final ValueNotifier<double> uploadProgress = ValueNotifier(0.0);
   final ValueNotifier<String> uploadStatus = ValueNotifier("");
 
-  // 📍 GPS లొకేషన్ తెచ్చుకునే ఫంక్షన్
   Future<Position?> _getUserLocation() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) return null; // GPS ఆన్ లేదు
+    if (!serviceEnabled) return null;
 
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) return null; // పర్మిషన్ లేదు
+      if (permission == LocationPermission.denied) return null;
     }
 
     if (permission == LocationPermission.deniedForever) return null;
 
     try {
-      // 🌟 FIX: Deprecated 'desiredAccuracy' వార్నింగ్ క్లియర్ చేశాం
       return await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
@@ -51,7 +48,6 @@ class UploadManager {
     }
   }
 
-  // 📸 ఫోటో పోస్ట్ అప్‌లోడ్
   Future<void> backgroundUploadPost(
     List<File> images,
     String caption,
@@ -63,9 +59,7 @@ class UploadManager {
     uploadStatus.value = "Getting Location...";
 
     try {
-      // 🌟 1. ముందే లొకేషన్ తెచ్చుకోవడం
       Position? currentPosition = await _getUserLocation();
-
       String uid = FirebaseAuth.instance.currentUser!.uid;
       var userDoc = await FirebaseFirestore.instance
           .collection('users')
@@ -114,7 +108,6 @@ class UploadManager {
       uploadStatus.value = "Finishing up...";
       String postId = const Uuid().v4();
 
-      // 🌟 2. లొకేషన్ తో సహా డేటాబేస్‌లో సేవ్ చేయడం
       Map<String, dynamic> postData = {
         'postId': postId,
         'ownerId': uid,
@@ -146,7 +139,6 @@ class UploadManager {
     }
   }
 
-  // 🎥 వీడియో (Reel) అప్‌లోడ్
   Future<void> backgroundUploadReel(
     File video,
     String caption,
@@ -158,9 +150,7 @@ class UploadManager {
     uploadStatus.value = "Getting Location...";
 
     try {
-      // 🌟 1. ముందే లొకేషన్ తెచ్చుకోవడం
       Position? currentPosition = await _getUserLocation();
-
       String uid = FirebaseAuth.instance.currentUser!.uid;
       var userDoc = await FirebaseFirestore.instance
           .collection('users')
@@ -197,17 +187,16 @@ class UploadManager {
       TaskSnapshot snapshot = await uploadTask;
       String videoUrl = await snapshot.ref.getDownloadURL();
 
-      // 🌟 2. లొకేషన్ తో సహా డేటాబేస్‌లో సేవ్ చేయడం
       Map<String, dynamic> reelData = {
-        'postId': postId, // రీల్స్ ని కూడా యాప్ అంతా వాడుకోవడానికి
+        'postId': postId,
         'ownerId': uid,
         'username': username,
         'profilePic': profilePic,
-        'postData': [videoUrl], // కన్సిస్టెన్సీ కోసం
+        'postData': [videoUrl],
         'mediaUrl': videoUrl,
         'type': 'video',
-        'description': caption, // టిక్‌టాక్ లాంటి పేజీ కోసం
-        'caption': caption, // హోమ్ ఫీడ్ కోసం
+        'description': caption,
+        'caption': caption,
         'likes': [],
         'savedBy': [],
         'isPublic': isPublic,
@@ -220,13 +209,10 @@ class UploadManager {
         reelData['longitude'] = currentPosition.longitude;
       }
 
-      // రీల్ ని 'reels' కలెక్షన్ లో సేవ్ చేయడం
       await FirebaseFirestore.instance
           .collection('reels')
           .doc(postId)
           .set(reelData);
-
-      // కావాలంటే 'posts' లో కూడా సేవ్ చేయొచ్చు (హోమ్ ఫీడ్ లో కనిపించడానికి)
       await FirebaseFirestore.instance
           .collection('posts')
           .doc(postId)
@@ -235,6 +221,89 @@ class UploadManager {
       debugPrint("Background Reel Error: $e");
     } finally {
       VideoCompress.deleteAllCache();
+      isUploading.value = false;
+    }
+  }
+
+  Future<void> backgroundUploadAutoReel({
+    required List<File> images,
+    required String caption,
+    required bool isLocalAudio,
+    required String? localAudioPath,
+    required String trendingAudioUrl,
+  }) async {
+    isUploading.value = true;
+    uploadProgress.value = 0.0;
+    uploadStatus.value = "Starting Auto-Reel Upload...";
+
+    try {
+      Position? currentPosition = await _getUserLocation();
+      String uid = FirebaseAuth.instance.currentUser!.uid;
+      var userDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+      String username = userDoc.data()?['username'] ?? 'User';
+      String profilePic = userDoc.data()?['profilePic'] ?? '';
+      String postId = const Uuid().v4();
+
+      List<String> imageUrls = [];
+      for (int i = 0; i < images.length; i++) {
+        uploadStatus.value = "Uploading Photo ${i + 1}/${images.length}...";
+        Reference ref = FirebaseStorage.instance
+            .ref()
+            .child('reels')
+            .child(uid)
+            .child('${const Uuid().v4()}.jpg');
+        TaskSnapshot snap = await ref.putFile(images[i]);
+        imageUrls.add(await snap.ref.getDownloadURL());
+        uploadProgress.value = (i + 1) / (images.length + 1);
+      }
+
+      String finalAudioUrl = trendingAudioUrl;
+      if (isLocalAudio && localAudioPath != null) {
+        uploadStatus.value = "Uploading Music... 🎵";
+        Reference audioRef = FirebaseStorage.instance
+            .ref()
+            .child('reels_audio')
+            .child(uid)
+            .child('${const Uuid().v4()}.mp3');
+        TaskSnapshot audioSnap = await audioRef.putFile(File(localAudioPath));
+        finalAudioUrl = await audioSnap.ref.getDownloadURL();
+      }
+
+      uploadProgress.value = 1.0;
+      uploadStatus.value = "Finishing up...";
+
+      Map<String, dynamic> reelData = {
+        'postId': postId,
+        'ownerId': uid,
+        'username': username,
+        'profilePic': profilePic,
+        'postData': imageUrls,
+        'audioUrl': finalAudioUrl,
+        'type': 'auto_reel',
+        'caption': caption,
+        'likes': [],
+        'savedBy': [],
+        'isPublic': true,
+        'timestamp': FieldValue.serverTimestamp(),
+      };
+
+      if (currentPosition != null) {
+        reelData['latitude'] = currentPosition.latitude;
+        reelData['longitude'] = currentPosition.longitude;
+      }
+
+      // 🌟 FIX: ఇక్కడ కేవలం 'reels' లో మాత్రమే సేవ్ చేస్తున్నాం, 'posts' లో కాదు!
+      // 🌟 FIX: ఫీడ్ లో కనిపించడం కోసం posts కలెక్షన్ లో సేవ్ చేస్తున్నాం
+      await FirebaseFirestore.instance
+          .collection('posts')
+          .doc(postId)
+          .set(reelData);
+    } catch (e) {
+      debugPrint("AutoReel Upload Error: $e");
+    } finally {
       isUploading.value = false;
     }
   }
@@ -332,7 +401,6 @@ class _AddPostScreenState extends State<AddPostScreen> {
                         itemCount: following.length,
                         itemBuilder: (context, index) {
                           String friendId = following[index];
-
                           return FutureBuilder<DocumentSnapshot>(
                             future: FirebaseFirestore.instance
                                 .collection('users')
@@ -344,7 +412,6 @@ class _AddPostScreenState extends State<AddPostScreen> {
                               var data =
                                   userSnap.data!.data() as Map<String, dynamic>;
                               String friendName = data['username'] ?? 'User';
-
                               bool isSelected = _taggedUsers.any(
                                 (user) => user['id'] == friendId,
                               );
@@ -398,7 +465,6 @@ class _AddPostScreenState extends State<AddPostScreen> {
     );
   }
 
-  // 🌟 మ్యాజిక్: కెమెరా లేదా గ్యాలరీ ఆప్షన్ అడిగే మెనూ
   void _showPickerOptions({required bool isPost}) {
     showModalBottomSheet(
       context: context,
@@ -425,11 +491,10 @@ class _AddPostScreenState extends State<AddPostScreen> {
               ),
               onTap: () {
                 Navigator.pop(ctx);
-                if (isPost) {
+                if (isPost)
                   _pickSingleImageFromCamera();
-                } else {
+                else
                   _pickVideo(ImageSource.camera);
-                }
               },
             ),
             ListTile(
@@ -437,20 +502,36 @@ class _AddPostScreenState extends State<AddPostScreen> {
               title: const Text("Choose from Gallery"),
               onTap: () {
                 Navigator.pop(ctx);
-                if (isPost) {
+                if (isPost)
                   _pickAndCropImagesFromGallery();
-                } else {
+                else
                   _pickVideo(ImageSource.gallery);
-                }
               },
             ),
+            if (!isPost)
+              ListTile(
+                leading: const Icon(
+                  Icons.auto_awesome,
+                  color: Colors.redAccent,
+                ),
+                title: const Text(
+                  "Create Auto-Sync Reel 🪄",
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const AutoReelScreen()),
+                  );
+                },
+              ),
           ],
         ),
       ),
     );
   }
 
-  // 📸 కెమెరా నుండి సింగిల్ ఫోటో
   Future<void> _pickSingleImageFromCamera() async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(
@@ -474,15 +555,11 @@ class _AddPostScreenState extends State<AddPostScreen> {
           ),
         ],
       );
-      if (croppedFile != null) {
-        setState(() {
-          _selectedImages = [File(croppedFile.path)];
-        });
-      }
+      if (croppedFile != null)
+        setState(() => _selectedImages = [File(croppedFile.path)]);
     }
   }
 
-  // 🖼️ గ్యాలరీ నుండి మల్టిపుల్ ఫోటోలు
   Future<void> _pickAndCropImagesFromGallery() async {
     final picker = ImagePicker();
     final pickedFiles = await picker.pickMultiImage(imageQuality: 100);
@@ -511,7 +588,6 @@ class _AddPostScreenState extends State<AddPostScreen> {
     }
   }
 
-  // 🎥 కెమెరా లేదా గ్యాలరీ నుండి వీడియో
   Future<void> _pickVideo(ImageSource source) async {
     final picker = ImagePicker();
     final pickedFile = await picker.pickVideo(source: source);
@@ -526,15 +602,12 @@ class _AddPostScreenState extends State<AddPostScreen> {
       );
       return;
     }
-
-    // 🌟 Upload start ayyindhani cheppadaniki
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
         content: Text("Upload started in background... 🚀"),
         duration: Duration(seconds: 2),
       ),
     );
-
     UploadManager().backgroundUploadPost(
       _selectedImages,
       _postCaptionController.text.trim(),
@@ -542,7 +615,8 @@ class _AddPostScreenState extends State<AddPostScreen> {
       _taggedUsers.map((e) => e['id']!).toList(),
     );
 
-    Navigator.pop(context); // Screen close chesthunnam
+    // 🌟 FIX: డైరెక్ట్ గా హోమ్ స్క్రీన్ కి
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   void _triggerReelUpload() {
@@ -552,13 +626,21 @@ class _AddPostScreenState extends State<AddPostScreen> {
       ).showSnackBar(const SnackBar(content: Text("Select a video first! 🎬")));
       return;
     }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text("Upload started in background... 🚀"),
+        duration: Duration(seconds: 2),
+      ),
+    );
     UploadManager().backgroundUploadReel(
       _selectedVideo!,
       _reelCaptionController.text.trim(),
       _isReelPublic,
       _taggedUsers.map((e) => e['id']!).toList(),
     );
-    Navigator.pop(context);
+
+    // 🌟 FIX: డైరెక్ట్ గా హోమ్ స్క్రీన్ కి
+    Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
   @override
@@ -601,7 +683,6 @@ class _AddPostScreenState extends State<AddPostScreen> {
       padding: const EdgeInsets.all(20),
       child: Column(
         children: [
-          // 🌟 ఇక్కడ ఆప్షన్స్ మెనూ ఓపెన్ అవుతుంది
           GestureDetector(
             onTap: () => _showPickerOptions(isPost: true),
             child: Container(
@@ -653,7 +734,6 @@ class _AddPostScreenState extends State<AddPostScreen> {
               ),
             ),
           ),
-
           ListTile(
             leading: const Icon(Icons.person_add_alt_1, color: Colors.blue),
             title: Text(
@@ -676,7 +756,6 @@ class _AddPostScreenState extends State<AddPostScreen> {
                 : const Icon(Icons.arrow_forward_ios, size: 14),
             onTap: _selectFriends,
           ),
-
           SwitchListTile(
             title: const Text("Public Post"),
             value: _isPostPublic,
@@ -714,7 +793,6 @@ class _AddPostScreenState extends State<AddPostScreen> {
       padding: const EdgeInsets.all(20),
       child: Column(
         children: [
-          // 🌟 ఇక్కడ ఆప్షన్స్ మెనూ ఓపెన్ అవుతుంది
           GestureDetector(
             onTap: () => _showPickerOptions(isPost: false),
             child: Container(
@@ -763,7 +841,6 @@ class _AddPostScreenState extends State<AddPostScreen> {
               ),
             ),
           ),
-
           ListTile(
             leading: const Icon(Icons.person_add_alt_1, color: Colors.red),
             title: Text(
@@ -786,7 +863,6 @@ class _AddPostScreenState extends State<AddPostScreen> {
                 : const Icon(Icons.arrow_forward_ios, size: 14),
             onTap: _selectFriends,
           ),
-
           SwitchListTile(
             title: const Text("Public Reel"),
             value: _isReelPublic,
