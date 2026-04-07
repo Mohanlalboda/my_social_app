@@ -107,7 +107,6 @@ class _ChatScreenState extends State<ChatScreen> {
         .listen((snap) {
           if (snap.exists && mounted) {
             bool newVanishMode = snap.data()?['isVanishMode'] ?? false;
-            // 🌟 THE FIX: నిజంగా Vanish Mode ఆన్/ఆఫ్ అయితేనే స్క్రీన్ రీలోడ్ చేయాలి (దీనివల్లే బ్లింకింగ్ ఆగిపోతుంది)
             if (_isVanishMode != newVanishMode) {
               setState(() {
                 _isVanishMode = newVanishMode;
@@ -140,13 +139,16 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
+  // 🌟 THE FIX: టైపింగ్ లాజిక్ పక్కాగా సెట్ చేసాం
   void _onTyping(String val) {
     bool hasText = val.trim().isNotEmpty;
 
+    // సెండ్ బటన్ చూపించడానికి/హైడ్ చేయడానికి
     if (_isTypingNotifier.value != hasText) {
       _isTypingNotifier.value = hasText;
     }
 
+    // 1. కీబోర్డ్ మీద టైప్ చేస్తున్నప్పుడు Firebase లో true అని పెడతాం
     if (hasText && !_isCurrentlyTypingInFirebase) {
       _isCurrentlyTypingInFirebase = true;
       FirebaseFirestore.instance.collection('chatRooms').doc(roomId).set({
@@ -154,12 +156,12 @@ class _ChatScreenState extends State<ChatScreen> {
       }, SetOptions(merge: true));
     }
 
+    // పాత టైమర్ క్యాన్సిల్ చేసి మళ్ళీ స్టార్ట్ చేస్తాం
     if (_typingTimer?.isActive ?? false) _typingTimer!.cancel();
 
-    _typingTimer = Timer(const Duration(milliseconds: 1500), () {
-      if (mounted &&
-          _isCurrentlyTypingInFirebase &&
-          _msgController.text.trim().isEmpty) {
+    // 2. యూజర్ టైప్ చేయడం ఆపేసి 2 సెకన్లు అవ్వగానే Firebase లో false అని మారుస్తాం
+    _typingTimer = Timer(const Duration(milliseconds: 2000), () {
+      if (mounted && _isCurrentlyTypingInFirebase) {
         _isCurrentlyTypingInFirebase = false;
         FirebaseFirestore.instance.collection('chatRooms').doc(roomId).set({
           'typing_$currentUid': false,
@@ -226,13 +228,13 @@ class _ChatScreenState extends State<ChatScreen> {
     _msgController.clear();
 
     _isTypingNotifier.value = false;
+
+    // 🌟 మెసేజ్ సెండ్ చేయగానే టైపింగ్ ఆపేయాలి
     _isCurrentlyTypingInFirebase = false;
-
     if (_typingTimer?.isActive ?? false) _typingTimer!.cancel();
+
     var timestamp = FieldValue.serverTimestamp();
-
     WriteBatch batch = FirebaseFirestore.instance.batch();
-
     DocumentReference roomRef = FirebaseFirestore.instance
         .collection('chatRooms')
         .doc(roomId);
@@ -244,7 +246,7 @@ class _ChatScreenState extends State<ChatScreen> {
       'timestamp': timestamp,
       'unread_${widget.receiverId}': FieldValue.increment(1),
       'deletedBy': [],
-      'typing_$currentUid': false,
+      'typing_$currentUid': false, // సెండ్ చేయగానే ఆపేయాలి
     }, SetOptions(merge: true));
 
     batch.set(newMsgRef, {
@@ -261,7 +263,6 @@ class _ChatScreenState extends State<ChatScreen> {
     });
 
     await batch.commit();
-
     _sendPushNotification(_isVanishMode ? "🤫 Sent a secret message" : msg);
   }
 
@@ -694,16 +695,22 @@ class _ChatScreenState extends State<ChatScreen> {
                               >)['typing_${widget.receiverId}'] ??
                           false;
                     }
-                    if (isTyping)
+
+                    // 🌟 THE FIX: అవతలి వాళ్ళు టైప్ చేస్తే, ఆన్లైన్/ఆఫ్లైన్ బదులు typing అని చూపిస్తాం
+                    if (isTyping) {
                       return const Text(
                         "typing...",
                         style: TextStyle(
-                          color: Colors.white70,
+                          color: Colors
+                              .greenAccent, // 🌟 గ్రీన్ కలర్ లో ఇటాలిక్ గా
                           fontSize: 12,
                           fontStyle: FontStyle.italic,
+                          fontWeight: FontWeight.bold,
                         ),
                       );
+                    }
 
+                    // వాళ్ళు టైప్ చేయకపోతే అప్పుడు వాళ్ళ ఆన్‌లైన్ స్టేటస్ చూపిస్తాం
                     return StreamBuilder<DocumentSnapshot>(
                       stream: FirebaseFirestore.instance
                           .collection('users')
@@ -775,7 +782,6 @@ class _ChatScreenState extends State<ChatScreen> {
                   .orderBy('timestamp', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
-                // 🌟 THE FIX 2: డేటా లేనప్పుడే లోడింగ్ చూపించాలి, అప్డేట్ అయిన ప్రతిసారి కాదు
                 if (snapshot.connectionState == ConnectionState.waiting &&
                     !snapshot.hasData)
                   return const Center(child: CircularProgressIndicator());
@@ -1064,7 +1070,8 @@ class _ChatScreenState extends State<ChatScreen> {
                   Expanded(
                     child: TextField(
                       controller: _msgController,
-                      onChanged: _onTyping,
+                      onChanged:
+                          _onTyping, // 🌟 ఇక్కడ టైపింగ్ లాజిక్ ట్రిగ్గర్ అవుతుంది
                       style: TextStyle(
                         color: isDark ? Colors.white : Colors.black,
                       ),
