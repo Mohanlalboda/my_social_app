@@ -1,9 +1,12 @@
 // ignore_for_file: use_build_context_synchronously
 
+import 'dart:io';
 import 'dart:math';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import '../../widgets/safe_elements.dart';
 import 'add_members_screen.dart';
 
@@ -17,28 +20,18 @@ class CommunityInfoScreen extends StatefulWidget {
 
 class _CommunityInfoScreenState extends State<CommunityInfoScreen> {
   final String currentUid = FirebaseAuth.instance.currentUser!.uid;
+  bool _isUploadingPic = false;
 
-  // 🌟 అడ్మిన్ గ్రూప్ పేరు, డిస్క్రిప్షన్ మార్చడానికి
-  void _editGroupInfo(String currentName, String currentDesc) {
+  // 🌟 అడ్మిన్ గ్రూప్ పేరు ఎడిట్ చేయడానికి
+  void _editGroupName(String currentName) {
     TextEditingController nameCtrl = TextEditingController(text: currentName);
-    TextEditingController descCtrl = TextEditingController(text: currentDesc);
-
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text("Edit Group Info"),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameCtrl,
-              decoration: const InputDecoration(labelText: "Group Name"),
-            ),
-            TextField(
-              controller: descCtrl,
-              decoration: const InputDecoration(labelText: "Description"),
-            ),
-          ],
+        title: const Text("Edit Group Name"),
+        content: TextField(
+          controller: nameCtrl,
+          decoration: const InputDecoration(hintText: "Enter new name"),
         ),
         actions: [
           TextButton(
@@ -46,26 +39,87 @@ class _CommunityInfoScreenState extends State<CommunityInfoScreen> {
             child: const Text("Cancel"),
           ),
           ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
             onPressed: () async {
               if (nameCtrl.text.trim().isNotEmpty) {
                 await FirebaseFirestore.instance
                     .collection('communities')
                     .doc(widget.communityId)
-                    .update({
-                      'name': nameCtrl.text.trim(),
-                      'description': descCtrl.text.trim(),
-                    });
+                    .update({'groupName': nameCtrl.text.trim()});
                 if (ctx.mounted) Navigator.pop(ctx);
               }
             },
-            child: const Text("Save"),
+            child: const Text("Save", style: TextStyle(color: Colors.white)),
           ),
         ],
       ),
     );
   }
 
-  // 🌟 అడ్మిన్ వేరే మెంబర్ ని సెలెక్ట్ చేసినప్పుడు వచ్చే ఆప్షన్స్
+  // 🌟 అడ్మిన్ గ్రూప్ డిస్క్రిప్షన్ ఎడిట్ చేయడానికి
+  void _editGroupDesc(String currentDesc) {
+    TextEditingController descCtrl = TextEditingController(text: currentDesc);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Edit Description"),
+        content: TextField(
+          controller: descCtrl,
+          maxLines: 3,
+          decoration: const InputDecoration(hintText: "Enter description"),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.blue),
+            onPressed: () async {
+              await FirebaseFirestore.instance
+                  .collection('communities')
+                  .doc(widget.communityId)
+                  .update({'description': descCtrl.text.trim()});
+              if (ctx.mounted) Navigator.pop(ctx);
+            },
+            child: const Text("Save", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 🌟 అడ్మిన్ గ్రూప్ ఫోటో ఎడిట్ చేయడానికి
+  void _updateGroupPic() async {
+    final picker = ImagePicker();
+    final XFile? image = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 50,
+    );
+    if (image != null) {
+      setState(() => _isUploadingPic = true);
+      try {
+        Reference ref = FirebaseStorage.instance
+            .ref()
+            .child('community_pics')
+            .child(
+              '${widget.communityId}_${DateTime.now().millisecondsSinceEpoch}.jpg',
+            );
+        await ref.putFile(File(image.path));
+        String downloadUrl = await ref.getDownloadURL();
+        await FirebaseFirestore.instance
+            .collection('communities')
+            .doc(widget.communityId)
+            .update({'groupPic': downloadUrl});
+      } catch (e) {
+        debugPrint("Update Pic Error: $e");
+      } finally {
+        if (mounted) setState(() => _isUploadingPic = false);
+      }
+    }
+  }
+
+  // 🌟 అడ్మిన్ వేరే మెంబర్ ని సెలెక్ట్ చేసినప్పుడు
   void _showMemberOptions(String memberId, String memberName) {
     showModalBottomSheet(
       context: context,
@@ -97,12 +151,7 @@ class _CommunityInfoScreenState extends State<CommunityInfoScreen> {
                 await FirebaseFirestore.instance
                     .collection('communities')
                     .doc(widget.communityId)
-                    .update({
-                      'adminId': memberId, // 🌟 అడ్మిన్ పవర్ బదిలీ
-                    });
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Admin rights transferred!")),
-                );
+                    .update({'adminId': memberId});
               },
             ),
             ListTile(
@@ -155,28 +204,55 @@ class _CommunityInfoScreenState extends State<CommunityInfoScreen> {
           }
 
           var data = snapshot.data!.data() as Map<String, dynamic>;
-          String name = data['name'] ?? "Community";
-          String icon = data['groupIcon'] ?? "";
+          String name = data['groupName'] ?? "Community";
+          String icon = data['groupPic'] ?? "";
           String desc = data['description'] ?? "";
           String adminId = data['adminId'] ?? "";
           List members = data['members'] ?? [];
-
           bool isAdmin = currentUid == adminId;
 
           return SingleChildScrollView(
             child: Column(
               children: [
-                // 🌟 గ్రూప్ ఐకాన్ & పేరు
+                // 🌟 గ్రూప్ ఐకాన్ & పేరు సెక్షన్
                 Container(
                   width: double.infinity,
                   color: isDark ? Colors.grey[900] : Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 20),
                   child: Column(
                     children: [
-                      SafeProfilePic(
-                        base64String: icon,
-                        radius: 50,
-                        fallbackText: name.isNotEmpty ? name[0] : 'C',
+                      GestureDetector(
+                        onTap: isAdmin ? _updateGroupPic : null,
+                        child: Stack(
+                          alignment: Alignment.bottomRight,
+                          children: [
+                            _isUploadingPic
+                                ? const CircleAvatar(
+                                    radius: 50,
+                                    child: CircularProgressIndicator(),
+                                  )
+                                : SafeProfilePic(
+                                    base64String: icon,
+                                    radius: 50,
+                                    fallbackText: name.isNotEmpty
+                                        ? name[0]
+                                        : 'C',
+                                  ),
+                            if (isAdmin)
+                              Container(
+                                padding: const EdgeInsets.all(6),
+                                decoration: const BoxDecoration(
+                                  color: Colors.blue,
+                                  shape: BoxShape.circle,
+                                ),
+                                child: const Icon(
+                                  Icons.camera_alt,
+                                  color: Colors.white,
+                                  size: 16,
+                                ),
+                              ),
+                          ],
+                        ),
                       ),
                       const SizedBox(height: 15),
                       Row(
@@ -196,20 +272,36 @@ class _CommunityInfoScreenState extends State<CommunityInfoScreen> {
                                 size: 20,
                                 color: Colors.blue,
                               ),
-                              onPressed: () => _editGroupInfo(name, desc),
+                              onPressed: () => _editGroupName(name),
                             ),
                         ],
                       ),
-                      if (desc.isNotEmpty) ...[
-                        const SizedBox(height: 5),
-                        Text(
-                          desc,
-                          style: const TextStyle(
-                            color: Colors.grey,
-                            fontSize: 14,
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              desc.isNotEmpty
+                                  ? desc
+                                  : (isAdmin ? "Add group description..." : ""),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                color: Colors.grey,
+                                fontSize: 14,
+                              ),
+                            ),
                           ),
-                        ),
-                      ],
+                          if (isAdmin)
+                            IconButton(
+                              icon: const Icon(
+                                Icons.edit,
+                                size: 16,
+                                color: Colors.blue,
+                              ),
+                              onPressed: () => _editGroupDesc(desc),
+                            ),
+                        ],
+                      ),
                       const SizedBox(height: 10),
                       Text(
                         "Group • ${members.length} members",
@@ -220,7 +312,7 @@ class _CommunityInfoScreenState extends State<CommunityInfoScreen> {
                 ),
                 const SizedBox(height: 10),
 
-                // 🌟 మెంబర్స్ లిస్ట్
+                // 🌟 మెంబర్స్ లిస్ట్ & యాడ్ మెంబర్స్ సెక్షన్
                 Container(
                   color: isDark ? Colors.grey[900] : Colors.white,
                   child: Column(
@@ -236,7 +328,6 @@ class _CommunityInfoScreenState extends State<CommunityInfoScreen> {
                           ),
                         ),
                       ),
-
                       if (isAdmin)
                         ListTile(
                           leading: const CircleAvatar(
@@ -257,7 +348,6 @@ class _CommunityInfoScreenState extends State<CommunityInfoScreen> {
                             ),
                           ),
                         ),
-
                       ListView.builder(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
@@ -316,7 +406,6 @@ class _CommunityInfoScreenState extends State<CommunityInfoScreen> {
                                         ),
                                       )
                                     : null,
-                                // 🌟 మ్యాజిక్: అడ్మిన్, వేరే వాళ్ల పేరు మీద నొక్కితే ఆప్షన్స్ వస్తాయి
                                 onTap: (isAdmin && memberId != currentUid)
                                     ? () => _showMemberOptions(memberId, mName)
                                     : null,

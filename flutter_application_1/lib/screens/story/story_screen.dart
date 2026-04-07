@@ -3,8 +3,6 @@
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // 🌟 ఓనర్ ఎవరో తెలుసుకోవడానికి
-import 'package:timeago/timeago.dart' as timeago;
 import 'package:cached_network_image/cached_network_image.dart';
 import '../../widgets/safe_elements.dart';
 
@@ -22,9 +20,7 @@ class _StoryScreenState extends State<StoryScreen>
   late AnimationController _animationController;
   int _currentIndex = 0;
 
-  // 🌟 డాక్యుమెంట్ స్నాప్‌షాట్స్ కాకుండా డైరెక్ట్ మ్యాప్ వాడుతున్నాం, ఎడిట్ చేయడానికి ఈజీగా ఉంటుంది
   List<Map<String, dynamic>> _userStories = [];
-  bool _isLoading = true;
 
   @override
   void initState() {
@@ -35,197 +31,88 @@ class _StoryScreenState extends State<StoryScreen>
         _nextStory();
       }
     });
-    _loadAllStoriesOfUser();
+    _animationController.addListener(() {
+      setState(() {});
+    });
+    _fetchStories();
   }
 
-  void _loadAllStoriesOfUser() async {
-    String ownerId =
-        widget.user['uid']?.toString() ??
-        widget.user['ownerId']?.toString() ??
-        "";
-    DateTime yesterday = DateTime.now().subtract(const Duration(hours: 24));
+  Future<void> _fetchStories() async {
+    try {
+      var snapshot = await FirebaseFirestore.instance
+          .collection('stories')
+          .where('uid', isEqualTo: widget.user['id'] ?? widget.user['uid'])
+          .orderBy('timestamp')
+          .get();
 
-    var snapshot = await FirebaseFirestore.instance
-        .collection('stories')
-        .where('ownerId', isEqualTo: ownerId)
-        .where('timestamp', isGreaterThanOrEqualTo: yesterday)
-        .orderBy('timestamp', descending: false)
-        .get();
-
-    if (snapshot.docs.isNotEmpty) {
-      if (mounted) {
-        setState(() {
-          // 🌟 స్టోరీ ఐడీ (storyId) ని కూడా డేటాలోకి కలుపుతున్నాం
-          _userStories = snapshot.docs.map((doc) {
-            var data = doc.data();
-            data['storyId'] = doc.id;
-            return data;
-          }).toList();
-          _isLoading = false;
-        });
-
-        _preloadImages();
-        _showStory();
+      if (snapshot.docs.isNotEmpty) {
+        _userStories = snapshot.docs.map((doc) {
+          var data = doc.data();
+          data['storyId'] = doc.id;
+          return data;
+        }).toList();
+        _loadStory();
+      } else {
+        Navigator.pop(context);
       }
-    } else {
-      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      Navigator.pop(context);
     }
   }
 
-  void _preloadImages() {
-    for (var data in _userStories) {
-      if (data['type'] != 'video') {
-        String url = data['storyUrl']?.toString() ?? "";
-        if (url.isNotEmpty && url.startsWith('http')) {
-          precacheImage(CachedNetworkImageProvider(url), context);
-        }
-      }
+  void _loadStory() {
+    if (_videoController != null) {
+      _videoController!.pause();
+      _videoController!.dispose();
+      _videoController = null;
     }
-  }
 
-  void _showStory() {
     _animationController.stop();
     _animationController.reset();
-    _videoController?.dispose();
-    _videoController = null;
 
-    if (_userStories.isEmpty) return;
-    var currentStory = _userStories[_currentIndex];
-    String storyUrl = currentStory['storyUrl']?.toString() ?? "";
+    var story = _userStories[_currentIndex];
+    bool isVideo = story['type'] == 'video';
 
-    if (currentStory['type'] == 'video' && storyUrl.isNotEmpty) {
-      _videoController = VideoPlayerController.networkUrl(Uri.parse(storyUrl))
-        ..initialize()
-            .then((_) {
+    if (isVideo) {
+      _videoController =
+          VideoPlayerController.networkUrl(Uri.parse(story['storyUrl']))
+            ..initialize().then((_) {
               if (mounted) {
                 setState(() {});
-                _videoController!.play();
-                _animationController.duration =
-                    _videoController!.value.duration;
-                _animationController.forward();
+                if (_videoController!.value.isInitialized) {
+                  _animationController.duration =
+                      _videoController!.value.duration;
+                  _videoController!.play();
+                  _animationController.forward();
+                }
               }
-            })
-            .catchError((e) {
-              _nextStory();
-              return null;
             });
     } else {
-      _animationController.duration = const Duration(seconds: 30);
+      _animationController.duration = const Duration(seconds: 5);
       _animationController.forward();
     }
-    if (mounted) setState(() {});
   }
 
   void _nextStory() {
-    _animationController.stop();
-    _animationController.reset();
     if (_currentIndex < _userStories.length - 1) {
-      setState(() => _currentIndex++);
-      _showStory();
+      setState(() {
+        _currentIndex++;
+      });
+      _loadStory();
     } else {
-      if (mounted) Navigator.pop(context);
+      Navigator.pop(context);
     }
   }
 
-  // 🌟 ఎడిట్ ఫంక్షన్
-  void _editStory(String storyId, String currentCaption) {
-    // డైలాగ్ వచ్చినప్పుడు స్టోరీ ఆగిపోవాలి
-    _animationController.stop();
-    _videoController?.pause();
-
-    TextEditingController captionCtrl = TextEditingController(
-      text: currentCaption,
-    );
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Edit Caption"),
-        content: TextField(
-          controller: captionCtrl,
-          decoration: const InputDecoration(hintText: "Enter new caption"),
-          maxLines: 2,
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _animationController.forward(); // మళ్ళీ ప్లే
-              _videoController?.play();
-            },
-            child: const Text("Cancel"),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              await FirebaseFirestore.instance
-                  .collection('stories')
-                  .doc(storyId)
-                  .update({'caption': captionCtrl.text.trim()});
-              if (mounted) {
-                setState(() {
-                  _userStories[_currentIndex]['caption'] = captionCtrl.text
-                      .trim();
-                });
-                Navigator.pop(ctx);
-                _animationController.forward(); // మళ్ళీ ప్లే
-                _videoController?.play();
-              }
-            },
-            child: const Text("Save"),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // 🌟 డిలీట్ ఫంక్షన్
-  void _deleteStory(String storyId) {
-    _animationController.stop();
-    _videoController?.pause();
-
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text("Delete Story?"),
-        content: const Text("Are you sure you want to delete this story?"),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              _animationController.forward();
-              _videoController?.play();
-            },
-            child: const Text("Cancel"),
-          ),
-          TextButton(
-            onPressed: () async {
-              await FirebaseFirestore.instance
-                  .collection('stories')
-                  .doc(storyId)
-                  .delete();
-              if (mounted) {
-                Navigator.pop(ctx);
-                setState(() {
-                  _userStories.removeAt(
-                    _currentIndex,
-                  ); // లిస్ట్ లోంచి తీసేస్తున్నాం
-                  if (_userStories.isEmpty) {
-                    Navigator.pop(context); // అన్నీ అయిపోతే స్క్రీన్ క్లోజ్
-                  } else {
-                    if (_currentIndex >= _userStories.length) {
-                      _currentIndex = _userStories.length - 1;
-                    }
-                    _showStory(); // నెక్స్ట్ దానికి వెళ్తుంది
-                  }
-                });
-              }
-            },
-            child: const Text("Delete", style: TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
+  void _previousStory() {
+    if (_currentIndex > 0) {
+      setState(() {
+        _currentIndex--;
+      });
+      _loadStory();
+    } else {
+      _loadStory();
+    }
   }
 
   @override
@@ -237,217 +124,124 @@ class _StoryScreenState extends State<StoryScreen>
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) {
+    if (_userStories.isEmpty) {
       return const Scaffold(
         backgroundColor: Colors.black,
         body: Center(child: CircularProgressIndicator(color: Colors.white)),
       );
     }
 
-    var currentStory = _userStories[_currentIndex];
-    String storyId = currentStory['storyId']?.toString() ?? "";
-    String storyUrl = currentStory['storyUrl']?.toString() ?? "";
-    String caption = currentStory['caption']?.toString() ?? "";
-
-    String profilePic = widget.user['profilePic']?.toString() ?? "";
-    String username = widget.user['username']?.toString() ?? "User";
-    String ownerId = currentStory['ownerId']?.toString() ?? "";
-
-    // 🌟 మీ సొంత స్టోరీనా కాదా అని చెక్ చేయడం
-    String currentUid = FirebaseAuth.instance.currentUser?.uid ?? "";
-    bool isOwner = ownerId == currentUid;
-
-    String postedTime = "Just now";
-    if (currentStory['timestamp'] != null &&
-        currentStory['timestamp'] is Timestamp) {
-      postedTime = timeago.format(
-        (currentStory['timestamp'] as Timestamp).toDate(),
-        locale: 'en_short',
-      );
-    }
+    var story = _userStories[_currentIndex];
+    bool isVideo = story['type'] == 'video';
 
     return Scaffold(
       backgroundColor: Colors.black,
       body: GestureDetector(
         onTapDown: (details) {
-          if (details.globalPosition.dx <
-              MediaQuery.of(context).size.width / 3) {
-            if (_currentIndex > 0) {
-              _animationController.stop();
-              _animationController.reset();
-              setState(() => _currentIndex--);
-              _showStory();
-            }
+          final double screenWidth = MediaQuery.of(context).size.width;
+          final double dx = details.globalPosition.dx;
+          if (dx < screenWidth / 3) {
+            _previousStory();
           } else {
             _nextStory();
           }
         },
         onLongPress: () {
           _animationController.stop();
-          _videoController?.pause();
+          if (isVideo) _videoController?.pause();
         },
         onLongPressUp: () {
           _animationController.forward();
-          _videoController?.play();
+          if (isVideo) _videoController?.play();
         },
         child: Stack(
+          fit: StackFit.expand,
           children: [
-            Center(
-              child: currentStory['type'] == 'video'
-                  ? (_videoController != null &&
-                            _videoController!.value.isInitialized
-                        ? AspectRatio(
-                            aspectRatio: _videoController!.value.aspectRatio,
-                            child: VideoPlayer(_videoController!),
-                          )
-                        : const CircularProgressIndicator(color: Colors.white))
-                  : CachedNetworkImage(
-                      imageUrl: storyUrl,
-                      fit: BoxFit.contain,
-                      placeholder: (context, url) => const Center(
-                        child: CircularProgressIndicator(
-                          color: Colors.white,
-                          strokeWidth: 3,
-                        ),
+            if (isVideo)
+              _videoController != null && _videoController!.value.isInitialized
+                  ? FittedBox(
+                      fit: BoxFit.cover,
+                      child: SizedBox(
+                        width: _videoController!.value.size.width,
+                        height: _videoController!.value.size.height,
+                        child: VideoPlayer(_videoController!),
                       ),
-                      errorWidget: (context, url, error) => const Center(
-                        child: Icon(
-                          Icons.broken_image,
-                          color: Colors.grey,
-                          size: 50,
-                        ),
-                      ),
-                    ),
-            ),
+                    )
+                  : const Center(
+                      child: CircularProgressIndicator(color: Colors.white),
+                    )
+            else
+              CachedNetworkImage(
+                imageUrl: story['storyUrl'],
+                fit: BoxFit.cover,
+                placeholder: (context, url) => const Center(
+                  child: CircularProgressIndicator(color: Colors.white),
+                ),
+                errorWidget: (context, url, error) => const Center(
+                  child: Icon(Icons.broken_image, color: Colors.white),
+                ),
+              ),
 
-            // 🌟 టైమ్ బార్
             Positioned(
-              top: 50,
+              top: MediaQuery.of(context).padding.top + 10,
               left: 10,
               right: 10,
               child: Row(
-                children: List.generate(_userStories.length, (index) {
+                children: _userStories.asMap().entries.map((entry) {
                   return Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 2),
-                      child: AnimatedBuilder(
-                        animation: _animationController,
-                        builder: (context, child) {
-                          double progress = 0.0;
-                          if (index < _currentIndex) {
-                            progress = 1.0;
-                          } else if (index == _currentIndex) {
-                            progress = _animationController.value;
-                          }
-                          return LinearProgressIndicator(
-                            value: progress,
-                            backgroundColor: Colors.white24,
-                            valueColor: const AlwaysStoppedAnimation<Color>(
-                              Colors.white,
-                            ),
-                          );
-                        },
+                      padding: const EdgeInsets.symmetric(horizontal: 2.0),
+                      child: LinearProgressIndicator(
+                        value: entry.key < _currentIndex
+                            ? 1.0
+                            : (entry.key == _currentIndex
+                                  ? _animationController.value
+                                  : 0.0),
+                        backgroundColor: Colors.grey.withValues(alpha: 0.5),
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          Colors.white,
+                        ),
+                        minHeight: 2,
                       ),
                     ),
                   );
-                }),
+                }).toList(),
               ),
             ),
 
-            // 🌟 టాప్ బార్: ప్రొఫైల్ + ఆప్షన్స్
             Positioned(
-              top: 70,
-              left: 15,
+              top: MediaQuery.of(context).padding.top + 25,
+              left: 10,
               right: 10,
               child: Row(
                 children: [
                   SafeProfilePic(
-                    base64String: profilePic,
+                    base64String: story['profilePic'],
                     radius: 18,
-                    fallbackText: username.isNotEmpty ? username[0] : "U",
+                    fallbackText: (story['username'] ?? "U")[0],
                   ),
                   const SizedBox(width: 10),
                   Text(
-                    username,
+                    story['username'] ?? "User",
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      shadows: [Shadow(color: Colors.black54, blurRadius: 3)],
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    postedTime,
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 12,
-                      shadows: [Shadow(color: Colors.black54, blurRadius: 3)],
+                      shadows: [Shadow(color: Colors.black, blurRadius: 2)],
                     ),
                   ),
                   const Spacer(),
-
-                  // 🌟 మీ సొంత స్టోరీ అయితే ఇక్కడ ఎడిట్/డిలీట్ 3-Dots వస్తాయి
-                  if (isOwner)
-                    PopupMenuButton<String>(
-                      icon: const Icon(Icons.more_vert, color: Colors.white),
-                      color: Colors.grey[900],
-                      onSelected: (value) {
-                        if (value == 'edit') _editStory(storyId, caption);
-                        if (value == 'delete') _deleteStory(storyId);
-                      },
-                      itemBuilder: (context) => [
-                        const PopupMenuItem(
-                          value: 'edit',
-                          child: Text(
-                            "Edit Caption",
-                            style: TextStyle(color: Colors.white),
-                          ),
-                        ),
-                        const PopupMenuItem(
-                          value: 'delete',
-                          child: Text(
-                            "Delete Story",
-                            style: TextStyle(color: Colors.redAccent),
-                          ),
-                        ),
-                      ],
-                    ),
-
                   IconButton(
                     icon: const Icon(
                       Icons.close,
                       color: Colors.white,
                       size: 28,
+                      shadows: [Shadow(color: Colors.black, blurRadius: 2)],
                     ),
                     onPressed: () => Navigator.pop(context),
                   ),
                 ],
               ),
             ),
-
-            // 🌟 కింద క్యాప్షన్ చూపిస్తున్నాం
-            if (caption.isNotEmpty)
-              Positioned(
-                bottom: 40,
-                left: 20,
-                right: 20,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 15,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.black54, // టెక్స్ట్ క్లియర్ గా కనబడటానికి
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Text(
-                    caption,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white, fontSize: 16),
-                  ),
-                ),
-              ),
           ],
         ),
       ),

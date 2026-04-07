@@ -1,11 +1,9 @@
-// ignore_for_file: use_build_context_synchronously
+// ignore_for_file: curly_braces_in_flow_control_structures
 
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-
-import '../../widgets/reel_item.dart'; // పాత వీడియోల కోసం మీ ఒరిజినల్ ఐటెమ్
+import '../../widgets/reel_item.dart';
 
 class ScrollingReelsScreen extends StatefulWidget {
   final List<String>? reelIds;
@@ -18,9 +16,7 @@ class ScrollingReelsScreen extends StatefulWidget {
 }
 
 class _ScrollingReelsScreenState extends State<ScrollingReelsScreen> {
-  final PageController _pageController = PageController();
-  final String currentUid = FirebaseAuth.instance.currentUser!.uid;
-
+  late PageController _pageController;
   final List<DocumentSnapshot> _reels = [];
   bool _isLoading = false;
   bool _hasMore = true;
@@ -29,13 +25,9 @@ class _ScrollingReelsScreenState extends State<ScrollingReelsScreen> {
   @override
   void initState() {
     super.initState();
+    // 🌟 THE FIX: యూజర్ క్లిక్ చేసిన రీల్ దగ్గరే ఓపెన్ అవ్వడానికి
+    _pageController = PageController(initialPage: widget.initialIndex);
     _fetchReels();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (widget.initialIndex > 0 && _reels.isNotEmpty) {
-        _pageController.jumpToPage(widget.initialIndex);
-      }
-    });
   }
 
   @override
@@ -52,7 +44,6 @@ class _ScrollingReelsScreenState extends State<ScrollingReelsScreen> {
       _hasMore = true;
     });
     await _fetchReels();
-    if (_pageController.hasClients) _pageController.jumpToPage(0);
   }
 
   Future<void> _fetchReels() async {
@@ -60,32 +51,67 @@ class _ScrollingReelsScreenState extends State<ScrollingReelsScreen> {
     if (mounted) setState(() => _isLoading = true);
 
     try {
-      Query query = FirebaseFirestore.instance
-          .collection('reels')
-          .orderBy('timestamp', descending: true);
-
       if (widget.reelIds != null && widget.reelIds!.isNotEmpty) {
-        query = query.where(FieldPath.documentId, whereIn: widget.reelIds);
+        // 🌟 1. Specific Reels (ప్రొఫైల్/సెర్చ్ గ్రిడ్ నుండి వచ్చినప్పుడు)
+        // Firestore whereIn కేవలం 10 ఐటమ్స్ కే పనిచేస్తుంది, కాబట్టి వాటిని ముక్కలు చేసి లాగుతున్నాం
+        List<DocumentSnapshot> fetchedDocs = [];
+
+        for (var i = 0; i < widget.reelIds!.length; i += 10) {
+          var chunk = widget.reelIds!.sublist(
+            i,
+            (i + 10 > widget.reelIds!.length) ? widget.reelIds!.length : i + 10,
+          );
+
+          var snap = await FirebaseFirestore.instance
+              .collection('posts')
+              .where(FieldPath.documentId, whereIn: chunk)
+              .get();
+
+          fetchedDocs.addAll(snap.docs);
+        }
+
+        // పంపిన లిస్ట్ ఆర్డర్ లోనే రీల్స్ ఉండేలా సార్ట్ చేస్తున్నాం
+        fetchedDocs.sort(
+          (a, b) => widget.reelIds!
+              .indexOf(a.id)
+              .compareTo(widget.reelIds!.indexOf(b.id)),
+        );
+
+        if (mounted) {
+          setState(() {
+            _reels.addAll(fetchedDocs);
+            _hasMore = false; // గ్రిడ్ నుండి వస్తే ఇంకా లాగాల్సిన పని లేదు
+          });
+        }
       } else {
-        query = query.limit(10);
-        if (_lastDoc != null) query = query.startAfterDocument(_lastDoc!);
+        // 🌟 2. Global Reels Screen (యాప్ ఓపెన్ చేసినప్పుడు వచ్చే ప్యాజినేషన్)
+        Query query = FirebaseFirestore.instance
+            .collection('posts')
+            .where('isReel', isEqualTo: true)
+            .orderBy('timestamp', descending: true)
+            .limit(10); // 🌟 10 మాత్రమే లాగుతాం
+
+        if (_lastDoc != null) {
+          query = query.startAfterDocument(_lastDoc!);
+        }
+
+        var snapshot = await query.get();
+
+        if (snapshot.docs.length < 10) {
+          _hasMore = false; // ఇంక లాగడానికి ఏమీ లేవని ఫిక్స్
+        }
+
+        if (snapshot.docs.isNotEmpty) {
+          _lastDoc = snapshot.docs.last;
+          if (mounted) {
+            setState(() {
+              _reels.addAll(snapshot.docs);
+            });
+          }
+        }
       }
-
-      var snapshot = await query.get();
-      if (snapshot.docs.isNotEmpty) {
-        _lastDoc = snapshot.docs.last;
-
-        // 🌟 ఇక్కడ కేవలం 'video' టైప్ ఉన్నవాటినే చూపిస్తున్నాం. ఆటో-రీల్స్ రావు!
-        var videoReels = snapshot.docs.where((doc) {
-          var data = doc.data() as Map<String, dynamic>;
-          return data['type'] != 'auto_reel';
-        }).toList();
-
-        if (mounted) setState(() => _reels.addAll(videoReels));
-      }
-      if (snapshot.docs.length < 10) _hasMore = false;
     } catch (e) {
-      debugPrint("Fetch Error: $e");
+      debugPrint("Reel Fetch Error: $e");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -100,21 +126,18 @@ class _ScrollingReelsScreenState extends State<ScrollingReelsScreen> {
       );
     }
 
-    if (_reels.isEmpty && !_isLoading) {
+    if (_reels.isEmpty) {
       return Scaffold(
         backgroundColor: Colors.black,
         body: RefreshIndicator(
           onRefresh: _refreshReels,
-          color: Colors.red,
           child: ListView(
-            physics: const AlwaysScrollableScrollPhysics(),
             children: const [
               SizedBox(height: 300),
               Center(
                 child: Text(
-                  "No Reels Found. 🎬\nPull down to refresh.",
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.white70, fontSize: 16),
+                  "No Reels Found 🎬",
+                  style: TextStyle(color: Colors.white70),
                 ),
               ),
             ],
@@ -127,16 +150,16 @@ class _ScrollingReelsScreenState extends State<ScrollingReelsScreen> {
       backgroundColor: Colors.black,
       body: RefreshIndicator(
         onRefresh: _refreshReels,
-        color: Colors.red,
         child: PageView.builder(
           controller: _pageController,
           scrollDirection: Axis.vertical,
-          physics: const BouncingScrollPhysics(
-            parent: AlwaysScrollableScrollPhysics(),
-          ),
-          itemCount: _reels.length + (_hasMore ? 1 : 0),
+          itemCount:
+              _reels.length + (_hasMore ? 1 : 0), // లోడింగ్ కోసం ఎక్స్‌ట్రా 1
           onPageChanged: (i) {
-            if (i == _reels.length) _fetchReels();
+            // చివరికి రాగానే ఆటోమేటిక్ గా నెక్స్ట్ 10 రీల్స్ లాగుతుంది
+            if (i >= _reels.length - 2 && _hasMore) {
+              _fetchReels();
+            }
           },
           itemBuilder: (context, index) {
             if (index == _reels.length) {
@@ -147,14 +170,8 @@ class _ScrollingReelsScreenState extends State<ScrollingReelsScreen> {
 
             var data = _reels[index].data() as Map<String, dynamic>;
             String reelId = _reels[index].id;
-            data['postId'] = reelId;
 
-            // 🌟 కేవలం వీడియో రీల్స్ మాత్రమే వస్తాయి. (పాత ReelItem వాడుతున్నాం)
-            return ReelItem(
-              key: ValueKey("video_$reelId"),
-              reel: data,
-              reelId: reelId,
-            );
+            return ReelItem(key: ValueKey(reelId), reel: data, reelId: reelId);
           },
         ),
       ),

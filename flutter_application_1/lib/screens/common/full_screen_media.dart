@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:cached_video_player_plus/cached_video_player_plus.dart';
-import 'package:video_player/video_player.dart';
+import 'package:video_player/video_player.dart'; // 🌟 అఫీషియల్ ప్యాకేజీ వాడుతున్నాం
 
 // --- IMAGE VIEWER ---
 class FullScreenImageViewer extends StatelessWidget {
@@ -38,25 +37,25 @@ class FullScreenVideoViewer extends StatefulWidget {
 }
 
 class _FullScreenVideoViewerState extends State<FullScreenVideoViewer> {
-  late CachedVideoPlayerPlus _player;
+  late VideoPlayerController _controller; // 🌟 స్టాండర్డ్ కంట్రోలర్
   bool _isInitialized = false;
 
   @override
   void initState() {
     super.initState();
-    _player = CachedVideoPlayerPlus.networkUrl(Uri.parse(widget.videoUrl))
+    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.videoUrl))
       ..initialize().then((_) {
         if (mounted) {
           setState(() => _isInitialized = true);
-          _player.controller.play();
-          _player.controller.setLooping(true);
+          _controller.play();
+          _controller.setLooping(true);
         }
       });
   }
 
   @override
   void dispose() {
-    _player.dispose();
+    _controller.dispose();
     super.dispose();
   }
 
@@ -71,23 +70,21 @@ class _FullScreenVideoViewerState extends State<FullScreenVideoViewer> {
     body: Center(
       child: _isInitialized
           ? AspectRatio(
-              aspectRatio: _player.controller.value.aspectRatio,
-              child: VideoPlayer(_player.controller),
+              aspectRatio: _controller.value.aspectRatio,
+              child: VideoPlayer(_controller), // 🌟 స్టాండర్డ్ వీడియో ప్లేయర్
             )
           : const CircularProgressIndicator(color: Colors.white),
     ),
     floatingActionButton: _isInitialized
         ? FloatingActionButton(
-            backgroundColor: Colors.white.withValues(alpha: 0.5),
+            backgroundColor: Colors.white54,
             onPressed: () => setState(
-              () => _player.controller.value.isPlaying
-                  ? _player.controller.pause()
-                  : _player.controller.play(),
+              () => _controller.value.isPlaying
+                  ? _controller.pause()
+                  : _controller.play(),
             ),
             child: Icon(
-              _player.controller.value.isPlaying
-                  ? Icons.pause
-                  : Icons.play_arrow,
+              _controller.value.isPlaying ? Icons.pause : Icons.play_arrow,
               color: Colors.black,
             ),
           )

@@ -10,6 +10,7 @@ class ReelsScreen extends StatefulWidget {
 class _ReelsScreenState extends State<ReelsScreen> {
   @override
   Widget build(BuildContext context) {
+    // 🌟 ప్యాజినేషన్, రీల్స్ లాగడం అన్నీ ఈ ScrollingReelsScreen చూసుకుంటుంది!
     return const ScrollingReelsScreen();
   }
 }

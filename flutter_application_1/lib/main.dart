@@ -5,31 +5,20 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:firebase_app_check/firebase_app_check.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 
+import 'screens/create/add_post_screen.dart';
 import 'services/notification_service.dart';
 import 'firebase_options.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/home/home_screen.dart';
-import 'screens/home/near_me_screen.dart'; // 🌟 NEW: రాడార్ స్క్రీన్ ఇంపోర్ట్
+import 'screens/home/near_me_screen.dart';
 import 'screens/search/search_screen.dart';
 import 'screens/profile/profile_screen.dart';
 import 'screens/activity/activity_screen.dart';
 import 'screens/chat/inbox_screen.dart';
 import 'screens/reels/reels_screen.dart';
-
-// 🌟 మన బ్రాండ్ గ్రేడియంట్ కలర్స్
-final brandGradient = const LinearGradient(
-  colors: [
-    Color(0xFF833AB4), // Purple
-    Color(0xFFFD1D1D), // Pink
-    Color(0xFFF56040), // Orange
-    Color(0xFFFFDC80), // Yellow
-  ],
-  begin: Alignment.topLeft,
-  end: Alignment.bottomRight,
-);
+import 'utils/constants.dart';
 
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.system);
 
@@ -42,9 +31,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  await FirebaseAppCheck.instance.activate(
-    androidProvider: AndroidProvider.playIntegrity,
-  );
+
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
   await PushNotificationService.initialize();
   runApp(const MySocialApp());
@@ -65,10 +52,10 @@ class MySocialApp extends StatelessWidget {
           theme: ThemeData(
             useMaterial3: true,
             brightness: Brightness.light,
-            primaryColor: const Color(0xFFFD1D1D),
+            primaryColor: const Color(0xFF00E5FF),
             colorScheme: ColorScheme.fromSeed(
-              seedColor: const Color(0xFF833AB4),
-              primary: const Color(0xFFFD1D1D),
+              seedColor: const Color(0xFF7A00FF),
+              primary: const Color(0xFF00E5FF),
             ),
             scaffoldBackgroundColor: Colors.white,
             appBarTheme: const AppBarTheme(
@@ -77,11 +64,11 @@ class MySocialApp extends StatelessWidget {
               elevation: 0,
             ),
             progressIndicatorTheme: const ProgressIndicatorThemeData(
-              color: Color(0xFFFD1D1D),
+              color: Color(0xFF00E5FF),
             ),
             bottomNavigationBarTheme: const BottomNavigationBarThemeData(
               backgroundColor: Colors.white,
-              selectedItemColor: Color(0xFFFD1D1D),
+              selectedItemColor: Color(0xFF7A00FF),
               unselectedItemColor: Colors.grey,
             ),
             textTheme: GoogleFonts.outfitTextTheme(ThemeData.light().textTheme),
@@ -90,24 +77,24 @@ class MySocialApp extends StatelessWidget {
           darkTheme: ThemeData(
             useMaterial3: true,
             brightness: Brightness.dark,
-            primaryColor: const Color(0xFFFD1D1D),
+            primaryColor: const Color(0xFF00E5FF),
             colorScheme: ColorScheme.fromSeed(
               brightness: Brightness.dark,
-              seedColor: const Color(0xFF833AB4),
-              primary: const Color(0xFFFD1D1D),
+              seedColor: const Color(0xFF7A00FF),
+              primary: const Color(0xFF00E5FF),
             ),
-            scaffoldBackgroundColor: Colors.black,
+            scaffoldBackgroundColor: brandDarkBackground,
             appBarTheme: const AppBarTheme(
-              backgroundColor: Colors.black,
+              backgroundColor: brandDarkBackground,
               foregroundColor: Colors.white,
               elevation: 0,
             ),
             progressIndicatorTheme: const ProgressIndicatorThemeData(
-              color: Color(0xFFFD1D1D),
+              color: Color(0xFF00E5FF),
             ),
             bottomNavigationBarTheme: const BottomNavigationBarThemeData(
-              backgroundColor: Colors.black,
-              selectedItemColor: Color(0xFFFD1D1D),
+              backgroundColor: brandDarkBackground,
+              selectedItemColor: Color(0xFF00E5FF),
               unselectedItemColor: Colors.white54,
             ),
             textTheme: GoogleFonts.outfitTextTheme(ThemeData.dark().textTheme),
@@ -135,21 +122,74 @@ class MySocialApp extends StatelessWidget {
   }
 }
 
+// 🌟 THE FIX: WidgetsBindingObserver ని ఇక్కడ యాడ్ చేశాం
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
   @override
   State<MainNavigation> createState() => _MainNavigationState();
 }
 
-class _MainNavigationState extends State<MainNavigation> {
+class _MainNavigationState extends State<MainNavigation>
+    with WidgetsBindingObserver {
   int _selectedIndex = 0;
 
   final List<Widget> _screens = [
     const HomeScreen(),
     const SearchScreen(),
+    const SizedBox(), // + బటన్ కోసం ప్లేస్‌హోల్డర్
     const ReelsScreen(),
     const ProfileScreen(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    // 🌟 యాప్ ఓపెన్ చేయగానే ఆన్‌లైన్ లో ఉన్నట్టు ఫైర్‌బేస్ కి చెప్తాం
+    _updateOnlineStatus(true);
+
+    // 🌟 యాప్ ని మినిమైజ్ చేసినా, మళ్ళీ ఓపెన్ చేసినా పసిగట్టడానికి ఇది పెడతాం
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    // 🌟 యాప్ పూర్తిగా క్లోజ్ చేసినప్పుడు అబ్జర్వర్ ని తీసేసి, ఆఫ్‌లైన్ అని చెప్తాం
+    _updateOnlineStatus(false);
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  // 🌟 యాప్ బ్యాక్‌గ్రౌండ్ కి వెళ్తే కనుక్కునే మ్యాజిక్ ఇక్కడే జరుగుతుంది
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      // యూజర్ మళ్ళీ యాప్ లోకి వచ్చాడు (Online)
+      _updateOnlineStatus(true);
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.detached ||
+        state == AppLifecycleState.inactive) {
+      // యూజర్ వేరే యాప్ కి వెళ్ళాడు లేదా క్లోజ్ చేసాడు (Offline)
+      _updateOnlineStatus(false);
+    }
+  }
+
+  // 🌟 ఫైర్‌బేస్ లో స్టేటస్ అప్‌డేట్ చేసే ఫంక్షన్
+  void _updateOnlineStatus(bool isOnline) async {
+    User? currentUser = FirebaseAuth.instance.currentUser;
+    if (currentUser != null) {
+      try {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUser.uid)
+            .update({
+              'isOnline': isOnline,
+              'lastSeen': FieldValue.serverTimestamp(),
+            });
+      } catch (e) {
+        debugPrint("Error updating online status: $e");
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -157,7 +197,7 @@ class _MainNavigationState extends State<MainNavigation> {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
-      appBar: _selectedIndex == 2 || _selectedIndex == 3
+      appBar: _selectedIndex == 3 || _selectedIndex == 4
           ? null
           : AppBar(
               title: ShaderMask(
@@ -166,25 +206,21 @@ class _MainNavigationState extends State<MainNavigation> {
                 ),
                 child: Text(
                   "MyBanjara",
-                  style: GoogleFonts.righteous(
-                    fontSize: 32,
+                  style: GoogleFonts.pacifico(
+                    fontSize: 28,
                     color: Colors.white,
-                    letterSpacing: 1.0,
+                    fontWeight: FontWeight.normal,
                   ),
                 ),
               ),
               actions: [
-                // 🌟 అప్‌డేటెడ్ క్వెరీ: ఇక్కడ మన కొత్త నోటిఫికేషన్స్ పాత్ ఇచ్చాం
                 if (currentUser != null)
                   StreamBuilder<QuerySnapshot>(
                     stream: FirebaseFirestore.instance
                         .collection('users')
                         .doc(currentUser.uid)
                         .collection('notifications')
-                        .where(
-                          'isRead',
-                          isEqualTo: false,
-                        ) // అన్-రీడ్ మాత్రమే లెక్కపెట్టాలి
+                        .where('isRead', isEqualTo: false)
                         .snapshots(),
                     builder: (context, snapshot) {
                       int unreadCount = snapshot.hasData
@@ -195,7 +231,7 @@ class _MainNavigationState extends State<MainNavigation> {
                         isLabelVisible: unreadCount > 0,
                         label: Text(
                           unreadCount > 9 ? '9+' : unreadCount.toString(),
-                        ), // 🌟 9 కన్నా ఎక్కువైతే 9+
+                        ),
                         child: IconButton(
                           icon: Icon(
                             Icons.favorite_border,
@@ -211,12 +247,13 @@ class _MainNavigationState extends State<MainNavigation> {
                       );
                     },
                   ),
-
                 const SizedBox(width: 5),
-
-                // 📡 రాడార్ (Near Me) బటన్
                 IconButton(
-                  icon: const Icon(Icons.radar, color: Colors.blue, size: 28),
+                  icon: Icon(
+                    Icons.radar,
+                    color: isDarkMode ? Colors.white : Colors.black,
+                    size: 28,
+                  ),
                   onPressed: () {
                     Navigator.push(
                       context,
@@ -224,7 +261,6 @@ class _MainNavigationState extends State<MainNavigation> {
                     );
                   },
                 ),
-
                 const SizedBox(width: 5),
                 Padding(
                   padding: const EdgeInsets.only(right: 15),
@@ -249,13 +285,26 @@ class _MainNavigationState extends State<MainNavigation> {
       body: _screens[_selectedIndex],
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
-        onTap: (i) => setState(() => _selectedIndex = i),
+        onTap: (i) {
+          if (i == 2) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AddPostScreen()),
+            );
+          } else {
+            setState(() => _selectedIndex = i);
+          }
+        },
         type: BottomNavigationBarType.fixed,
         showSelectedLabels: false,
         showUnselectedLabels: false,
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: "Home"),
           BottomNavigationBarItem(icon: Icon(Icons.search), label: "Search"),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.add_box_outlined, size: 30),
+            label: "Add",
+          ),
           BottomNavigationBarItem(
             icon: Icon(Icons.video_library_outlined),
             label: "Reels",
@@ -305,7 +354,7 @@ class UnreadChatBadge extends StatelessWidget {
                 child: Container(
                   padding: const EdgeInsets.all(4),
                   decoration: const BoxDecoration(
-                    color: Color(0xFFFD1D1D),
+                    color: Color(0xFFFF007F),
                     shape: BoxShape.circle,
                   ),
                   child: Text(

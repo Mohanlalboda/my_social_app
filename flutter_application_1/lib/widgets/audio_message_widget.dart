@@ -22,6 +22,11 @@ class _AudioMessageWidgetState extends State<AudioMessageWidget> {
   @override
   void initState() {
     super.initState();
+    _initPlayer();
+  }
+
+  // 🌟 ప్లేయర్ సెట్టింగ్స్ ని ఒకే దగ్గర మేనేజ్ చేయడం
+  void _initPlayer() {
     _audioPlayer.onPlayerStateChanged.listen((state) {
       if (mounted) setState(() => _isPlaying = state == PlayerState.playing);
     });
@@ -54,7 +59,6 @@ class _AudioMessageWidgetState extends State<AudioMessageWidget> {
 
   @override
   Widget build(BuildContext context) {
-    // 🌟 మ్యాజిక్: ఇక్కడ డార్క్ మోడ్/లైట్ మోడ్ కి తగ్గట్టు కలర్స్ మారతాయి
     bool isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Container(
@@ -66,16 +70,20 @@ class _AudioMessageWidgetState extends State<AudioMessageWidget> {
             icon: Icon(
               _isPlaying ? Icons.pause_circle_filled : Icons.play_circle_fill,
               size: 35,
-              // 🌟 డైనమిక్ కలర్స్ అప్‌డేట్
               color: widget.isMe
                   ? (isDark ? Colors.greenAccent : Colors.green[800])
                   : (isDark ? Colors.lightBlue : Colors.blue),
             ),
             onPressed: () async {
-              if (_isPlaying) {
-                await _audioPlayer.pause();
-              } else {
-                await _audioPlayer.play(UrlSource(widget.audioUrl));
+              try {
+                if (_isPlaying) {
+                  await _audioPlayer.pause();
+                } else {
+                  // 🌟 మ్యాజిక్: ఆడియో ప్లే చేసేటప్పుడు UrlSource ని వాడుతున్నాం
+                  await _audioPlayer.play(UrlSource(widget.audioUrl));
+                }
+              } catch (e) {
+                debugPrint("Audio Play Error: $e");
               }
             },
           ),
@@ -89,20 +97,19 @@ class _AudioMessageWidgetState extends State<AudioMessageWidget> {
                     thumbShape: const RoundSliderThumbShape(
                       enabledThumbRadius: 6,
                     ),
-                    // 🌟 స్లయిడర్ ట్రాక్ కలర్ అప్‌డేట్
                     activeTrackColor: widget.isMe
                         ? (isDark ? Colors.greenAccent[700] : Colors.green[700])
                         : (isDark ? Colors.lightBlue : Colors.blue),
                     inactiveTrackColor: isDark
                         ? Colors.grey[600]
                         : Colors.grey[400],
-                    // 🌟 స్లయిడర్ బటన్ (Thumb) కలర్ అప్‌డేట్
                     thumbColor: widget.isMe
                         ? (isDark ? Colors.greenAccent : Colors.green[800])
                         : (isDark ? Colors.lightBlue : Colors.blue),
                   ),
                   child: Slider(
                     min: 0,
+                    // 🌟 Safety: Duration కనీసం 1 సెకన్ ఉండేలా చూడాలి
                     max: _duration.inSeconds > 0
                         ? _duration.inSeconds.toDouble()
                         : 1.0,
@@ -113,7 +120,16 @@ class _AudioMessageWidgetState extends State<AudioMessageWidget> {
                           : 1.0,
                     ),
                     onChanged: (val) async {
-                      await _audioPlayer.seek(Duration(seconds: val.toInt()));
+                      // 🌟 THE FIX: ఆడియో డ్యూరేషన్ ఉంటేనే Seek చేయాలి
+                      if (_duration.inSeconds > 0) {
+                        try {
+                          await _audioPlayer.seek(
+                            Duration(seconds: val.toInt()),
+                          );
+                        } catch (e) {
+                          debugPrint("Seek Error: $e");
+                        }
+                      }
                     },
                   ),
                 ),
@@ -123,9 +139,7 @@ class _AudioMessageWidgetState extends State<AudioMessageWidget> {
                     _formatTime(_position),
                     style: TextStyle(
                       fontSize: 10,
-                      color: isDark
-                          ? Colors.grey[400]
-                          : Colors.grey[700], // 🌟 టైమ్ కలర్ అప్‌డేట్
+                      color: isDark ? Colors.grey[400] : Colors.grey[700],
                     ),
                   ),
                 ),

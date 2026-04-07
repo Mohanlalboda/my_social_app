@@ -3,9 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:cached_video_player_plus/cached_video_player_plus.dart';
 import 'package:video_player/video_player.dart';
-import 'package:video_thumbnail/video_thumbnail.dart'; // 🌟 కొత్త ప్యాకేజీ
+import 'package:video_thumbnail/video_thumbnail.dart';
 
-// 🌟 థంబ్‌నైల్స్ ని మెమరీలో సేవ్ చేసుకోవడానికి (గ్రిడ్ స్క్రోల్ ఫాస్ట్ గా ఉండటానికి)
+// 🌟 థంబ్‌నైల్స్ ని మెమరీలో సేవ్ చేసుకోవడానికి
 final Map<String, Uint8List> _globalThumbnailCache = {};
 
 class CachedMediaWidget extends StatefulWidget {
@@ -26,7 +26,6 @@ class CachedMediaWidget extends StatefulWidget {
   State<CachedMediaWidget> createState() => _CachedMediaWidgetState();
 }
 
-// 🌟 AutomaticKeepAliveClientMixin యాడ్ చేశాం (స్క్రోల్ చేస్తున్నప్పుడు మళ్ళీ లోడ్ కాకుండా ఉండటానికి)
 class _CachedMediaWidgetState extends State<CachedMediaWidget>
     with AutomaticKeepAliveClientMixin {
   CachedVideoPlayerPlus? _player;
@@ -34,7 +33,6 @@ class _CachedMediaWidgetState extends State<CachedMediaWidget>
   bool _isMuted = false;
   bool _hasError = false;
 
-  // 🌟 మ్యాజిక్: ఇది true ఉంటేనే స్క్రోల్ చేసినప్పుడు విడ్జెట్ బతికి ఉంటుంది
   @override
   bool get wantKeepAlive => true;
 
@@ -88,8 +86,6 @@ class _CachedMediaWidgetState extends State<CachedMediaWidget>
               });
             }
           });
-    } else {
-      _player = null;
     }
   }
 
@@ -117,12 +113,13 @@ class _CachedMediaWidgetState extends State<CachedMediaWidget>
 
   @override
   Widget build(BuildContext context) {
-    super.build(context); // 🌟 Mixin వాడినప్పుడు ఇది కచ్చితంగా ఉండాలి
+    super.build(context);
 
     if (widget.type == 'image') {
       return CachedNetworkImage(
         imageUrl: widget.mediaUrl,
-        fit: BoxFit.cover,
+        // 🌟 ఇక్కడ మార్చాం: 'cover' తీసేసి 'contain' పెట్టాం
+        fit: widget.isGrid ? BoxFit.cover : BoxFit.contain,
         width: double.infinity,
         placeholder: (context, url) => Container(
           color: Colors.grey[900],
@@ -141,12 +138,11 @@ class _CachedMediaWidgetState extends State<CachedMediaWidget>
         ),
       );
     } else if (widget.type == 'video') {
-      // 🌟 గ్రిడ్ లో ఉన్నప్పుడు వీడియోకి బదులు 'ఫస్ట్ ఫ్రేమ్ ఫోటో' చూపిస్తాం
       if (widget.isGrid) {
         return Stack(
           fit: StackFit.expand,
           children: [
-            _VideoThumbnailLoader(videoUrl: widget.mediaUrl), // 🔥 ఫస్ట్ ఫ్రేమ్
+            _VideoThumbnailLoader(videoUrl: widget.mediaUrl),
             const Center(
               child: Icon(
                 Icons.play_circle_outline,
@@ -174,13 +170,15 @@ class _CachedMediaWidgetState extends State<CachedMediaWidget>
           fit: StackFit.expand,
           alignment: Alignment.center,
           children: [
-            AspectRatio(
-              aspectRatio: _player!.controller.value.aspectRatio,
-              child: VideoPlayer(_player!.controller),
+            Center(
+              child: AspectRatio(
+                aspectRatio: _player!.controller.value.aspectRatio,
+                child: VideoPlayer(_player!.controller),
+              ),
             ),
             if (widget.showAudioControl)
               Positioned(
-                top: 130,
+                bottom: 15, // ఇక్కడ పొజిషన్ కొంచెం అడ్జస్ట్ చేశాను
                 right: 15,
                 child: GestureDetector(
                   onTap: _toggleMute,
@@ -222,9 +220,7 @@ class _CachedMediaWidgetState extends State<CachedMediaWidget>
   }
 }
 
-// -----------------------------------------------------------------
-// 🌟 వీడియో నుండి ఫస్ట్ ఫ్రేమ్ ఫోటో (Thumbnail) ని తీసే మ్యాజిక్ విడ్జెట్
-// -----------------------------------------------------------------
+// --- Thumbnail Loader ---
 class _VideoThumbnailLoader extends StatefulWidget {
   final String videoUrl;
   const _VideoThumbnailLoader({required this.videoUrl});
@@ -244,7 +240,6 @@ class _VideoThumbnailLoaderState extends State<_VideoThumbnailLoader> {
   }
 
   Future<void> _loadThumbnail() async {
-    // మెమరీలో ఆల్రెడీ ఉంటే వెంటనే లాగేస్తాం (స్పీడ్ గా ఉంటుంది)
     if (_globalThumbnailCache.containsKey(widget.videoUrl)) {
       if (mounted) {
         setState(() {
@@ -255,17 +250,15 @@ class _VideoThumbnailLoaderState extends State<_VideoThumbnailLoader> {
     }
 
     try {
-      // లేకపోతే వీడియో నుండి ఫోటో జనరేట్ చేస్తాం
       final uint8list = await VideoThumbnail.thumbnailData(
         video: widget.videoUrl,
         imageFormat: ImageFormat.JPEG,
-        maxWidth: 300, // గ్రిడ్ కోసం 300px సైజు చాలు
+        maxWidth: 300,
         quality: 50,
       );
 
       if (uint8list != null) {
-        _globalThumbnailCache[widget.videoUrl] =
-            uint8list; // మెమరీలో దాచుకుంటాం
+        _globalThumbnailCache[widget.videoUrl] = uint8list;
         if (mounted) {
           setState(() {
             _thumbData = uint8list;
@@ -275,22 +268,16 @@ class _VideoThumbnailLoaderState extends State<_VideoThumbnailLoader> {
         if (mounted) setState(() => _isError = true);
       }
     } catch (e) {
-      debugPrint("Thumbnail generation error: $e");
       if (mounted) setState(() => _isError = true);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isError) {
-      return Container(
-        color: Colors.grey[900],
-      ); // ఎర్రర్ వస్తే బ్లాక్ బ్యాక్‌గ్రౌండ్
-    }
+    if (_isError) return Container(color: Colors.grey[900]);
     if (_thumbData != null) {
       return Image.memory(_thumbData!, fit: BoxFit.cover);
     }
-    // లోడ్ అయ్యే వరకు చిన్న స్పిన్నర్
     return Container(
       color: Colors.grey[900],
       child: const Center(

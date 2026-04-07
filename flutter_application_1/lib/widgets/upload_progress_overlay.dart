@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../screens/create/add_post_screen.dart'; // 🌟 UploadManager ఇక్కడే ఉంది కాబట్టి
+import '../services/upload_manager.dart';
 
 class GlobalUploadOverlay extends StatelessWidget {
   const GlobalUploadOverlay({super.key});

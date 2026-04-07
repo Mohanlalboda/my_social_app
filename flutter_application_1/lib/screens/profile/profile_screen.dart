@@ -8,13 +8,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:image_cropper/image_cropper.dart';
-import 'package:uuid/uuid.dart';
 
+import '../../utils/constants.dart';
+import '../../services/upload_manager.dart';
+import '../../services/paginated_grid.dart';
 import '../create/add_post_screen.dart';
-import '../posts/scrolling_posts_screen.dart';
-import '../reels/scrolling_reels_screen.dart';
 import '../../widgets/safe_elements.dart';
-import '../../widgets/cached_media_widget.dart';
 import 'user_list_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -27,17 +26,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final String uid = FirebaseAuth.instance.currentUser!.uid;
 
-  final LinearGradient brandGradient = const LinearGradient(
-    colors: [
-      Color(0xFF833AB4),
-      Color(0xFFFD1D1D),
-      Color(0xFFF56040),
-      Color(0xFFFFDC80),
-    ],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
-
+  // ⚙️ Settings
   void _showSettings(bool currentPrivateStatus) {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
     showModalBottomSheet(
@@ -50,17 +39,24 @@ class _ProfileScreenState extends State<ProfileScreen> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Padding(
-              padding: EdgeInsets.all(15.0),
+            Padding(
+              padding: const EdgeInsets.all(15.0),
               child: Text(
                 "Settings and privacy",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: isDark ? Colors.white : Colors.black,
+                ),
               ),
             ),
             const Divider(),
             SwitchListTile(
               secondary: const Icon(Icons.lock_outline),
-              title: const Text("Private Account"),
+              title: Text(
+                "Private Account",
+                style: TextStyle(color: isDark ? Colors.white : Colors.black),
+              ),
               value: currentPrivateStatus,
               activeThumbColor: const Color(0xFFFD1D1D),
               onChanged: (val) async {
@@ -78,6 +74,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // 📷 Profile Pic Action
   void _onProfilePicAction(String picUrl, String name) {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
     showModalBottomSheet(
@@ -120,6 +117,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // 🍔 Menu
   void _showInstagramMenu(String name, String bio, bool isPrivate) {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
     showModalBottomSheet(
@@ -133,8 +131,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
           mainAxisSize: MainAxisSize.min,
           children: [
             ListTile(
-              leading: const Icon(Icons.settings_outlined),
-              title: const Text("Settings and privacy"),
+              leading: Icon(
+                Icons.settings_outlined,
+                color: isDark ? Colors.white : Colors.black,
+              ),
+              title: Text(
+                "Settings and privacy",
+                style: TextStyle(color: isDark ? Colors.white : Colors.black),
+              ),
               onTap: () {
                 Navigator.pop(ctx);
                 _showSettings(isPrivate);
@@ -154,6 +158,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // 📝 Edit Profile
   void _showEditDialog(String currentName, String currentBio) {
     final nameCtrl = TextEditingController(text: currentName);
     final bioCtrl = TextEditingController(text: currentBio);
@@ -200,13 +205,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  // 🖼️ Update Profile Pic
   Future<void> _updateProfilePic() async {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(
       source: ImageSource.gallery,
       imageQuality: 85,
     );
-
     if (image != null) {
       CroppedFile? croppedFile = await ImageCropper().cropImage(
         sourcePath: image.path,
@@ -226,7 +231,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
         ],
       );
-
       if (croppedFile != null) {
         _backgroundUploadProfilePic(File(croppedFile.path));
       }
@@ -237,23 +241,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     UploadManager().isUploading.value = true;
     UploadManager().uploadProgress.value = 0.0;
     UploadManager().uploadStatus.value = "Updating Profile Picture...";
-
     try {
       var storageRef = FirebaseStorage.instance
           .ref()
           .child('profile_pics')
           .child('$uid.jpg');
-
       UploadTask uploadTask = storageRef.putFile(file);
-
       uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
-        double progress = snapshot.bytesTransferred / snapshot.totalBytes;
-        UploadManager().uploadProgress.value = progress;
+        UploadManager().uploadProgress.value =
+            snapshot.bytesTransferred / snapshot.totalBytes;
       });
-
       TaskSnapshot snapshot = await uploadTask;
       String downloadUrl = await snapshot.ref.getDownloadURL();
-
       await FirebaseFirestore.instance.collection('users').doc(uid).update({
         "profilePic": downloadUrl,
       });
@@ -285,101 +284,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
       ),
     );
-  }
-
-  void _showStoryPicker(Map<String, dynamic> userData) {
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Wrap(
-          children: [
-            const Padding(
-              padding: EdgeInsets.all(15),
-              child: Text(
-                "Add to Story",
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-            ),
-            ListTile(
-              leading: const Icon(
-                Icons.photo_library,
-                color: Color(0xFFFD1D1D),
-              ),
-              title: const Text("Photo Story"),
-              onTap: () {
-                Navigator.pop(context);
-                _uploadStory(userData, false);
-              },
-            ),
-            ListTile(
-              leading: const Icon(
-                Icons.video_collection,
-                color: Color(0xFF833AB4),
-              ),
-              title: const Text("Video Story"),
-              onTap: () {
-                Navigator.pop(context);
-                _uploadStory(userData, true);
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _uploadStory(Map<String, dynamic> userData, bool isVideo) async {
-    final ImagePicker picker = ImagePicker();
-    final XFile? file = isVideo
-        ? await picker.pickVideo(source: ImageSource.gallery)
-        : await picker.pickImage(source: ImageSource.gallery);
-
-    if (file != null) {
-      UploadManager().isUploading.value = true;
-      UploadManager().uploadProgress.value = 0.0;
-      UploadManager().uploadStatus.value = isVideo
-          ? "Compressing Video Story..."
-          : "Uploading Photo Story...";
-
-      try {
-        String storyId = const Uuid().v4();
-        Reference ref = FirebaseStorage.instance
-            .ref()
-            .child('stories')
-            .child(uid)
-            .child(storyId);
-
-        UploadTask uploadTask = ref.putFile(File(file.path));
-
-        uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
-          double progress = snapshot.bytesTransferred / snapshot.totalBytes;
-          UploadManager().uploadProgress.value = progress;
-        });
-
-        TaskSnapshot snapshot = await uploadTask;
-        String downloadUrl = await snapshot.ref.getDownloadURL();
-
-        UploadManager().uploadStatus.value = "Finishing up...";
-
-        await FirebaseFirestore.instance.collection('stories').add({
-          "uid": uid,
-          "ownerId": uid,
-          "username": userData['username'] ?? "User",
-          "profilePic": userData['profilePic'] ?? "",
-          "storyUrl": downloadUrl,
-          "type": isVideo ? "video" : "image",
-          "timestamp": FieldValue.serverTimestamp(),
-          "viewers": [],
-        });
-      } catch (e) {
-        debugPrint("Story Error: $e");
-      } finally {
-        UploadManager().isUploading.value = false;
-      }
-    }
   }
 
   @override
@@ -432,14 +336,22 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
               actions: [
                 IconButton(
-                  icon: const Icon(Icons.add_box_outlined, size: 28),
+                  icon: Icon(
+                    Icons.add_box_outlined,
+                    size: 28,
+                    color: isDark ? Colors.white : Colors.black,
+                  ),
                   onPressed: () => Navigator.push(
                     context,
                     MaterialPageRoute(builder: (_) => const AddPostScreen()),
                   ),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.menu, size: 28),
+                  icon: Icon(
+                    Icons.menu,
+                    size: 28,
+                    color: isDark ? Colors.white : Colors.black,
+                  ),
                   onPressed: () => _showInstagramMenu(name, bio, isPrivate),
                 ),
               ],
@@ -464,7 +376,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ),
                               child: Container(
                                 padding: const EdgeInsets.all(3),
-                                decoration: BoxDecoration(
+                                decoration: const BoxDecoration(
                                   shape: BoxShape.circle,
                                   gradient: brandGradient,
                                 ),
@@ -547,11 +459,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           children: [
                             Text(
                               name,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontWeight: FontWeight.bold,
+                                color: isDark ? Colors.white : Colors.black,
                               ),
                             ),
-                            if (bio.isNotEmpty) Text(bio),
+                            if (bio.isNotEmpty)
+                              Text(
+                                bio,
+                                style: TextStyle(
+                                  color: isDark
+                                      ? Colors.white70
+                                      : Colors.black87,
+                                ),
+                              ),
                             const SizedBox(height: 15),
                             Row(
                               children: [
@@ -606,28 +527,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               ],
                             ),
                             const SizedBox(height: 15),
-                            SizedBox(
-                              height: 85,
-                              child: ListView(
-                                scrollDirection: Axis.horizontal,
-                                children: [
-                                  _buildHighlightCircle(
-                                    "New",
-                                    true,
-                                    isDark,
-                                    brandGradient,
-                                    () => _showStoryPicker(userData),
-                                  ),
-                                  _buildHighlightCircle(
-                                    "Moments",
-                                    false,
-                                    isDark,
-                                    brandGradient,
-                                    () {},
-                                  ),
-                                ],
-                              ),
-                            ),
                           ],
                         ),
                       ),
@@ -651,23 +550,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
               ],
+              // 🌟🌟 FIX: ORDER BY ని తీసేశాం (INDEX ఎర్రర్ రాకుండా) 🌟🌟
               body: TabBarView(
                 children: [
-                  _buildPostGrid(
-                    FirebaseFirestore.instance
+                  // 1. My Posts Tab
+                  PaginatedGrid(
+                    query: FirebaseFirestore.instance
                         .collection('posts')
                         .where('ownerId', isEqualTo: uid)
-                        .where('type', isEqualTo: 'image')
-                        .snapshots(),
+                        .where('type', isEqualTo: 'image'), // ❌ orderBy తీసేశాం
                   ),
-                  _buildReelsGrid(
-                    FirebaseFirestore.instance
+                  // 2. My Reels Tab
+                  PaginatedGrid(
+                    query: FirebaseFirestore.instance
                         .collection('posts')
                         .where('ownerId', isEqualTo: uid)
-                        .where('type', isEqualTo: 'video')
-                        .snapshots(),
+                        .where('type', isEqualTo: 'video'), // ❌ orderBy తీసేశాం
+                    isReel: true,
                   ),
-                  _buildSavedTab(uid),
+                  // 3. Saved Tab
+                  _buildSavedTab(uid, isDark),
                 ],
               ),
             ),
@@ -677,191 +579,47 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildHighlightCircle(
-    String title,
-    bool isNew,
-    bool isDark,
-    Gradient gradient,
-    VoidCallback onTap,
-  ) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.only(right: 15),
-        child: Column(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(2),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: gradient,
-              ),
-              child: Container(
-                padding: const EdgeInsets.all(2),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isDark ? Colors.black : Colors.white,
-                ),
-                child: CircleAvatar(
-                  radius: 26,
-                  backgroundColor: isDark ? Colors.grey[900] : Colors.grey[200],
-                  child: isNew
-                      ? Icon(
-                          Icons.add,
-                          color: isDark ? Colors.white : Colors.black,
-                        )
-                      : null,
-                ),
-              ),
-            ),
-            const SizedBox(height: 5),
-            Text(title, style: const TextStyle(fontSize: 12)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPostGrid(
-    Stream<QuerySnapshot> stream, {
-    bool isScrollable = true,
-  }) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: stream,
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        var posts = snapshot.data!.docs;
-        List<String> ids = posts.map((d) => d.id).toList();
-        if (posts.isEmpty) return const Center(child: Text("No posts yet."));
-        return GridView.builder(
-          shrinkWrap: !isScrollable,
-          physics: isScrollable
-              ? const AlwaysScrollableScrollPhysics()
-              : const NeverScrollableScrollPhysics(),
-          padding: EdgeInsets.zero,
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            crossAxisSpacing: 1,
-            mainAxisSpacing: 1,
-          ),
-          itemCount: posts.length,
-          itemBuilder: (context, i) {
-            var data = posts[i].data() as Map<String, dynamic>;
-            String thumb =
-                (data['postData'] is List &&
-                    (data['postData'] as List).isNotEmpty)
-                ? data['postData'][0]
-                : "";
-            return GestureDetector(
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) =>
-                      ScrollingPostsScreen(postIds: ids, initialIndex: i),
-                ),
-              ),
-              child: thumb.startsWith('http')
-                  ? CachedMediaWidget(
-                      mediaUrl: thumb,
-                      type: 'image',
-                      isGrid: true,
-                    )
-                  : SafeImage(base64String: thumb),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildReelsGrid(
-    Stream<QuerySnapshot> stream, {
-    bool isScrollable = true,
-  }) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: stream,
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        var reels = snapshot.data!.docs;
-        List<String> ids = reels.map((d) => d.id).toList();
-        if (reels.isEmpty) return const Center(child: Text("No Reels yet."));
-        return GridView.builder(
-          shrinkWrap: !isScrollable,
-          physics: isScrollable
-              ? const AlwaysScrollableScrollPhysics()
-              : const NeverScrollableScrollPhysics(),
-          padding: EdgeInsets.zero,
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            childAspectRatio: 0.65,
-            crossAxisSpacing: 2,
-            mainAxisSpacing: 2,
-          ),
-          itemCount: reels.length,
-          itemBuilder: (context, i) {
-            var data = reels[i].data() as Map<String, dynamic>;
-            String url =
-                (data['postData'] is List &&
-                    (data['postData'] as List).isNotEmpty)
-                ? data['postData'][0]
-                : (data['storyUrl'] ?? "");
-            return GestureDetector(
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) =>
-                      ScrollingReelsScreen(reelIds: ids, initialIndex: i),
-                ),
-              ),
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  CachedMediaWidget(mediaUrl: url, type: 'video', isGrid: true),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildSavedTab(String uid) {
+  // 🌟 SAVED TAB WIDGET
+  Widget _buildSavedTab(String uid, bool isDark) {
     return ListView(
+      padding: EdgeInsets.zero,
       children: [
-        const Padding(
-          padding: EdgeInsets.all(12),
+        Padding(
+          padding: const EdgeInsets.all(12),
           child: Text(
             "📌 Saved Posts",
-            style: TextStyle(fontWeight: FontWeight.bold),
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white : Colors.black,
+            ),
           ),
         ),
-        _buildPostGrid(
-          FirebaseFirestore.instance
+        // Saved Images
+        PaginatedGrid(
+          query: FirebaseFirestore.instance
               .collection('posts')
-              .where('type', isEqualTo: 'image')
               .where('savedBy', arrayContains: uid)
-              .snapshots(),
+              .where('type', isEqualTo: 'image'), // ❌ orderBy తీసేశాం
           isScrollable: false,
         ),
         const Divider(height: 30),
-        const Padding(
-          padding: EdgeInsets.all(12),
+        Padding(
+          padding: const EdgeInsets.all(12),
           child: Text(
             "🎬 Saved Reels",
-            style: TextStyle(fontWeight: FontWeight.bold),
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              color: isDark ? Colors.white : Colors.black,
+            ),
           ),
         ),
-        _buildReelsGrid(
-          FirebaseFirestore.instance
+        // Saved Reels
+        PaginatedGrid(
+          query: FirebaseFirestore.instance
               .collection('posts')
-              .where('type', isEqualTo: 'video')
               .where('savedBy', arrayContains: uid)
-              .snapshots(),
+              .where('type', isEqualTo: 'video'), // ❌ orderBy తీసేశాం
+          isReel: true,
           isScrollable: false,
         ),
       ],
@@ -873,16 +631,23 @@ class _StatColumn extends StatelessWidget {
   final String num, label;
   const _StatColumn({required this.num, required this.label});
   @override
-  Widget build(BuildContext context) => Column(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Text(
-        num,
-        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-      ),
-      Text(label, style: const TextStyle(fontSize: 13, color: Colors.grey)),
-    ],
-  );
+  Widget build(BuildContext context) {
+    bool isDark = Theme.of(context).brightness == Brightness.dark;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text(
+          num,
+          style: TextStyle(
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+            color: isDark ? Colors.white : Colors.black,
+          ),
+        ),
+        Text(label, style: const TextStyle(fontSize: 13, color: Colors.grey)),
+      ],
+    );
+  }
 }
 
 class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {

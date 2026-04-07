@@ -49,7 +49,6 @@ class _CreateCommunityScreenState extends State<CreateCommunityScreen> {
       String communityId = const Uuid().v4();
       String imageUrl = "";
 
-      // 1. ఇమేజ్ ఉంటే అప్‌లోడ్ చేసి లింక్ తెచ్చుకోవడం
       if (_image != null) {
         Reference ref = FirebaseStorage.instance
             .ref()
@@ -60,29 +59,28 @@ class _CreateCommunityScreenState extends State<CreateCommunityScreen> {
         imageUrl = await snapshot.ref.getDownloadURL();
       }
 
-      // 2. ఫైర్‌స్టోర్ లో సేవ్ చేయడం
+      // 🌟 THE FIX: ఫీల్డ్ నేమ్స్ కరెక్ట్ చేశాం (groupName, groupPic)
       await FirebaseFirestore.instance
           .collection('communities')
           .doc(communityId)
           .set({
             'communityId': communityId,
-            'name': _nameController.text.trim(),
+            'groupName': _nameController.text.trim(),
             'description': _descController.text.trim(),
-            'groupIcon': imageUrl,
+            'groupPic': imageUrl,
             'adminId': currentUid,
-            'members': [
-              currentUid,
-            ], // 🌟 క్రియేట్ చేసిన వాళ్ళు ఆటోమేటిక్ గా మెంబర్
+            'members': [currentUid],
             'createdAt': FieldValue.serverTimestamp(),
             'lastMessage': 'Community Created! 🎉',
             'lastMessageTime': FieldValue.serverTimestamp(),
+            'deletedBy': [],
           });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text("Community Created Successfully! 🚀")),
         );
-        Navigator.pop(context); // వెనక్కి వెళ్ళిపోతాం
+        Navigator.pop(context);
       }
     } catch (e) {
       debugPrint("Create Community Error: $e");
@@ -153,9 +151,7 @@ class _CreateCommunityScreenState extends State<CreateCommunityScreen> {
               height: 50,
               child: ElevatedButton(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(
-                    0xFF833AB4,
-                  ), // బ్రాండ్ కలర్ (Purple)
+                  backgroundColor: const Color(0xFF833AB4),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(10),
                   ),

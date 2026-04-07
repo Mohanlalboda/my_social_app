@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'sign_up_screen.dart';
+import '../../utils/constants.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -10,38 +12,60 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _identifierController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _isLoading = false;
 
-  final LinearGradient brandGradient = const LinearGradient(
-    colors: [
-      Color(0xFF833AB4), // Purple
-      Color(0xFFFD1D1D), // Pink
-      Color(0xFFF56040), // Orange
-      Color(0xFFFFDC80), // Yellow
-    ],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
-
   Future<void> _login() async {
-    if (_emailController.text.trim().isEmpty ||
-        _passwordController.text.trim().isEmpty) {
-      return;
-    }
+    String identifier = _identifierController.text.trim();
+    String password = _passwordController.text.trim();
+
+    if (identifier.isEmpty || password.isEmpty) return;
 
     setState(() => _isLoading = true);
     try {
+      String loginEmail = identifier;
+
+      // 🌟 MAGIC LOGIC: యూజర్ '@' సింబల్ ఎంటర్ చేయకపోతే, అది మొబైల్ నంబర్ అని భావించి డేటాబేస్ లో వెతుకుతాం
+      if (!identifier.contains('@')) {
+        var querySnapshot = await FirebaseFirestore.instance
+            .collection('users')
+            .where('phone', isEqualTo: identifier)
+            .limit(1)
+            .get();
+
+        if (querySnapshot.docs.isNotEmpty) {
+          // నంబర్ కి లింక్ అయిన ఈమెయిల్ దొరికింది!
+          loginEmail = querySnapshot.docs.first.data()['email'];
+        } else {
+          throw Exception(
+            "No account found with this mobile number. Please sign up.",
+          );
+        }
+      }
+
+      // ఫైనల్ గా ఆ ఈమెయిల్ ఐడీ తో లాగిన్ అవుతున్నాం
       await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
+        email: loginEmail,
+        password: password,
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(e.toString())));
+      // ఫైర్‌బేస్ ఎర్రర్స్ ని సింపుల్ గా చూపించడానికి
+      String errorMsg = e.toString();
+
+      if (errorMsg.contains('invalid-credential') ||
+          errorMsg.contains('user-not-found') ||
+          errorMsg.contains('wrong-password')) {
+        errorMsg = "Invalid Email/Phone or Password. Please try again.";
+      } else if (errorMsg.contains('Exception:')) {
+        // మనం పైన రాసిన కస్టమ్ ఎర్రర్ మెసేజ్ ని ఫార్మాట్ చేయడానికి
+        errorMsg = errorMsg.replaceAll('Exception: ', '');
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(errorMsg), backgroundColor: Colors.redAccent),
+      );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -76,11 +100,12 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 50),
 
+                  // 🌟 Email or Mobile Field
                   TextField(
-                    controller: _emailController,
+                    controller: _identifierController,
                     style: TextStyle(color: textColor),
                     decoration: InputDecoration(
-                      hintText: "Email",
+                      hintText: "Email or Mobile Number",
                       hintStyle: const TextStyle(color: Colors.grey),
                       filled: true,
                       fillColor: isDark ? Colors.grey[900] : Colors.grey[100],
@@ -89,7 +114,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         borderSide: BorderSide.none,
                       ),
                       prefixIcon: const Icon(
-                        Icons.email_outlined,
+                        Icons.person_outline,
                         color: Colors.grey,
                       ),
                     ),
@@ -128,9 +153,9 @@ class _LoginScreenState extends State<LoginScreen> {
                         borderRadius: BorderRadius.circular(15),
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(
-                              0xFFFD1D1D,
-                            ).withValues(alpha: 0.3), // 🌟 withValues వాడాను
+                            color: const Color(0xFFFD1D1D).withValues(
+                              alpha: 0.3,
+                            ), // పాత వెర్షన్స్ లో క్రాష్ అవ్వకుండా withOpacity వాడాం
                             blurRadius: 10,
                             offset: const Offset(0, 5),
                           ),

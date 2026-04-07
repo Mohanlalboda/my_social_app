@@ -19,8 +19,8 @@ class SearchScreen extends StatefulWidget {
 
 class _SearchScreenState extends State<SearchScreen> {
   final TextEditingController searchController = TextEditingController();
-  final String currentUid = FirebaseAuth.instance.currentUser!.uid;
   bool isShowUsers = false;
+  final String currentUid = FirebaseAuth.instance.currentUser!.uid;
 
   @override
   void dispose() {
@@ -32,66 +32,93 @@ class _SearchScreenState extends State<SearchScreen> {
   Widget build(BuildContext context) {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
-      backgroundColor: isDark ? Colors.black : Colors.white,
-      appBar: AppBar(
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
         backgroundColor: isDark ? Colors.black : Colors.white,
-        elevation: 0,
-        titleSpacing: 10,
-        title: TextFormField(
-          controller: searchController,
-          style: TextStyle(color: isDark ? Colors.white : Colors.black),
-          decoration: InputDecoration(
-            hintText: 'Search users...',
-            hintStyle: const TextStyle(color: Colors.grey, fontSize: 15),
-            prefixIcon: const Icon(Icons.search, color: Colors.grey, size: 20),
-            suffixIcon: isShowUsers
-                ? IconButton(
-                    icon: const Icon(Icons.clear, color: Colors.grey, size: 20),
-                    onPressed: () => setState(() {
-                      searchController.clear();
-                      isShowUsers = false;
-                    }),
-                  )
-                : null,
-            filled: true,
-            fillColor: isDark ? Colors.grey[900] : Colors.grey.shade200,
-            contentPadding: const EdgeInsets.all(8),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(12),
-              borderSide: BorderSide.none,
+        appBar: AppBar(
+          backgroundColor: isDark ? Colors.black : Colors.white,
+          elevation: 0,
+          title: Container(
+            decoration: BoxDecoration(
+              color: isDark ? Colors.grey[900] : Colors.grey[200],
+              borderRadius: BorderRadius.circular(25),
+            ),
+            child: TextFormField(
+              controller: searchController,
+              style: TextStyle(color: isDark ? Colors.white : Colors.black),
+              decoration: InputDecoration(
+                hintText: 'Search for a user...',
+                hintStyle: const TextStyle(color: Colors.grey),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 15,
+                  vertical: 12,
+                ),
+                prefixIcon: const Icon(Icons.search, color: Colors.grey),
+                suffixIcon: isShowUsers
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, color: Colors.grey),
+                        onPressed: () {
+                          searchController.clear();
+                          setState(() => isShowUsers = false);
+                          FocusScope.of(context).unfocus();
+                        },
+                      )
+                    : null,
+              ),
+              onChanged: (String value) {
+                setState(() {
+                  isShowUsers = value.trim().isNotEmpty;
+                });
+              },
             ),
           ),
-          onChanged: (String text) {
-            setState(() {
-              isShowUsers = text.trim().isNotEmpty;
-            });
-          },
         ),
+        body: isShowUsers
+            ? _buildUserSearch()
+            : Column(
+                children: [
+                  _buildSuggestedFriends(), // 🌟 సజెస్టెడ్ ఫ్రెండ్స్
+                  const TabBar(
+                    indicatorColor: Color(0xFF00E5FF),
+                    labelColor: Color(0xFF00E5FF),
+                    unselectedLabelColor: Colors.grey,
+                    tabs: [
+                      Tab(icon: Icon(Icons.grid_on), text: "Posts"),
+                      Tab(icon: Icon(Icons.video_library), text: "Reels"),
+                    ],
+                  ),
+                  Expanded(child: _buildExploreTabs()),
+                ],
+              ),
       ),
-      body: isShowUsers ? _buildUserSearchStream() : _buildExploreSection(),
     );
   }
 
-  Widget _buildUserSearchStream() {
+  // 🌟 1. యూజర్లను వెతికే స్క్రీన్
+  Widget _buildUserSearch() {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
-    String searchText = searchController.text.trim().toLowerCase();
 
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance.collection('users').snapshots(),
+    return FutureBuilder<QuerySnapshot>(
+      future: FirebaseFirestore.instance
+          .collection('users')
+          .where(
+            'username',
+            isGreaterThanOrEqualTo: searchController.text.trim(),
+          )
+          .where(
+            'username',
+            isLessThanOrEqualTo: '${searchController.text.trim()}\uf8ff',
+          )
+          .get(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: CircularProgressIndicator(color: Color(0xFF00E5FF)),
+          );
         }
-        var users = snapshot.data!.docs.where((doc) {
-          var userData = doc.data() as Map<String, dynamic>;
-          String username = (userData['username'] ?? '')
-              .toString()
-              .toLowerCase();
-          return username.contains(searchText);
-        }).toList();
-
-        if (users.isEmpty) {
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
           return const Center(
             child: Text(
               "No users found.",
@@ -101,20 +128,20 @@ class _SearchScreenState extends State<SearchScreen> {
         }
 
         return ListView.builder(
-          itemCount: users.length,
+          itemCount: snapshot.data!.docs.length,
           itemBuilder: (context, index) {
-            var userData = users[index].data() as Map<String, dynamic>;
-            String username = userData['username'] ?? 'User';
+            var userData =
+                snapshot.data!.docs[index].data() as Map<String, dynamic>;
+            String userId = snapshot.data!.docs[index].id;
+
             return ListTile(
               leading: SafeProfilePic(
-                base64String: userData['profilePic'],
+                base64String: userData['profilePic'] ?? '',
                 radius: 22,
-                fallbackText: username.isNotEmpty
-                    ? username[0].toUpperCase()
-                    : 'U',
+                fallbackText: (userData['username'] ?? 'U')[0],
               ),
               title: Text(
-                username,
+                userData['username'] ?? 'User',
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   color: isDark ? Colors.white : Colors.black,
@@ -126,13 +153,14 @@ class _SearchScreenState extends State<SearchScreen> {
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(color: Colors.grey),
               ),
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) =>
-                      OtherUserProfileScreen(userId: users[index].id),
-                ),
-              ),
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => OtherUserProfileScreen(userId: userId),
+                  ),
+                );
+              },
             );
           },
         );
@@ -140,441 +168,367 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  Widget _buildExploreSection() {
+  // 🌟 2. సజెస్టెడ్ ఫ్రెండ్స్ లిస్ట్ (Mutual Friends & Follow బటన్ అప్‌డేట్)
+  Widget _buildSuggestedFriends() {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return FutureBuilder<DocumentSnapshot>(
-      future: FirebaseFirestore.instance
+    return StreamBuilder<DocumentSnapshot>(
+      // 🌟 ముందు మన డేటా (మనం ఎవరిని ఫాలో అవుతున్నామో) తెచ్చుకోవాలి
+      stream: FirebaseFirestore.instance
           .collection('users')
           .doc(currentUid)
-          .get(),
-      builder: (context, userSnap) {
-        if (!userSnap.hasData)
-          return const Center(child: CircularProgressIndicator());
-        var myData = userSnap.data!.data() as Map<String, dynamic>? ?? {};
-        List myFollowing = List.from(myData['following'] ?? [])
-          ..add(currentUid);
+          .snapshots(),
+      builder: (context, mySnapshot) {
+        if (!mySnapshot.hasData) return const SizedBox();
 
-        return DefaultTabController(
-          length: 2,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _buildSuggestedFriends(myFollowing),
-              TabBar(
-                indicatorColor: const Color(0xFFFD1D1D),
-                labelColor: isDark ? Colors.white : Colors.black,
-                unselectedLabelColor: Colors.grey,
-                tabs: const [
-                  Tab(icon: Icon(Icons.grid_on), text: "Trending Posts"),
-                  Tab(icon: Icon(Icons.video_library), text: "Top Reels"),
-                ],
-              ),
-              Expanded(
-                child: TabBarView(
-                  children: [
-                    _buildPostsGrid(myFollowing),
-                    _buildReelsGrid(myFollowing),
-                  ],
+        var myData = mySnapshot.data!.data() as Map<String, dynamic>? ?? {};
+        List myFollowing = myData['following'] ?? [];
+
+        return StreamBuilder<QuerySnapshot>(
+          // 🌟 లైవ్ లో అప్‌డేట్ అవ్వడానికి (Follow నొక్కగానే మారడానికి) StreamBuilder వాడాం
+          stream: FirebaseFirestore.instance
+              .collection('users')
+              .limit(15)
+              .snapshots(),
+          builder: (context, usersSnapshot) {
+            if (!usersSnapshot.hasData) return const SizedBox();
+
+            var users = usersSnapshot.data!.docs
+                .where((doc) => doc.id != currentUid)
+                .toList();
+            if (users.isEmpty) return const SizedBox();
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Padding(
+                  padding: EdgeInsets.only(left: 15, top: 10, bottom: 5),
+                  child: Text(
+                    "Suggested for you",
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
                 ),
-              ),
-            ],
-          ),
+                SizedBox(
+                  height: 160, // 🌟 బటన్ వస్తుంది కాబట్టి కార్డ్ ఎత్తు పెంచాం
+                  child: ListView.builder(
+                    scrollDirection: Axis.horizontal,
+                    physics: const BouncingScrollPhysics(),
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    itemCount: users.length,
+                    itemBuilder: (context, index) {
+                      var userData =
+                          users[index].data() as Map<String, dynamic>;
+                      String targetUid = users[index].id;
+
+                      // 🌟 Mutual ఫ్రెండ్స్ కౌంట్ లాజిక్
+                      List targetFollowers = userData['followers'] ?? [];
+                      int mutualCount = myFollowing
+                          .where((id) => targetFollowers.contains(id))
+                          .length;
+
+                      // 🌟 Follow/Following స్టేటస్ లాజిక్
+                      bool isFollowing = myFollowing.contains(targetUid);
+
+                      return GestureDetector(
+                        onTap: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                OtherUserProfileScreen(userId: targetUid),
+                          ),
+                        ),
+                        child: Container(
+                          width: 120, // 🌟 బటన్ పట్టడానికి వెడల్పు పెంచాం
+                          margin: const EdgeInsets.symmetric(horizontal: 5),
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: isDark ? Colors.grey[900] : Colors.white,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: isDark
+                                  ? Colors.grey.shade800
+                                  : Colors.grey.shade300,
+                            ),
+                          ),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              SafeProfilePic(
+                                base64String: userData['profilePic'] ?? '',
+                                radius: 26,
+                                fallbackText: (userData['username'] ?? 'U')[0]
+                                    .toUpperCase(),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                userData['username'] ?? 'User',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              // 🌟 Mutual ఫ్రండ్స్ ఉంటే ఆ నంబర్ చూపుతుంది, లేకపోతే 'Suggested' అంటుంది
+                              Text(
+                                mutualCount > 0
+                                    ? "$mutualCount mutual friends"
+                                    : "Suggested",
+                                style: const TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 11,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                              const Spacer(),
+                              // 🌟 THE FIX: ఇక్కడే Follow/Following బటన్ వస్తుంది
+                              SizedBox(
+                                width: double.infinity,
+                                height: 28,
+                                child: ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: isFollowing
+                                        ? Colors.grey[300]
+                                        : const Color(0xFF00E5FF),
+                                    padding: EdgeInsets.zero,
+                                    elevation: 0,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                  ),
+                                  onPressed: () async {
+                                    if (isFollowing) {
+                                      // Unfollow లాజిక్
+                                      await FirebaseFirestore.instance
+                                          .collection('users')
+                                          .doc(currentUid)
+                                          .update({
+                                            'following': FieldValue.arrayRemove(
+                                              [targetUid],
+                                            ),
+                                          });
+                                      await FirebaseFirestore.instance
+                                          .collection('users')
+                                          .doc(targetUid)
+                                          .update({
+                                            'followers': FieldValue.arrayRemove(
+                                              [currentUid],
+                                            ),
+                                          });
+                                    } else {
+                                      // Follow లాజిక్
+                                      await FirebaseFirestore.instance
+                                          .collection('users')
+                                          .doc(currentUid)
+                                          .update({
+                                            'following': FieldValue.arrayUnion([
+                                              targetUid,
+                                            ]),
+                                          });
+                                      await FirebaseFirestore.instance
+                                          .collection('users')
+                                          .doc(targetUid)
+                                          .update({
+                                            'followers': FieldValue.arrayUnion([
+                                              currentUid,
+                                            ]),
+                                          });
+                                    }
+                                  },
+                                  child: Text(
+                                    isFollowing ? "Following" : "Follow",
+                                    style: TextStyle(
+                                      color: isFollowing
+                                          ? Colors.black87
+                                          : Colors.black,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 11,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
         );
       },
     );
   }
 
-  Widget _buildSuggestedFriends(List myFollowing) {
-    bool isDark = Theme.of(context).brightness == Brightness.dark;
-
+  // 🌟 3. ఎక్స్‌ప్లోర్ ట్యాబ్స్ (ట్రెండింగ్ పోస్ట్‌లు & రీల్స్ వేరుగా)
+  Widget _buildExploreTabs() {
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('users')
-          .limit(30)
-          .snapshots(),
+      stream: FirebaseFirestore.instance.collection('posts').snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData) return const SizedBox();
+        if (!snapshot.hasData) {
+          return const Center(
+            child: CircularProgressIndicator(color: Color(0xFF00E5FF)),
+          );
+        }
 
-        var suggestedUsers = snapshot.data!.docs
-            .where(
-              (doc) => doc.id != currentUid && !myFollowing.contains(doc.id),
-            )
-            .toList();
+        var allDocs = snapshot.data!.docs.where((doc) {
+          var data = doc.data() as Map<String, dynamic>;
+          return data['isPublic'] ?? true;
+        }).toList();
 
-        if (suggestedUsers.isEmpty) return const SizedBox();
+        var imagePosts = allDocs.where((doc) {
+          var type = (doc.data() as Map<String, dynamic>)['type'] ?? 'image';
+          return type != 'video';
+        }).toList();
 
-        suggestedUsers.sort((a, b) {
-          var aData = a.data() as Map<String, dynamic>;
-          var bData = b.data() as Map<String, dynamic>;
+        var videoReels = allDocs.where((doc) {
+          var type = (doc.data() as Map<String, dynamic>)['type'] ?? 'image';
+          return type == 'video';
+        }).toList();
 
-          List aFollowers = aData['followers'] ?? [];
-          List bFollowers = bData['followers'] ?? [];
+        int sortByLikes(DocumentSnapshot a, DocumentSnapshot b) {
+          var dataA = a.data() as Map<String, dynamic>;
+          var dataB = b.data() as Map<String, dynamic>;
 
-          int aMutuals = aFollowers
-              .where((id) => myFollowing.contains(id))
-              .length;
-          int bMutuals = bFollowers
-              .where((id) => myFollowing.contains(id))
-              .length;
+          int likesA = (dataA['likes'] as List?)?.length ?? 0;
+          int likesB = (dataB['likes'] as List?)?.length ?? 0;
 
-          return bMutuals.compareTo(aMutuals);
-        });
+          if (likesA == likesB) {
+            Timestamp? timeA = dataA['timestamp'] as Timestamp?;
+            Timestamp? timeB = dataB['timestamp'] as Timestamp?;
+            if (timeA != null && timeB != null) return timeB.compareTo(timeA);
+          }
+          return likesB.compareTo(likesA);
+        }
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        imagePosts.sort(sortByLikes);
+        videoReels.sort(sortByLikes);
+
+        return TabBarView(
           children: [
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 15, vertical: 10),
-              child: Text(
-                "Discover People",
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-              ),
-            ),
-            SizedBox(
-              height: 165,
-              child: ListView.builder(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 10),
-                itemCount: suggestedUsers.length > 15
-                    ? 15
-                    : suggestedUsers.length,
-                itemBuilder: (context, index) {
-                  var userData =
-                      suggestedUsers[index].data() as Map<String, dynamic>;
-                  String username = userData['username'] ?? 'User';
-
-                  List userFollowers = userData['followers'] ?? [];
-                  int mutualCount = userFollowers
-                      .where((id) => myFollowing.contains(id))
-                      .length;
-
-                  return GestureDetector(
-                    onTap: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => OtherUserProfileScreen(
-                          userId: suggestedUsers[index].id,
-                        ),
-                      ),
-                    ),
-                    child: Container(
-                      width: 120,
-                      margin: const EdgeInsets.symmetric(horizontal: 5),
-                      decoration: BoxDecoration(
-                        color: isDark ? Colors.grey[900] : Colors.grey[100],
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: Colors.grey.withValues(alpha: 0.2),
-                        ),
-                      ),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          SafeProfilePic(
-                            base64String: userData['profilePic'],
-                            radius: 35,
-                            fallbackText: username.isNotEmpty
-                                ? username[0]
-                                : 'U',
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            username,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontWeight: FontWeight.bold),
-                          ),
-                          Text(
-                            mutualCount > 0
-                                ? "$mutualCount mutuals"
-                                : "New User",
-                            style: TextStyle(
-                              color: Colors.grey.shade500,
-                              fontSize: 10,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 15,
-                              vertical: 5,
-                            ),
-                            decoration: BoxDecoration(
-                              color: Colors.blue,
-                              borderRadius: BorderRadius.circular(5),
-                            ),
-                            child: const Text(
-                              "View",
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-            const SizedBox(height: 10),
+            _buildGrid(imagePosts, isReelTab: false),
+            _buildGrid(videoReels, isReelTab: true),
           ],
         );
       },
     );
   }
 
-  // ----------------------------------------------------
-  // 📸 POSTS GRID (🌟 Sorted by Likes)
-  // ----------------------------------------------------
-  Widget _buildPostsGrid(List myFollowing) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('posts')
-          .where('type', isEqualTo: 'image')
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
+  // 🌟 4. గ్రిడ్ డిజైన్ (ఇక్కడ రెడ్ హార్ట్ & లైక్స్ కౌంట్ వస్తుంది)
+  Widget _buildGrid(List<DocumentSnapshot> items, {required bool isReelTab}) {
+    if (items.isEmpty) {
+      return Center(
+        child: Text(
+          isReelTab ? "No trending reels yet." : "No trending posts yet.",
+          style: const TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+
+    return GridView.builder(
+      physics: const BouncingScrollPhysics(),
+      padding: const EdgeInsets.all(2),
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: isReelTab ? 2 : 3,
+        crossAxisSpacing: 2,
+        mainAxisSpacing: 2,
+        childAspectRatio: isReelTab ? 9 / 16 : 1,
+      ),
+      itemCount: items.length,
+      itemBuilder: (context, index) {
+        var data = items[index].data() as Map<String, dynamic>;
+        String id = items[index].id;
+        String type = data['type'] ?? 'image';
+        int likesCount = (data['likes'] as List?)?.length ?? 0;
+
+        String mediaUrl = "";
+        if (data['postData'] is List && (data['postData'] as List).isNotEmpty) {
+          mediaUrl = data['postData'][0].toString();
+        } else if (data['storyUrl'] != null) {
+          mediaUrl = data['storyUrl'].toString();
         }
 
-        var posts = snapshot.data!.docs.where((doc) {
-          var data = doc.data() as Map<String, dynamic>;
-          bool isPublic = data['isPublic'] ?? true;
-          String ownerId = data['ownerId'];
-          return isPublic || myFollowing.contains(ownerId);
-        }).toList();
-
-        posts.sort((a, b) {
-          var aData = a.data() as Map<String, dynamic>;
-          var bData = b.data() as Map<String, dynamic>;
-          int aLikes = (aData['likes'] as List?)?.length ?? 0;
-          int bLikes = (bData['likes'] as List?)?.length ?? 0;
-          return bLikes.compareTo(aLikes);
-        });
-
-        List<String> postIds = posts.map((p) => p.id).toList();
-
-        if (posts.isEmpty) {
-          return const Center(
-            child: Text(
-              "No trending posts.",
-              style: TextStyle(color: Colors.grey),
-            ),
-          );
-        }
-
-        return GridView.builder(
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.only(top: 2),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            crossAxisSpacing: 2,
-            mainAxisSpacing: 2,
-            childAspectRatio: 1,
-          ),
-          itemCount: posts.length,
-          itemBuilder: (context, index) {
-            var data = posts[index].data() as Map<String, dynamic>;
-            String thumbnail =
-                (data['postData'] is List &&
-                    (data['postData'] as List).isNotEmpty)
-                ? data['postData'][0].toString()
-                : data['postData']?.toString() ?? "";
-
-            int likesCount = (data['likes'] as List?)?.length ?? 0;
-
-            return GestureDetector(
-              onTap: () => Navigator.push(
+        return GestureDetector(
+          onTap: () {
+            if (isReelTab) {
+              Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) => ScrollingPostsScreen(
-                    postIds: postIds,
-                    initialIndex: index,
-                  ),
+                  builder: (_) =>
+                      ScrollingReelsScreen(reelIds: [id], initialIndex: 0),
                 ),
-              ),
-              child: ClipRRect(
-                clipBehavior: Clip.antiAlias,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    Positioned.fill(
-                      child: thumbnail.startsWith('http')
-                          ? CachedMediaWidget(
-                              mediaUrl: thumbnail,
-                              type: 'image',
-                              isGrid: true, // 🌟 NEW: Safe loading
-                            )
-                          : SafeImage(
-                              base64String: thumbnail,
-                              fit: BoxFit.cover,
-                            ),
-                    ),
-                    Positioned(
-                      bottom: 5,
-                      left: 5,
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.favorite,
-                            color: Colors.white,
-                            size: 12,
-                          ),
-                          const SizedBox(width: 3),
-                          Text(
-                            "$likesCount",
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (data['postData'] is List &&
-                        (data['postData'] as List).length > 1)
-                      const Positioned(
-                        top: 5,
-                        right: 5,
-                        child: Icon(
-                          Icons.filter_none,
-                          color: Colors.white,
-                          size: 16,
-                        ),
-                      ),
-                  ],
+              );
+            } else {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) =>
+                      ScrollingPostsScreen(postIds: [id], initialIndex: 0),
                 ),
-              ),
-            );
+              );
+            }
           },
-        );
-      },
-    );
-  }
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              CachedMediaWidget(mediaUrl: mediaUrl, type: type, isGrid: true),
 
-  // ----------------------------------------------------
-  // 🎬 REELS GRID (🌟 Sorted by Likes)
-  // ----------------------------------------------------
-  Widget _buildReelsGrid(List myFollowing) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('posts')
-          .where('type', isEqualTo: 'video')
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData) {
-          return const Center(child: CircularProgressIndicator());
-        }
-
-        var reels = snapshot.data!.docs.where((doc) {
-          var data = doc.data() as Map<String, dynamic>;
-          bool isPublic = data['isPublic'] ?? true;
-          String ownerId = data['ownerId'];
-          return isPublic || myFollowing.contains(ownerId);
-        }).toList();
-
-        reels.sort((a, b) {
-          var aData = a.data() as Map<String, dynamic>;
-          var bData = b.data() as Map<String, dynamic>;
-          int aLikes = (aData['likes'] as List?)?.length ?? 0;
-          int bLikes = (bData['likes'] as List?)?.length ?? 0;
-          return bLikes.compareTo(aLikes);
-        });
-
-        List<String> reelIds = reels.map((r) => r.id).toList();
-
-        if (reels.isEmpty) {
-          return const Center(
-            child: Text(
-              "No trending reels.",
-              style: TextStyle(color: Colors.grey),
-            ),
-          );
-        }
-
-        return GridView.builder(
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.only(top: 2),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-            crossAxisCount: 3,
-            crossAxisSpacing: 2,
-            mainAxisSpacing: 2,
-            childAspectRatio: 0.65,
-          ),
-          itemCount: reels.length,
-          itemBuilder: (context, index) {
-            var data = reels[index].data() as Map<String, dynamic>;
-            String videoUrl =
-                (data['postData'] is List &&
-                    (data['postData'] as List).isNotEmpty)
-                ? data['postData'][0].toString()
-                : (data['storyUrl'] ?? "");
-
-            int likesCount = (data['likes'] as List?)?.length ?? 0;
-
-            return GestureDetector(
-              onTap: () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => ScrollingReelsScreen(
-                    reelIds: reelIds,
-                    initialIndex: index,
+              // గ్రేడియంట్ షాడో (లైక్స్ కౌంట్ క్లియర్ గా కనిపించడానికి)
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                height: 30,
+                child: Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [Colors.transparent, Colors.black87],
+                    ),
                   ),
                 ),
               ),
-              child: ClipRRect(
-                clipBehavior: Clip.antiAlias,
-                child: Stack(
-                  fit: StackFit.expand,
+
+              // 🌟 రెడ్ హార్ట్ మరియు లైక్స్ కౌంట్
+              Positioned(
+                bottom: 5,
+                left: 8,
+                child: Row(
                   children: [
-                    Positioned.fill(
-                      child: CachedMediaWidget(
-                        mediaUrl: videoUrl,
-                        type: 'video',
-                        isGrid: true, // 🌟 NEW: Prevents media codec crash
-                      ),
+                    const Icon(
+                      Icons.favorite,
+                      color: Colors.redAccent,
+                      size: 14,
                     ),
-                    Positioned(
-                      bottom: 5,
-                      left: 5,
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.favorite,
-                            color: Colors.white,
-                            size: 12,
-                          ),
-                          const SizedBox(width: 3),
-                          Text(
-                            "$likesCount",
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Positioned(
-                      top: 5,
-                      right: 5,
-                      child: Icon(
-                        Icons.play_arrow_rounded,
+                    const SizedBox(width: 4),
+                    Text(
+                      "$likesCount",
+                      style: const TextStyle(
                         color: Colors.white,
-                        size: 24,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
                       ),
                     ),
                   ],
                 ),
               ),
-            );
-          },
+
+              // కలెక్షన్ ఐకాన్ (మల్టిపుల్ ఇమేజెస్ ఉంటే)
+              if (!isReelTab &&
+                  data['postData'] is List &&
+                  (data['postData'] as List).length > 1)
+                const Positioned(
+                  top: 5,
+                  right: 5,
+                  child: Icon(Icons.collections, color: Colors.white, size: 18),
+                ),
+            ],
+          ),
         );
       },
     );

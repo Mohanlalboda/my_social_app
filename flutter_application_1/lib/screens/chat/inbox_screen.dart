@@ -4,10 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:timeago/timeago.dart' as timeago;
+import 'package:marquee/marquee.dart'; // 🌟 THE FIX: స్క్రోలింగ్ టెక్స్ట్ కోసం
 
 import '../../widgets/safe_elements.dart';
 import 'chat_screen.dart';
-import '../community/community_list_screen.dart'; // 🌟 మన కొత్త కమ్యూనిటీ స్క్రీన్ ఇంపోర్ట్
+import '../community/community_list_screen.dart';
 
 class InboxScreen extends StatefulWidget {
   const InboxScreen({super.key});
@@ -151,7 +152,7 @@ class _InboxScreenState extends State<InboxScreen> {
         title: const Text("Share a thought..."),
         content: TextField(
           controller: noteController,
-          maxLength: 60,
+          maxLength: 100,
           decoration: InputDecoration(
             hintText: "What's on your mind?",
             hintStyle: const TextStyle(color: Colors.grey),
@@ -246,8 +247,11 @@ class _InboxScreenState extends State<InboxScreen> {
           );
         }
 
+        String myNoteText = hasMyNote ? myNoteData!['text'] : "Note...";
+
         return Container(
-          height: 135,
+          // 🌟 THE FIX: Overflow ఎర్రర్ రాకుండా హైట్ 145 నుండి 155 కి పెంచాను
+          height: 155,
           padding: const EdgeInsets.only(top: 25, bottom: 5),
           child: ListView(
             scrollDirection: Axis.horizontal,
@@ -278,11 +282,14 @@ class _InboxScreenState extends State<InboxScreen> {
                           Positioned(
                             top: -18,
                             child: Container(
+                              constraints: const BoxConstraints(
+                                maxHeight: 60,
+                                maxWidth: 100,
+                              ),
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
+                                horizontal: 10,
                                 vertical: 6,
                               ),
-                              constraints: const BoxConstraints(maxWidth: 90),
                               decoration: BoxDecoration(
                                 color: isDark ? Colors.grey[800] : Colors.white,
                                 borderRadius: BorderRadius.circular(15),
@@ -293,45 +300,69 @@ class _InboxScreenState extends State<InboxScreen> {
                                   ),
                                 ],
                               ),
-                              child: Text(
-                                hasMyNote ? myNoteData!['text'] : "Note...",
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: hasMyNote
-                                      ? FontWeight.bold
-                                      : FontWeight.normal,
-                                  color: hasMyNote
-                                      ? (isDark ? Colors.white : Colors.black)
-                                      : Colors.grey,
-                                ),
-                              ),
+                              // 🌟 THE FIX: టెక్స్ట్ పెద్దగా ఉంటే Marquee (స్క్రోలింగ్), చిన్నగా ఉంటే నార్మల్ టెక్స్ట్
+                              child: myNoteText.length > 12
+                                  ? SizedBox(
+                                      width: 80,
+                                      height: 16,
+                                      child: Marquee(
+                                        text: myNoteText,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          fontWeight: hasMyNote
+                                              ? FontWeight.bold
+                                              : FontWeight.normal,
+                                          color: hasMyNote
+                                              ? (isDark
+                                                    ? Colors.white
+                                                    : Colors.black)
+                                              : Colors.grey,
+                                        ),
+                                        scrollAxis: Axis.horizontal,
+                                        blankSpace: 20.0,
+                                        velocity: 30.0, // స్క్రోల్ అయ్యే స్పీడ్
+                                      ),
+                                    )
+                                  : Text(
+                                      myNoteText,
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: hasMyNote
+                                            ? FontWeight.bold
+                                            : FontWeight.normal,
+                                        color: hasMyNote
+                                            ? (isDark
+                                                  ? Colors.white
+                                                  : Colors.black)
+                                            : Colors.grey,
+                                      ),
+                                    ),
                             ),
                           ),
-                          if (!hasMyNote)
-                            Positioned(
-                              bottom: 0,
-                              right: 0,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: Colors.blue,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
-                                    color: isDark ? Colors.black : Colors.white,
-                                    width: 2,
-                                  ),
-                                ),
-                                padding: const EdgeInsets.all(2),
-                                child: const Icon(
-                                  Icons.add,
-                                  color: Colors.white,
-                                  size: 14,
-                                ),
-                              ),
-                            ),
                         ],
                       ),
+                      if (!hasMyNote)
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.blue,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: isDark ? Colors.black : Colors.white,
+                                width: 2,
+                              ),
+                            ),
+                            padding: const EdgeInsets.all(2),
+                            child: const Icon(
+                              Icons.add,
+                              color: Colors.white,
+                              size: 14,
+                            ),
+                          ),
+                        ),
                       const SizedBox(height: 8),
                       Text(
                         "Your note",
@@ -348,69 +379,130 @@ class _InboxScreenState extends State<InboxScreen> {
               // 2. Friends' Notes
               ...allNotes.map((doc) {
                 var noteData = doc.data() as Map<String, dynamic>;
+                String friendId = noteData['uid'];
                 String friendName = noteData['username'] ?? 'User';
-                return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Column(
-                    children: [
-                      Stack(
-                        clipBehavior: Clip.none,
-                        alignment: Alignment.topCenter,
+                String friendNoteText = noteData['text'];
+
+                return FutureBuilder<DocumentSnapshot>(
+                  future: FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(friendId)
+                      .get(),
+                  builder: (context, userSnap) {
+                    bool isOnline = false;
+                    if (userSnap.hasData && userSnap.data!.exists) {
+                      isOnline =
+                          (userSnap.data!.data()
+                              as Map<String, dynamic>)['isOnline'] ??
+                          false;
+                    }
+
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Column(
                         children: [
-                          SafeProfilePic(
-                            base64String: noteData['profilePic'] ?? '',
-                            radius: 35,
-                            fallbackText: friendName.isNotEmpty
-                                ? friendName[0].toUpperCase()
-                                : 'U',
-                          ),
-                          Positioned(
-                            top: -18,
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 6,
+                          Stack(
+                            clipBehavior: Clip.none,
+                            alignment: Alignment.topCenter,
+                            children: [
+                              SafeProfilePic(
+                                base64String: noteData['profilePic'] ?? '',
+                                radius: 35,
+                                fallbackText: friendName.isNotEmpty
+                                    ? friendName[0].toUpperCase()
+                                    : 'U',
                               ),
-                              constraints: const BoxConstraints(maxWidth: 90),
-                              decoration: BoxDecoration(
-                                color: isDark ? Colors.grey[800] : Colors.white,
-                                borderRadius: BorderRadius.circular(15),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.black.withValues(alpha: 0.1),
-                                    blurRadius: 4,
+                              Positioned(
+                                bottom: 0,
+                                right: 0,
+                                child: Container(
+                                  width: 16,
+                                  height: 16,
+                                  decoration: BoxDecoration(
+                                    color: isOnline ? Colors.green : Colors.red,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: isDark
+                                          ? Colors.black
+                                          : Colors.white,
+                                      width: 2,
+                                    ),
                                   ),
-                                ],
-                              ),
-                              child: Text(
-                                noteData['text'],
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
                                 ),
+                              ),
+                              Positioned(
+                                top: -18,
+                                child: Container(
+                                  constraints: const BoxConstraints(
+                                    maxHeight: 60,
+                                    maxWidth: 100,
+                                  ),
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 10,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: isDark
+                                        ? Colors.grey[800]
+                                        : Colors.white,
+                                    borderRadius: BorderRadius.circular(15),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withValues(
+                                          alpha: 0.1,
+                                        ),
+                                        blurRadius: 4,
+                                      ),
+                                    ],
+                                  ),
+                                  // 🌟 THE FIX: ఫ్రెండ్స్ టెక్స్ట్ పెద్దగా ఉంటే Marquee (స్క్రోలింగ్)
+                                  child: friendNoteText.length > 12
+                                      ? SizedBox(
+                                          width: 80,
+                                          height: 16,
+                                          child: Marquee(
+                                            text: friendNoteText,
+                                            style: const TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                            scrollAxis: Axis.horizontal,
+                                            blankSpace: 20.0,
+                                            velocity: 30.0,
+                                          ),
+                                        )
+                                      : Text(
+                                          friendNoteText,
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          SizedBox(
+                            width: 70,
+                            child: Text(
+                              friendName,
+                              textAlign: TextAlign.center,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: isDark
+                                    ? Colors.white54
+                                    : Colors.grey[600],
                               ),
                             ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        width: 70,
-                        child: Text(
-                          friendName,
-                          textAlign: TextAlign.center,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: isDark ? Colors.white54 : Colors.grey[600],
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                    );
+                  },
                 );
               }),
             ],
@@ -465,33 +557,49 @@ class _InboxScreenState extends State<InboxScreen> {
                     .doc(currentUid)
                     .get(),
                 builder: (context, userSnap) {
-                  if (!userSnap.hasData) {
+                  if (!userSnap.hasData)
                     return const Center(child: CircularProgressIndicator());
-                  }
                   var myData =
                       userSnap.data!.data() as Map<String, dynamic>? ?? {};
                   List myFollowing = List.from(myData['following'] ?? []);
 
-                  return Column(
-                    children: [
-                      _buildNotesSection(myFollowing, myData),
-                      const Divider(height: 1),
-                      Expanded(
-                        child: StreamBuilder<QuerySnapshot>(
+                  return RefreshIndicator(
+                    color: const Color(0xFFFD1D1D),
+                    onRefresh: () async {
+                      setState(() {});
+                      await Future.delayed(const Duration(seconds: 1));
+                    },
+                    child: ListView(
+                      physics: const AlwaysScrollableScrollPhysics(
+                        parent: BouncingScrollPhysics(),
+                      ),
+                      children: [
+                        _buildNotesSection(myFollowing, myData),
+                        const Divider(height: 1),
+
+                        StreamBuilder<QuerySnapshot>(
                           stream: FirebaseFirestore.instance
                               .collection('chatRooms')
                               .where('users', arrayContains: currentUid)
                               .snapshots(),
                           builder: (context, snapshot) {
-                            if (snapshot.hasError)
-                              return const Center(
-                                child: Text("Error loading chats"),
+                            if (snapshot.hasError) {
+                              return const SizedBox(
+                                height: 300,
+                                child: Center(
+                                  child: Text("Error loading chats"),
+                                ),
                               );
+                            }
                             if (snapshot.connectionState ==
-                                ConnectionState.waiting)
-                              return const Center(
-                                child: CircularProgressIndicator(),
+                                ConnectionState.waiting) {
+                              return const SizedBox(
+                                height: 300,
+                                child: Center(
+                                  child: CircularProgressIndicator(),
+                                ),
                               );
+                            }
 
                             var visibleChatRooms = snapshot.data!.docs.where((
                               room,
@@ -503,12 +611,15 @@ class _InboxScreenState extends State<InboxScreen> {
                             }).toList();
 
                             if (visibleChatRooms.isEmpty) {
-                              return const Center(
-                                child: Text(
-                                  "No chats yet. Start a conversation! 💬",
-                                  style: TextStyle(
-                                    color: Colors.grey,
-                                    fontSize: 16,
+                              return const SizedBox(
+                                height: 300,
+                                child: Center(
+                                  child: Text(
+                                    "No chats yet. Start a conversation! 💬",
+                                    style: TextStyle(
+                                      color: Colors.grey,
+                                      fontSize: 16,
+                                    ),
                                   ),
                                 ),
                               );
@@ -526,6 +637,8 @@ class _InboxScreenState extends State<InboxScreen> {
                             });
 
                             return ListView.builder(
+                              shrinkWrap: true,
+                              physics: const NeverScrollableScrollPhysics(),
                               itemCount: visibleChatRooms.length,
                               itemBuilder: (context, index) {
                                 var roomData =
@@ -543,7 +656,6 @@ class _InboxScreenState extends State<InboxScreen> {
                                 int unreadCount =
                                     roomData['unread_$currentUid'] ?? 0;
                                 bool hasUnread = unreadCount > 0;
-                                String lastMsg = roomData['lastMessage'] ?? '';
                                 DateTime time =
                                     (roomData['timestamp'] as Timestamp?)
                                         ?.toDate() ??
@@ -573,13 +685,14 @@ class _InboxScreenState extends State<InboxScreen> {
                                         .get(),
                                     builder: (context, userSnap) {
                                       if (userSnap.connectionState ==
-                                          ConnectionState.waiting)
+                                          ConnectionState.waiting) {
                                         return const ListTile(
                                           leading: CircleAvatar(
                                             backgroundColor: Colors.grey,
                                             radius: 25,
                                           ),
                                         );
+                                      }
                                       if (!userSnap.hasData ||
                                           !userSnap.data!.exists)
                                         return const SizedBox();
@@ -604,25 +717,26 @@ class _InboxScreenState extends State<InboxScreen> {
                                                   ? name[0].toUpperCase()
                                                   : 'U',
                                             ),
-                                            if (isOnline)
-                                              Positioned(
-                                                bottom: 0,
-                                                right: 0,
-                                                child: Container(
-                                                  width: 14,
-                                                  height: 14,
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.green,
-                                                    shape: BoxShape.circle,
-                                                    border: Border.all(
-                                                      color: isDark
-                                                          ? Colors.black
-                                                          : Colors.white,
-                                                      width: 2,
-                                                    ),
+                                            Positioned(
+                                              bottom: 0,
+                                              right: 0,
+                                              child: Container(
+                                                width: 14,
+                                                height: 14,
+                                                decoration: BoxDecoration(
+                                                  color: isOnline
+                                                      ? Colors.green
+                                                      : Colors.red,
+                                                  shape: BoxShape.circle,
+                                                  border: Border.all(
+                                                    color: isDark
+                                                        ? Colors.black
+                                                        : Colors.white,
+                                                    width: 2,
                                                   ),
                                                 ),
                                               ),
+                                            ),
                                           ],
                                         ),
                                         title: Text(
@@ -636,30 +750,20 @@ class _InboxScreenState extends State<InboxScreen> {
                                                 : Colors.black,
                                           ),
                                         ),
-                                        subtitle: Text(
-                                          roomData['typing_$otherUserId'] ==
-                                                  true
-                                              ? "typing..."
-                                              : lastMsg,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: TextStyle(
-                                            color:
-                                                roomData['typing_$otherUserId'] ==
-                                                    true
-                                                ? Colors.green
-                                                : (hasUnread
-                                                      ? (isDark
-                                                            ? Colors.white
-                                                            : Colors.black)
-                                                      : Colors.grey),
-                                            fontStyle:
-                                                roomData['typing_$otherUserId'] ==
-                                                    true
-                                                ? FontStyle.italic
-                                                : FontStyle.normal,
-                                          ),
-                                        ),
+                                        // 🌟 THE FIX: లాస్ట్ మెసేజ్ తీసేసి, కేవలం టైపింగ్ మాత్రమే ఉంచాను.
+                                        subtitle:
+                                            roomData['typing_$otherUserId'] ==
+                                                true
+                                            ? const Text(
+                                                "typing...",
+                                                maxLines: 1,
+                                                style: TextStyle(
+                                                  color: Colors.green,
+                                                  fontStyle: FontStyle.italic,
+                                                  fontWeight: FontWeight.bold,
+                                                ),
+                                              )
+                                            : null, // ఇక్కడ null ఇస్తే కింద ఏమీ కనిపించదు
                                         trailing: Column(
                                           mainAxisAlignment:
                                               MainAxisAlignment.center,
@@ -730,14 +834,14 @@ class _InboxScreenState extends State<InboxScreen> {
                             );
                           },
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   );
                 },
               ),
             ),
 
-            // 🌟 2. COMMUNITIES TAB (ఇక్కడ మన కొత్త స్క్రీన్ పెట్టేశాం)
+            // 🌟 2. COMMUNITIES TAB
             const CommunityListScreen(),
 
             // 🌟 3. CALLS TAB

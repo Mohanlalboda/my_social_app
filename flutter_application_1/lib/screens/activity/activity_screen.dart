@@ -262,26 +262,27 @@ class _ActivityScreenState extends State<ActivityScreen> {
           return t2.compareTo(t1);
         });
 
+        // 🌟 FINAL TOUCH 2: Beautiful Empty State for General Notifications
         if (notifications.isEmpty) {
           return Center(
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(
-                  Icons.favorite_border,
-                  size: 80,
-                  color: Colors.grey.shade400,
+                  Icons.notifications_off_outlined,
+                  size: 100,
+                  color: isDark ? Colors.grey.shade800 : Colors.grey.shade300,
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  "No notifications yet! 📭",
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 10),
-                const Text(
-                  "No Activity Yet",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 5),
-                const Text(
-                  "When someone likes or comments on\nyour posts, it will appear here.",
+                Text(
+                  "When someone likes or comments\non your posts, it will appear here.",
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey),
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
                 ),
               ],
             ),
@@ -486,6 +487,7 @@ class _ActivityScreenState extends State<ActivityScreen> {
           return t2.compareTo(t1);
         });
 
+        // 🌟 FINAL TOUCH 2: Beautiful Empty State for Tags
         if (taggedPosts.isEmpty) {
           return Center(
             child: Column(
@@ -493,19 +495,19 @@ class _ActivityScreenState extends State<ActivityScreen> {
               children: [
                 Icon(
                   Icons.person_pin_circle_outlined,
-                  size: 80,
-                  color: Colors.grey.shade400,
+                  size: 100,
+                  color: isDark ? Colors.grey.shade800 : Colors.grey.shade300,
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  "No Tags Yet 🏷️",
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 10),
-                const Text(
-                  "No Tags Yet",
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 5),
-                const Text(
+                Text(
                   "When someone tags you in a post or reel,\nit will appear here.",
                   textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.grey),
+                  style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
                 ),
               ],
             ),

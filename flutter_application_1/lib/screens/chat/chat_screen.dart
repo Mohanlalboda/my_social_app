@@ -44,6 +44,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   final ValueNotifier<bool> _isTypingNotifier = ValueNotifier(false);
   Timer? _typingTimer;
+  bool _isCurrentlyTypingInFirebase = false;
 
   bool _isUploading = false;
   bool _isVanishMode = false;
@@ -105,9 +106,13 @@ class _ChatScreenState extends State<ChatScreen> {
         .snapshots()
         .listen((snap) {
           if (snap.exists && mounted) {
-            setState(
-              () => _isVanishMode = snap.data()?['isVanishMode'] ?? false,
-            );
+            bool newVanishMode = snap.data()?['isVanishMode'] ?? false;
+            // 🌟 THE FIX: నిజంగా Vanish Mode ఆన్/ఆఫ్ అయితేనే స్క్రీన్ రీలోడ్ చేయాలి (దీనివల్లే బ్లింకింగ్ ఆగిపోతుంది)
+            if (_isVanishMode != newVanishMode) {
+              setState(() {
+                _isVanishMode = newVanishMode;
+              });
+            }
           }
         });
   }
@@ -125,21 +130,37 @@ class _ChatScreenState extends State<ChatScreen> {
     _msgController.dispose();
     _typingTimer?.cancel();
     _isTypingNotifier.dispose();
+
+    if (_isCurrentlyTypingInFirebase) {
+      FirebaseFirestore.instance.collection('chatRooms').doc(roomId).set({
+        'typing_$currentUid': false,
+      }, SetOptions(merge: true));
+    }
+
     super.dispose();
   }
 
   void _onTyping(String val) {
     bool hasText = val.trim().isNotEmpty;
+
     if (_isTypingNotifier.value != hasText) {
       _isTypingNotifier.value = hasText;
+    }
+
+    if (hasText && !_isCurrentlyTypingInFirebase) {
+      _isCurrentlyTypingInFirebase = true;
       FirebaseFirestore.instance.collection('chatRooms').doc(roomId).set({
-        'typing_$currentUid': hasText,
+        'typing_$currentUid': true,
       }, SetOptions(merge: true));
     }
 
     if (_typingTimer?.isActive ?? false) _typingTimer!.cancel();
-    _typingTimer = Timer(const Duration(seconds: 3), () {
-      if (mounted) {
+
+    _typingTimer = Timer(const Duration(milliseconds: 1500), () {
+      if (mounted &&
+          _isCurrentlyTypingInFirebase &&
+          _msgController.text.trim().isEmpty) {
+        _isCurrentlyTypingInFirebase = false;
         FirebaseFirestore.instance.collection('chatRooms').doc(roomId).set({
           'typing_$currentUid': false,
         }, SetOptions(merge: true));
@@ -205,36 +226,41 @@ class _ChatScreenState extends State<ChatScreen> {
     _msgController.clear();
 
     _isTypingNotifier.value = false;
+    _isCurrentlyTypingInFirebase = false;
 
+    if (_typingTimer?.isActive ?? false) _typingTimer!.cancel();
     var timestamp = FieldValue.serverTimestamp();
-    FirebaseFirestore.instance.collection('chatRooms').doc(roomId).set({
-      'typing_$currentUid': false,
-    }, SetOptions(merge: true));
 
-    await FirebaseFirestore.instance
+    WriteBatch batch = FirebaseFirestore.instance.batch();
+
+    DocumentReference roomRef = FirebaseFirestore.instance
         .collection('chatRooms')
-        .doc(roomId)
-        .collection('messages')
-        .add({
-          'senderId': currentUid,
-          'receiverId': widget.receiverId,
-          'text': msg,
-          'type': 'text',
-          'isRead': false,
-          'isVanish': _isVanishMode,
-          'timestamp': timestamp,
-          'isEdited': false,
-          'isDeleted': false,
-          'deletedBy': [],
-        });
+        .doc(roomId);
+    DocumentReference newMsgRef = roomRef.collection('messages').doc();
 
-    await FirebaseFirestore.instance.collection('chatRooms').doc(roomId).set({
+    batch.set(roomRef, {
       'users': [currentUid, widget.receiverId],
       'lastMessage': _isVanishMode ? "🤫 Secret Message" : msg,
       'timestamp': timestamp,
       'unread_${widget.receiverId}': FieldValue.increment(1),
       'deletedBy': [],
+      'typing_$currentUid': false,
     }, SetOptions(merge: true));
+
+    batch.set(newMsgRef, {
+      'senderId': currentUid,
+      'receiverId': widget.receiverId,
+      'text': msg,
+      'type': 'text',
+      'isRead': false,
+      'isVanish': _isVanishMode,
+      'timestamp': timestamp,
+      'isEdited': false,
+      'isDeleted': false,
+      'deletedBy': [],
+    });
+
+    await batch.commit();
 
     _sendPushNotification(_isVanishMode ? "🤫 Sent a secret message" : msg);
   }
@@ -749,7 +775,9 @@ class _ChatScreenState extends State<ChatScreen> {
                   .orderBy('timestamp', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting)
+                // 🌟 THE FIX 2: డేటా లేనప్పుడే లోడింగ్ చూపించాలి, అప్డేట్ అయిన ప్రతిసారి కాదు
+                if (snapshot.connectionState == ConnectionState.waiting &&
+                    !snapshot.hasData)
                   return const Center(child: CircularProgressIndicator());
 
                 if (snapshot.hasData) {
@@ -1076,8 +1104,6 @@ class _ChatScreenState extends State<ChatScreen> {
                     ),
                   ),
                   const SizedBox(width: 8),
-
-                  // 🌟 ValueNotifier తో బ్లింకింగ్ ఆగిపోయింది + యానిమేటెడ్ మైక్
                   ValueListenableBuilder<bool>(
                     valueListenable: _isTypingNotifier,
                     builder: (context, isTypingNow, child) {

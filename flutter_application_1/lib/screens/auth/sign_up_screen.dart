@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
+import '../../utils/constants.dart';
 
 class SignUpScreen extends StatefulWidget {
   const SignUpScreen({super.key});
@@ -12,24 +13,17 @@ class SignUpScreen extends StatefulWidget {
 class _SignUpScreenState extends State<SignUpScreen> {
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _phoneController =
+      TextEditingController(); // 🌟 మొబైల్ నంబర్ కోసం
   final TextEditingController _passwordController = TextEditingController();
   bool _isLoading = false;
-
-  final LinearGradient brandGradient = const LinearGradient(
-    colors: [
-      Color(0xFF833AB4),
-      Color(0xFFFD1D1D),
-      Color(0xFFF56040),
-      Color(0xFFFFDC80),
-    ],
-    begin: Alignment.topLeft,
-    end: Alignment.bottomRight,
-  );
 
   Future<void> _signUp() async {
     if (_emailController.text.isEmpty ||
         _passwordController.text.isEmpty ||
-        _usernameController.text.isEmpty) {
+        _usernameController.text.isEmpty ||
+        _phoneController.text.isEmpty) {
+      // 🌟 వాలిడేషన్ అప్‌డేట్
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Please fill all fields! ⚠️")),
       );
@@ -50,6 +44,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
             'uid': userCred.user!.uid,
             'username': _usernameController.text.trim(),
             'email': _emailController.text.trim(),
+            'phone': _phoneController.text
+                .trim(), // 🌟 డేటాబేస్ లో ఫోన్ నంబర్ సేవ్
             'profilePic': '',
             'followers': [],
             'following': [],
@@ -123,9 +119,32 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   ),
                   const SizedBox(height: 15),
 
+                  // 🌟 Phone Field
+                  TextField(
+                    controller: _phoneController,
+                    keyboardType: TextInputType.phone,
+                    style: TextStyle(color: textColor),
+                    decoration: InputDecoration(
+                      hintText: "Mobile Number",
+                      hintStyle: const TextStyle(color: Colors.grey),
+                      filled: true,
+                      fillColor: isDark ? Colors.grey[900] : Colors.grey[100],
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(15),
+                        borderSide: BorderSide.none,
+                      ),
+                      prefixIcon: const Icon(
+                        Icons.phone_outlined,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 15),
+
                   // Email Field
                   TextField(
                     controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
                     style: TextStyle(color: textColor),
                     decoration: InputDecoration(
                       hintText: "Email",
@@ -166,7 +185,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                   ),
                   const SizedBox(height: 30),
 
-                  // 🌟 మ్యాజిక్: బ్రాండ్ గ్రేడియంట్ సైన్ అప్ బటన్
                   GestureDetector(
                     onTap: _isLoading ? null : _signUp,
                     child: Container(

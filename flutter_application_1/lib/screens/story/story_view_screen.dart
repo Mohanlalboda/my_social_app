@@ -26,13 +26,13 @@ class StoryViewScreen extends StatefulWidget {
 class _StoryViewScreenState extends State<StoryViewScreen> {
   late int currentUserIndex;
   int currentStoryIndex = 0;
-
   List<Map<String, dynamic>> currentStoryItems = [];
 
   Timer? _timer;
   double _percent = 0.0;
   bool _isPaused = false;
   final String currentUid = FirebaseAuth.instance.currentUser!.uid;
+  bool _isLoading = true;
 
   @override
   void initState() {
@@ -43,10 +43,12 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
 
   void _loadUserStories() async {
     String userId = widget.usersWithStories[currentUserIndex]['uid'];
+
     var snap = await FirebaseFirestore.instance
         .collection('stories')
         .where('uid', isEqualTo: userId)
-        .orderBy('timestamp', descending: false)
+        .where('expiresAt', isGreaterThan: Timestamp.now())
+        .orderBy('expiresAt')
         .get();
 
     if (mounted) {
@@ -59,9 +61,15 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
 
         currentStoryIndex = 0;
         _percent = 0.0;
+        _isLoading = false;
       });
-      _startTimer();
-      _markAsSeen();
+
+      if (currentStoryItems.isNotEmpty) {
+        _startTimer();
+        _markAsSeen();
+      } else {
+        _nextUser();
+      }
     }
   }
 
@@ -106,6 +114,7 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
       setState(() {
         currentUserIndex++;
         currentStoryItems = [];
+        _isLoading = true;
       });
       _loadUserStories();
     } else {
@@ -124,8 +133,11 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
       setState(() {
         currentUserIndex--;
         currentStoryItems = [];
+        _isLoading = true;
       });
       _loadUserStories();
+    } else {
+      Navigator.pop(context);
     }
   }
 
@@ -135,6 +147,39 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
     FirebaseFirestore.instance.collection('stories').doc(storyId).update({
       'viewers': FieldValue.arrayUnion([currentUid]),
     });
+  }
+
+  void _toggleLike() async {
+    if (currentStoryItems.isEmpty) return;
+
+    String storyId = currentStoryItems[currentStoryIndex]['storyId'];
+    List likes = currentStoryItems[currentStoryIndex]['likes'] ?? [];
+    bool isLiked = likes.contains(currentUid);
+
+    setState(() {
+      if (isLiked) {
+        likes.remove(currentUid);
+      } else {
+        likes.add(currentUid);
+      }
+      currentStoryItems[currentStoryIndex]['likes'] = likes;
+    });
+
+    if (isLiked) {
+      await FirebaseFirestore.instance
+          .collection('stories')
+          .doc(storyId)
+          .update({
+            'likes': FieldValue.arrayRemove([currentUid]),
+          });
+    } else {
+      await FirebaseFirestore.instance
+          .collection('stories')
+          .doc(storyId)
+          .update({
+            'likes': FieldValue.arrayUnion([currentUid]),
+          });
+    }
   }
 
   void _showStoryMenu(String currentCaption) async {
@@ -210,22 +255,20 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
     if (isSaved == true) {
       String storyId = currentStoryItems[currentStoryIndex]['storyId'];
       String newCaption = captionCtrl.text.trim();
-
       await FirebaseFirestore.instance
           .collection('stories')
           .doc(storyId)
           .update({'caption': newCaption});
 
       if (mounted) {
-        setState(() {
-          currentStoryItems[currentStoryIndex]['caption'] = newCaption;
-        });
+        setState(
+          () => currentStoryItems[currentStoryIndex]['caption'] = newCaption,
+        );
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text("Caption Updated!")));
       }
     }
-
     if (mounted) setState(() => _isPaused = false);
   }
 
@@ -277,22 +320,52 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (currentStoryItems.isEmpty)
+    if (_isLoading)
       return const Scaffold(
         backgroundColor: Colors.black,
-        body: Center(child: CircularProgressIndicator()),
+        body: Center(child: CircularProgressIndicator(color: Colors.white)),
       );
 
+    if (currentStoryItems.isEmpty) {
+      return Scaffold(
+        backgroundColor: Colors.black,
+        appBar: AppBar(
+          backgroundColor: Colors.black,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () => Navigator.pop(context),
+          ),
+        ),
+        body: const Center(
+          child: Text(
+            "No active stories",
+            style: TextStyle(color: Colors.white),
+          ),
+        ),
+      );
+    }
+
     var storyData = currentStoryItems[currentStoryIndex];
-    bool isOwner = storyData['ownerId'] == currentUid;
+    bool isOwner =
+        storyData['uid'] == currentUid || storyData['ownerId'] == currentUid;
     String type = storyData['type'] ?? 'image';
 
     String timeStr = "Just now";
-    if (storyData['timestamp'] != null) {
+    if (storyData['timestamp'] != null)
       timeStr = timeago.format((storyData['timestamp'] as Timestamp).toDate());
-    }
 
     String caption = storyData['caption'] ?? "";
+    String username =
+        widget.usersWithStories[currentUserIndex]['username'] ??
+        storyData['username'] ??
+        "User";
+    String profilePic =
+        widget.usersWithStories[currentUserIndex]['profilePic'] ??
+        storyData['profilePic'] ??
+        "";
+
+    List likes = storyData['likes'] ?? [];
+    bool isLiked = likes.contains(currentUid);
 
     return Scaffold(
       backgroundColor: Colors.black,
@@ -301,11 +374,10 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
         onLongPressEnd: (_) => setState(() => _isPaused = false),
         onTapUp: (details) {
           double width = MediaQuery.of(context).size.width;
-          if (details.globalPosition.dx < width / 3) {
+          if (details.globalPosition.dx < width / 3)
             _previousStory();
-          } else {
+          else
             _nextStory();
-          }
         },
         child: Stack(
           fit: StackFit.expand,
@@ -316,9 +388,6 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
                 maxScale: 4.0,
                 onInteractionStart: (_) => setState(() => _isPaused = true),
                 onInteractionEnd: (_) => setState(() => _isPaused = false),
-
-                // 🌟 బగ్ ఫిక్స్ ఇక్కడే: ValueKey యాడ్ చేశాం!
-                // ఇది పెట్టడం వల్ల ఫోటో, వీడియోలు మారుతున్న ప్రతిసారీ ఫ్లట్టర్ పాత దాన్ని ఆపేసి కొత్తదాన్ని ఫ్రెష్ గా స్టార్ట్ చేస్తుంది.
                 child: CachedMediaWidget(
                   key: ValueKey(storyData['storyUrl']),
                   mediaUrl: storyData['storyUrl'],
@@ -328,10 +397,9 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
               ),
             ),
 
-            // CAPTION OVERLAY 🌟
             if (caption.isNotEmpty)
               Positioned(
-                bottom: 50,
+                bottom: 100,
                 left: 20,
                 right: 20,
                 child: Container(
@@ -351,7 +419,34 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
                 ),
               ),
 
-            // PROGRESS BARS
+            // 🌟 Like Button (Right Bottom)
+            Positioned(
+              bottom: 20,
+              right: 15,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  GestureDetector(
+                    onTap: _toggleLike,
+                    child: Icon(
+                      isLiked ? Icons.favorite : Icons.favorite_border,
+                      color: isLiked ? const Color(0xFFFD1D1D) : Colors.white,
+                      size: 35,
+                    ),
+                  ),
+                  if (likes.isNotEmpty)
+                    Text(
+                      likes.length.toString(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                ],
+              ),
+            ),
+
             Positioned(
               top: 50,
               left: 10,
@@ -377,7 +472,6 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
               ),
             ),
 
-            // HEADER (PROFILE, NAME, TIME, OPTIONS) 🌟
             Positioned(
               top: 70,
               left: 15,
@@ -385,9 +479,9 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
               child: Row(
                 children: [
                   SafeProfilePic(
-                    base64String: storyData['profilePic'],
+                    base64String: profilePic,
                     radius: 20,
-                    fallbackText: storyData['username'][0],
+                    fallbackText: username[0],
                   ),
                   const SizedBox(width: 10),
                   Expanded(
@@ -395,7 +489,7 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          storyData['username'],
+                          username,
                           style: const TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
@@ -412,9 +506,14 @@ class _StoryViewScreenState extends State<StoryViewScreen> {
                       ],
                     ),
                   ),
+                  // 🌟 Edit Menu (Owner Only)
                   if (isOwner)
                     IconButton(
-                      icon: const Icon(Icons.more_vert, color: Colors.white),
+                      icon: const Icon(
+                        Icons.more_vert,
+                        color: Colors.white,
+                        size: 28,
+                      ),
                       onPressed: () => _showStoryMenu(caption),
                     ),
                   IconButton(

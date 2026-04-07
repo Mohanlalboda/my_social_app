@@ -1,14 +1,18 @@
 // ignore_for_file: curly_braces_in_flow_control_structures, use_build_context_synchronously
 
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cached_video_player_plus/cached_video_player_plus.dart';
 import 'package:video_player/video_player.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:timeago/timeago.dart' as timeago;
+
 import '../screens/posts/comments_screen.dart';
 import '../screens/profile/other_user_profile_screen.dart';
 import 'safe_elements.dart';
+import '../services/social_service.dart';
 
 bool globalIsMuted = false;
 
@@ -40,38 +44,58 @@ class _ReelItemState extends State<ReelItem> {
   bool _hasError = false;
   bool _showBigHeart = false;
 
+  // Live data
+  List _currentLikes = [];
+  List _currentSavedBy = [];
+  String _currentCaption = "";
+  StreamSubscription<DocumentSnapshot>? _postSubscription;
+
   @override
   void initState() {
     super.initState();
-    _syncData();
+    _currentLikes = widget.reel['likes'] ?? [];
+    _currentSavedBy = widget.reel['savedBy'] ?? [];
+    _currentCaption = widget.reel['caption']?.toString() ?? "";
+    _isLiked = _currentLikes.contains(currentUid);
+    _isSaved = _currentSavedBy.contains(currentUid);
+    _likeCount = _currentLikes.length;
+
     _initializePlayer();
     _checkFollowStatus();
+
+    // 🌟 LIVE SYNC
+    _postSubscription = FirebaseFirestore.instance
+        .collection('posts')
+        .doc(widget.reelId)
+        .snapshots()
+        .listen((doc) {
+          if (doc.exists && mounted) {
+            var data = doc.data()!;
+            setState(() {
+              _currentLikes = data['likes'] ?? [];
+              _currentSavedBy = data['savedBy'] ?? [];
+              _currentCaption = data['caption']?.toString() ?? "";
+              _isLiked = _currentLikes.contains(currentUid);
+              _isSaved = _currentSavedBy.contains(currentUid);
+              _likeCount = _currentLikes.length;
+            });
+          }
+        });
   }
 
-  // 🌟 మ్యాజిక్: పెర్ఫార్మన్స్ బూస్ట్ & ఆడియో బగ్ ఫిక్స్
   @override
   void didUpdateWidget(ReelItem oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (_isInitialized) {
       if (widget.isCurrentPage) {
         _player.controller.play();
-        // 🌟 పేజీ లోకి రాగానే గ్లోబల్ సెట్టింగ్ బట్టి వాల్యూమ్ సెట్ అవుతుంది
         _player.controller.setVolume(globalIsMuted ? 0.0 : 1.0);
       } else {
         _player.controller.pause();
-        // 🌟 పేజీ దాటి కిందకు వెళ్ళగానే పూర్తిగా సైలెంట్ అయిపోతుంది
         _player.controller.setVolume(0.0);
         _player.controller.seekTo(Duration.zero);
       }
     }
-  }
-
-  void _syncData() {
-    List likes = widget.reel['likes'] ?? [];
-    List savedBy = widget.reel['savedBy'] ?? [];
-    _isLiked = likes.contains(currentUid);
-    _isSaved = savedBy.contains(currentUid);
-    _likeCount = likes.length;
   }
 
   void _checkFollowStatus() async {
@@ -97,7 +121,6 @@ class _ReelItemState extends State<ReelItem> {
       }
     } catch (e) {
       if (mounted) setState(() => _isLoadingFollow = false);
-      debugPrint("Follow Check Error: $e");
     }
   }
 
@@ -147,45 +170,33 @@ class _ReelItemState extends State<ReelItem> {
     });
   }
 
-  void _toggleLike() async {
+  void _toggleLike() {
     setState(() {
       _isLiked = !_isLiked;
       _isLiked ? _likeCount++ : _likeCount--;
     });
-    var ref = FirebaseFirestore.instance.collection('posts').doc(widget.reelId);
-    if (_isLiked) {
-      await ref.update({
-        'likes': FieldValue.arrayUnion([currentUid]),
-      });
-    } else {
-      await ref.update({
-        'likes': FieldValue.arrayRemove([currentUid]),
-      });
-    }
+    SocialService.toggleLike(
+      postId: widget.reelId,
+      likesArray: _currentLikes,
+      isReel: false,
+    );
   }
 
   void _handleDoubleTap() {
-    _toggleLike();
-    setState(() {
-      _showBigHeart = true;
-    });
+    if (!_isLiked) _toggleLike();
+    setState(() => _showBigHeart = true);
     Future.delayed(const Duration(milliseconds: 800), () {
       if (mounted) setState(() => _showBigHeart = false);
     });
   }
 
-  void _toggleSave() async {
+  void _toggleSave() {
     setState(() => _isSaved = !_isSaved);
-    var ref = FirebaseFirestore.instance.collection('posts').doc(widget.reelId);
-    if (_isSaved) {
-      await ref.update({
-        'savedBy': FieldValue.arrayUnion([currentUid]),
-      });
-    } else {
-      await ref.update({
-        'savedBy': FieldValue.arrayRemove([currentUid]),
-      });
-    }
+    SocialService.toggleSave(
+      postId: widget.reelId,
+      savedArray: _currentSavedBy,
+      isReel: false,
+    );
   }
 
   void _toggleFollow() async {
@@ -217,6 +228,125 @@ class _ReelItemState extends State<ReelItem> {
     } catch (e) {
       if (mounted) setState(() => _isFollowing = !_isFollowing);
     }
+  }
+
+  // 🌟 EDIT REEL
+  void _editReel() {
+    TextEditingController editController = TextEditingController(
+      text: _currentCaption,
+    );
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Edit Caption"),
+        content: TextField(
+          controller: editController,
+          decoration: const InputDecoration(
+            hintText: "Enter new caption",
+            border: OutlineInputBorder(),
+          ),
+          maxLines: 3,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              await FirebaseFirestore.instance
+                  .collection('posts')
+                  .doc(widget.reelId)
+                  .update({'caption': editController.text.trim()});
+              if (ctx.mounted) Navigator.pop(ctx);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text("Caption Updated!")),
+                );
+              }
+            },
+            child: const Text("Save"),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 🌟 DELETE REEL
+  void _deleteReel() async {
+    bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Delete Reel?"),
+        content: const Text("Are you sure? This cannot be undone."),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("Delete", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await FirebaseFirestore.instance
+          .collection('posts')
+          .doc(widget.reelId)
+          .delete();
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Reel Deleted!")));
+      }
+    }
+  }
+
+  // 🌟 MORE OPTIONS MENU (3-Dots)
+  void _showReelOptions() {
+    bool isDark = Theme.of(context).brightness == Brightness.dark;
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? Colors.grey[900] : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Icon(
+                Icons.edit,
+                color: isDark ? Colors.white : Colors.black,
+              ),
+              title: Text(
+                "Edit Caption",
+                style: TextStyle(color: isDark ? Colors.white : Colors.black),
+              ),
+              onTap: () {
+                Navigator.pop(ctx);
+                _editReel();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.delete, color: Colors.red),
+              title: const Text(
+                "Delete Reel",
+                style: TextStyle(color: Colors.red),
+              ),
+              onTap: () {
+                Navigator.pop(ctx);
+                _deleteReel();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _sendReelToUser(String receiverId, String receiverName) async {
@@ -298,7 +428,6 @@ class _ReelItemState extends State<ReelItem> {
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
             ),
-
             Expanded(
               child: FutureBuilder<DocumentSnapshot>(
                 future: FirebaseFirestore.instance
@@ -312,15 +441,13 @@ class _ReelItemState extends State<ReelItem> {
                       (snapshot.data!.data()
                           as Map<String, dynamic>)['following'] ??
                       [];
-
-                  if (following.isEmpty) {
+                  if (following.isEmpty)
                     return const Center(
                       child: Text(
                         "Follow someone to share with them!",
                         style: TextStyle(color: Colors.grey),
                       ),
                     );
-                  }
 
                   return ListView.builder(
                     controller: scrollController,
@@ -336,7 +463,6 @@ class _ReelItemState extends State<ReelItem> {
                             return const SizedBox();
                           var userData =
                               userSnap.data!.data() as Map<String, dynamic>;
-
                           return ListTile(
                             leading: SafeProfilePic(
                               base64String: userData['profilePic'],
@@ -351,7 +477,7 @@ class _ReelItemState extends State<ReelItem> {
                             ),
                             trailing: ElevatedButton(
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: const Color(0xFF007AFF),
+                                backgroundColor: const Color(0xFF00E5FF),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(20),
                                 ),
@@ -366,7 +492,7 @@ class _ReelItemState extends State<ReelItem> {
                               child: const Text(
                                 "Send",
                                 style: TextStyle(
-                                  color: Colors.white,
+                                  color: Colors.black,
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
@@ -380,7 +506,6 @@ class _ReelItemState extends State<ReelItem> {
               ),
             ),
             const Divider(),
-
             ListTile(
               leading: const CircleAvatar(
                 backgroundColor: Colors.green,
@@ -411,6 +536,7 @@ class _ReelItemState extends State<ReelItem> {
 
   @override
   void dispose() {
+    _postSubscription?.cancel();
     if (_isInitialized) _player.dispose();
     super.dispose();
   }
@@ -418,6 +544,9 @@ class _ReelItemState extends State<ReelItem> {
   @override
   Widget build(BuildContext context) {
     bool isOwner = widget.reel['ownerId'] == currentUid;
+    String timeStr = widget.reel['timestamp'] != null
+        ? timeago.format((widget.reel['timestamp'] as Timestamp).toDate())
+        : "Just now";
 
     return Stack(
       fit: StackFit.expand,
@@ -445,6 +574,21 @@ class _ReelItemState extends State<ReelItem> {
         else
           const Center(child: CircularProgressIndicator(color: Colors.white)),
 
+        Positioned.fill(
+          child: IgnorePointer(
+            child: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Colors.transparent, Colors.black87],
+                  begin: Alignment.center,
+                  end: Alignment.bottomCenter,
+                  stops: [0.6, 1.0],
+                ),
+              ),
+            ),
+          ),
+        ),
+
         if (_showBigHeart)
           Center(
             child: TweenAnimationBuilder<double>(
@@ -456,7 +600,7 @@ class _ReelItemState extends State<ReelItem> {
                   scale: scale,
                   child: Icon(
                     Icons.favorite,
-                    color: Colors.red.withValues(alpha: 0.5),
+                    color: Colors.red.withValues(alpha: 0.8),
                     size: 100,
                   ),
                 );
@@ -498,9 +642,6 @@ class _ReelItemState extends State<ReelItem> {
                             color: Colors.white,
                             fontWeight: FontWeight.bold,
                             fontSize: 16,
-                            shadows: [
-                              Shadow(color: Colors.black, blurRadius: 2),
-                            ],
                           ),
                         ),
                       ],
@@ -518,9 +659,12 @@ class _ReelItemState extends State<ReelItem> {
                         ),
                         decoration: BoxDecoration(
                           color: _isFollowing
-                              ? Colors.white24
+                              ? Colors.transparent
                               : Colors.transparent,
-                          border: Border.all(color: Colors.white, width: 1.5),
+                          border: Border.all(
+                            color: const Color(0xFF00E5FF),
+                            width: 1.5,
+                          ),
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Text(
@@ -536,17 +680,18 @@ class _ReelItemState extends State<ReelItem> {
                 ],
               ),
               const SizedBox(height: 10),
-              if ((widget.reel['caption'] ?? "").toString().isNotEmpty)
+              if (_currentCaption.isNotEmpty)
                 Text(
-                  widget.reel['caption'] ?? "",
+                  _currentCaption,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    shadows: [Shadow(color: Colors.black, blurRadius: 2)],
-                  ),
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
                 ),
+              const SizedBox(height: 5),
+              Text(
+                timeStr,
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
+              ),
             ],
           ),
         ),
@@ -579,29 +724,59 @@ class _ReelItemState extends State<ReelItem> {
                   ),
                   Text(
                     "$_likeCount",
-                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ],
               ),
-              const SizedBox(height: 15),
-              IconButton(
-                icon: const Icon(
-                  Icons.comment_outlined,
-                  color: Colors.white,
-                  size: 32,
-                ),
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => CommentsScreen(
-                      postId: widget.reelId,
-                      postOwnerId: widget.reel['ownerId'],
-                      isReel: true,
-                    ),
-                  ),
-                ),
+              const SizedBox(height: 10),
+
+              StreamBuilder<QuerySnapshot>(
+                stream: FirebaseFirestore.instance
+                    .collection('posts')
+                    .doc(widget.reelId)
+                    .collection('comments')
+                    .snapshots(),
+                builder: (context, snapshot) {
+                  int liveCommentCount = snapshot.hasData
+                      ? snapshot.data!.docs.length
+                      : 0;
+                  return Column(
+                    children: [
+                      IconButton(
+                        icon: const Icon(
+                          Icons.comment_outlined,
+                          color: Colors.white,
+                          size: 32,
+                        ),
+                        onPressed: () => Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => CommentsScreen(
+                              postId: widget.reelId,
+                              postOwnerId: widget.reel['ownerId'],
+                              isReel: false,
+                            ),
+                          ),
+                        ),
+                      ),
+                      Text(
+                        "$liveCommentCount",
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
-              const SizedBox(height: 15),
+
+              const SizedBox(height: 10),
               IconButton(
                 icon: const Icon(
                   Icons.share_outlined,
@@ -610,7 +785,7 @@ class _ReelItemState extends State<ReelItem> {
                 ),
                 onPressed: _showShareSheet,
               ),
-              const SizedBox(height: 15),
+              const SizedBox(height: 10),
               IconButton(
                 icon: Icon(
                   _isSaved ? Icons.bookmark : Icons.bookmark_border,
@@ -619,6 +794,19 @@ class _ReelItemState extends State<ReelItem> {
                 ),
                 onPressed: _toggleSave,
               ),
+
+              // 🌟 MORE OPTIONS (3-DOTS) ONLY FOR OWNER
+              if (isOwner) ...[
+                const SizedBox(height: 10),
+                IconButton(
+                  icon: const Icon(
+                    Icons.more_vert,
+                    color: Colors.white,
+                    size: 30,
+                  ),
+                  onPressed: _showReelOptions,
+                ),
+              ],
             ],
           ),
         ),

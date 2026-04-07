@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:file_picker/file_picker.dart';
-import 'add_post_screen.dart'; // 🌟 UploadManager కోసం
+import '../../services/upload_manager.dart'; // 🌟 UploadManager కోసం
 
 class AutoReelScreen extends StatefulWidget {
   const AutoReelScreen({super.key});

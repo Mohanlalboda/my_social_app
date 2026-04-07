@@ -40,21 +40,34 @@ class _CommunityChatScreenState extends State<CommunityChatScreen> {
 
   final AudioRecorder _audioRecorder = AudioRecorder();
   bool _isRecording = false;
-
-  // 🌟 FIX: Blinking problem solve cheyadaniki ValueNotifier vaaduthunnam!
   final ValueNotifier<bool> _isTypingNotifier = ValueNotifier(false);
+
+  // 🌟 PAGINATION: మెసేజ్ లోడ్ లిమిట్ & స్క్రోల్ కంట్రోలర్
+  int _messageLimit = 30;
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _fetchMyData();
+
+    // స్క్రోల్ పైకి వెళ్ళగానే ఇంకో 30 మెసేజ్ లు లాగుతాం
+    _scrollController.addListener(() {
+      if (_scrollController.position.pixels ==
+          _scrollController.position.maxScrollExtent) {
+        setState(() {
+          _messageLimit += 30;
+        });
+      }
+    });
   }
 
   @override
   void dispose() {
     _msgController.dispose();
     _audioRecorder.dispose();
-    _isTypingNotifier.dispose(); // 🌟 Notifier ni dispose chesthunnam
+    _isTypingNotifier.dispose();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -64,9 +77,7 @@ class _CommunityChatScreenState extends State<CommunityChatScreen> {
           .collection('users')
           .doc(currentUid)
           .get();
-      if (doc.exists && mounted) {
-        setState(() => myUserData = doc.data());
-      }
+      if (doc.exists && mounted) setState(() => myUserData = doc.data());
     } catch (e) {
       debugPrint("UserData Fetch Error: $e");
     }
@@ -78,8 +89,7 @@ class _CommunityChatScreenState extends State<CommunityChatScreen> {
     if (myUserData == null) return;
 
     _msgController.clear();
-    _isTypingNotifier.value =
-        false; // 🌟 Message send cheyagane malli Mic button ravali
+    _isTypingNotifier.value = false;
 
     String messageContent = type == 'image'
         ? '📷 Photo'
@@ -108,10 +118,10 @@ class _CommunityChatScreenState extends State<CommunityChatScreen> {
       await FirebaseFirestore.instance
           .collection('communities')
           .doc(widget.communityId)
-          .update({
+          .set({
             'lastMessage': "${myUserData!['username']}: $messageContent",
             'lastMessageTime': timestamp,
-          });
+          }, SetOptions(merge: true));
     } catch (e) {
       debugPrint("Send Message Error: $e");
     }
@@ -140,7 +150,7 @@ class _CommunityChatScreenState extends State<CommunityChatScreen> {
 
         _sendMessage(mediaUrl: downloadUrl, type: isVideo ? 'video' : 'image');
       } catch (e) {
-        debugPrint("Media Upload Error: $e");
+        debugPrint("Send Media Error: $e");
       } finally {
         if (mounted) setState(() => _isUploading = false);
       }
@@ -179,47 +189,32 @@ class _CommunityChatScreenState extends State<CommunityChatScreen> {
   }
 
   Future<void> _startRecording() async {
-    try {
-      if (await _audioRecorder.hasPermission()) {
-        final dir = await getApplicationDocumentsDirectory();
-        String filePath =
-            '${dir.path}/audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
-
-        await _audioRecorder.start(
-          const RecordConfig(encoder: AudioEncoder.aacLc),
-          path: filePath,
-        );
-        setState(() => _isRecording = true);
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Microphone permission required!")),
-        );
-      }
-    } catch (e) {
-      debugPrint("Recording Start Error: $e");
+    if (await _audioRecorder.hasPermission()) {
+      final dir = await getApplicationDocumentsDirectory();
+      String filePath =
+          '${dir.path}/audio_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      await _audioRecorder.start(
+        const RecordConfig(encoder: AudioEncoder.aacLc),
+        path: filePath,
+      );
+      setState(() => _isRecording = true);
     }
   }
 
   Future<void> _stopRecordingAndSend() async {
-    try {
-      String? path = await _audioRecorder.stop();
-      setState(() => _isRecording = false);
-
-      if (path != null) {
-        setState(() => _isUploading = true);
-        String fileName = "audio_${DateTime.now().millisecondsSinceEpoch}.m4a";
-        Reference ref = FirebaseStorage.instance
-            .ref()
-            .child('community_media')
-            .child(widget.communityId)
-            .child(fileName);
-        await ref.putFile(File(path));
-        String downloadUrl = await ref.getDownloadURL();
-        _sendMessage(mediaUrl: downloadUrl, type: 'audio');
-      }
-    } catch (e) {
-      debugPrint("Recording Stop Error: $e");
-    } finally {
+    String? path = await _audioRecorder.stop();
+    setState(() => _isRecording = false);
+    if (path != null) {
+      setState(() => _isUploading = true);
+      String fileName = "audio_${DateTime.now().millisecondsSinceEpoch}.m4a";
+      Reference ref = FirebaseStorage.instance
+          .ref()
+          .child('community_media')
+          .child(widget.communityId)
+          .child(fileName);
+      await ref.putFile(File(path));
+      String downloadUrl = await ref.getDownloadURL();
+      _sendMessage(mediaUrl: downloadUrl, type: 'audio');
       if (mounted) setState(() => _isUploading = false);
     }
   }
@@ -312,51 +307,94 @@ class _CommunityChatScreenState extends State<CommunityChatScreen> {
         backgroundColor: isDark ? Colors.grey[900] : Colors.white,
         elevation: 1,
         titleSpacing: 0,
-        title: Row(
-          children: [
-            SafeProfilePic(
-              base64String: widget.communityIcon,
-              radius: 18,
-              fallbackText: widget.communityName.isNotEmpty
-                  ? widget.communityName[0].toUpperCase()
-                  : 'C',
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.communityName,
-                    style: TextStyle(
-                      color: isDark ? Colors.white : Colors.black,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                  const Text(
-                    "Community Group",
-                    style: TextStyle(color: Colors.grey, fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: Icon(
-              Icons.info_outline,
-              color: isDark ? Colors.white : Colors.black,
-            ),
-            onPressed: () {
-              Navigator.push(
+        title: StreamBuilder<DocumentSnapshot>(
+          stream: FirebaseFirestore.instance
+              .collection('communities')
+              .doc(widget.communityId)
+              .snapshots(),
+          builder: (context, snapshot) {
+            String currentName = widget.communityName;
+            String currentPic = widget.communityIcon;
+
+            if (snapshot.hasData && snapshot.data!.exists) {
+              var data = snapshot.data!.data() as Map<String, dynamic>;
+              currentName = data['groupName'] ?? currentName;
+              currentPic = data['groupPic'] ?? currentPic;
+            }
+
+            return GestureDetector(
+              onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (_) =>
                       CommunityInfoScreen(communityId: widget.communityId),
                 ),
-              );
+              ),
+              child: Row(
+                children: [
+                  SafeProfilePic(
+                    base64String: currentPic,
+                    radius: 18,
+                    fallbackText: currentName.isNotEmpty
+                        ? currentName[0].toUpperCase()
+                        : 'C',
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          currentName,
+                          style: TextStyle(
+                            color: isDark ? Colors.white : Colors.black,
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const Text(
+                          "Tap here for group info",
+                          style: TextStyle(color: Colors.grey, fontSize: 11),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+        actions: [
+          // 🌟 THE FIX: కేవలం ఒక్క 'Group Info' ఆప్షన్ మాత్రమే ఉంచాం
+          PopupMenuButton<String>(
+            icon: Icon(
+              Icons.more_vert,
+              color: isDark ? Colors.white : Colors.black,
+            ),
+            onSelected: (value) {
+              if (value == 'info') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) =>
+                        CommunityInfoScreen(communityId: widget.communityId),
+                  ),
+                );
+              }
+            },
+            itemBuilder: (BuildContext context) {
+              return [
+                const PopupMenuItem<String>(
+                  value: 'info',
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline, color: Colors.grey, size: 20),
+                      SizedBox(width: 10),
+                      Text("Group Info"),
+                    ],
+                  ),
+                ),
+              ];
             },
           ),
         ],
@@ -370,6 +408,7 @@ class _CommunityChatScreenState extends State<CommunityChatScreen> {
                   .doc(widget.communityId)
                   .collection('messages')
                   .orderBy('timestamp', descending: true)
+                  .limit(_messageLimit) // 🌟 THE FIX: ప్యాజినేషన్ లిమిట్
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -394,6 +433,8 @@ class _CommunityChatScreenState extends State<CommunityChatScreen> {
                 }
 
                 return ListView.builder(
+                  controller:
+                      _scrollController, // 🌟 THE FIX: స్క్రోల్ కంట్రోలర్ యాడ్ చేసాం
                   reverse: true,
                   itemCount: messages.length,
                   itemBuilder: (context, index) {
@@ -407,7 +448,6 @@ class _CommunityChatScreenState extends State<CommunityChatScreen> {
                     String timeStr = time != null
                         ? timeago.format(time, locale: 'en_short')
                         : 'now';
-
                     Map reactions = msgData['reactions'] ?? {};
 
                     return Align(
@@ -551,7 +591,6 @@ class _CommunityChatScreenState extends State<CommunityChatScreen> {
                                                   msgData['imageUrl'] ?? '',
                                               isMe: isMe,
                                             ),
-
                                           const SizedBox(height: 3),
                                           Text(
                                             timeStr,
@@ -583,8 +622,8 @@ class _CommunityChatScreenState extends State<CommunityChatScreen> {
                                           borderRadius: BorderRadius.circular(
                                             12,
                                           ),
-                                          boxShadow: [
-                                            const BoxShadow(
+                                          boxShadow: const [
+                                            BoxShadow(
                                               color: Colors.black12,
                                               blurRadius: 2,
                                             ),
@@ -635,7 +674,6 @@ class _CommunityChatScreenState extends State<CommunityChatScreen> {
                     style: TextStyle(
                       color: isDark ? Colors.white : Colors.black,
                     ),
-                    // 🌟 FIX: setState theesesi ValueNotifier ki marcham
                     onChanged: (val) {
                       bool hasText = val.trim().isNotEmpty;
                       if (_isTypingNotifier.value != hasText) {
@@ -659,8 +697,6 @@ class _CommunityChatScreenState extends State<CommunityChatScreen> {
                   ),
                 ),
                 const SizedBox(width: 5),
-
-                // 🌟 FIX: ValueListenableBuilder vadadam valla kevalam ee button matrame maruthundi!
                 ValueListenableBuilder<bool>(
                   valueListenable: _isTypingNotifier,
                   builder: (context, isTyping, child) {
@@ -673,31 +709,10 @@ class _CommunityChatScreenState extends State<CommunityChatScreen> {
                             onPressed: () => _sendMessage(),
                           )
                         : GestureDetector(
-                            onTap: () {
-                              ScaffoldMessenger.of(context).clearSnackBars();
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: const Text(
-                                    "🎤 Hold to record audio. Release to send.",
-                                    style: TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  backgroundColor: Colors.grey[800],
-                                  behavior: SnackBarBehavior.floating,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  duration: const Duration(seconds: 2),
-                                ),
-                              );
-                            },
                             onLongPress: _startRecording,
                             onLongPressUp: _stopRecordingAndSend,
                             child: AnimatedContainer(
                               duration: const Duration(milliseconds: 200),
-                              curve: Curves.easeInOut,
                               width: _isRecording ? 50 : 40,
                               height: _isRecording ? 50 : 40,
                               margin: const EdgeInsets.only(left: 5, right: 5),
@@ -706,17 +721,6 @@ class _CommunityChatScreenState extends State<CommunityChatScreen> {
                                     ? Colors.red
                                     : const Color(0xFF833AB4),
                                 shape: BoxShape.circle,
-                                boxShadow: _isRecording
-                                    ? [
-                                        BoxShadow(
-                                          color: Colors.red.withValues(
-                                            alpha: 0.5,
-                                          ),
-                                          blurRadius: 10,
-                                          spreadRadius: 2,
-                                        ),
-                                      ]
-                                    : [],
                               ),
                               child: Icon(
                                 Icons.mic,

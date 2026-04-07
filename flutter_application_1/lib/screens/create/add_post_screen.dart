@@ -5,309 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
-import 'package:uuid/uuid.dart';
 import 'package:image_cropper/image_cropper.dart';
-import 'package:flutter_image_compress/flutter_image_compress.dart';
-import 'package:video_compress/video_compress.dart';
-import 'package:path_provider/path_provider.dart';
+
 import '../../widgets/safe_elements.dart';
-import 'package:geolocator/geolocator.dart';
 import 'auto_reel_screen.dart';
-
-class UploadManager {
-  static final UploadManager _instance = UploadManager._internal();
-  factory UploadManager() => _instance;
-  UploadManager._internal();
-
-  final ValueNotifier<bool> isUploading = ValueNotifier(false);
-  final ValueNotifier<double> uploadProgress = ValueNotifier(0.0);
-  final ValueNotifier<String> uploadStatus = ValueNotifier("");
-
-  Future<Position?> _getUserLocation() async {
-    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) return null;
-
-    LocationPermission permission = await Geolocator.checkPermission();
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-      if (permission == LocationPermission.denied) return null;
-    }
-
-    if (permission == LocationPermission.deniedForever) return null;
-
-    try {
-      return await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-        ),
-      );
-    } catch (e) {
-      debugPrint("Location Error: $e");
-      return null;
-    }
-  }
-
-  Future<void> backgroundUploadPost(
-    List<File> images,
-    String caption,
-    bool isPublic,
-    List<String> taggedFriends,
-  ) async {
-    isUploading.value = true;
-    uploadProgress.value = 0.0;
-    uploadStatus.value = "Getting Location...";
-
-    try {
-      Position? currentPosition = await _getUserLocation();
-      String uid = FirebaseAuth.instance.currentUser!.uid;
-      var userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
-      String username = userDoc.data()?['username'] ?? 'User';
-      String profilePic = userDoc.data()?['profilePic'] ?? '';
-
-      List<String> imageUrls = [];
-      final tempDir = await getTemporaryDirectory();
-
-      for (int i = 0; i < images.length; i++) {
-        uploadStatus.value = "Compressing Image ${i + 1}...";
-        String imageId = const Uuid().v4();
-        final outPath = "${tempDir.path}/post_$imageId.jpg";
-        var compressedImage = await FlutterImageCompress.compressAndGetFile(
-          images[i].path,
-          outPath,
-          quality: 70,
-          minWidth: 1080,
-          minHeight: 1080,
-        );
-
-        File fileToUpload = compressedImage != null
-            ? File(compressedImage.path)
-            : images[i];
-        Reference ref = FirebaseStorage.instance
-            .ref()
-            .child('posts')
-            .child(uid)
-            .child('$imageId.jpg');
-        UploadTask uploadTask = ref.putFile(fileToUpload);
-
-        uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
-          uploadProgress.value =
-              snapshot.bytesTransferred / snapshot.totalBytes;
-          uploadStatus.value =
-              "Uploading Image ${i + 1} of ${images.length}...";
-        });
-
-        TaskSnapshot snapshot = await uploadTask;
-        String downloadUrl = await snapshot.ref.getDownloadURL();
-        imageUrls.add(downloadUrl);
-      }
-
-      uploadStatus.value = "Finishing up...";
-      String postId = const Uuid().v4();
-
-      Map<String, dynamic> postData = {
-        'postId': postId,
-        'ownerId': uid,
-        'username': username,
-        'profilePic': profilePic,
-        'postData': imageUrls,
-        'type': 'image',
-        'caption': caption,
-        'likes': [],
-        'savedBy': [],
-        'isPublic': isPublic,
-        'taggedUsers': taggedFriends,
-        'timestamp': FieldValue.serverTimestamp(),
-      };
-
-      if (currentPosition != null) {
-        postData['latitude'] = currentPosition.latitude;
-        postData['longitude'] = currentPosition.longitude;
-      }
-
-      await FirebaseFirestore.instance
-          .collection('posts')
-          .doc(postId)
-          .set(postData);
-    } catch (e) {
-      debugPrint("Background Post Error: $e");
-    } finally {
-      isUploading.value = false;
-    }
-  }
-
-  Future<void> backgroundUploadReel(
-    File video,
-    String caption,
-    bool isPublic,
-    List<String> taggedFriends,
-  ) async {
-    isUploading.value = true;
-    uploadProgress.value = 0.0;
-    uploadStatus.value = "Getting Location...";
-
-    try {
-      Position? currentPosition = await _getUserLocation();
-      String uid = FirebaseAuth.instance.currentUser!.uid;
-      var userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
-      String username = userDoc.data()?['username'] ?? 'User';
-      String profilePic = userDoc.data()?['profilePic'] ?? '';
-      String postId = const Uuid().v4();
-
-      uploadStatus.value = "Compressing Video...";
-      MediaInfo? mediaInfo = await VideoCompress.compressVideo(
-        video.path,
-        quality: VideoQuality.MediumQuality,
-        includeAudio: true,
-      );
-
-      File fileToUpload = (mediaInfo != null && mediaInfo.file != null)
-          ? mediaInfo.file!
-          : video;
-
-      Reference storageRef = FirebaseStorage.instance
-          .ref()
-          .child('reels')
-          .child('$postId.mp4');
-      UploadTask uploadTask = storageRef.putFile(fileToUpload);
-
-      uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
-        double progress = snapshot.bytesTransferred / snapshot.totalBytes;
-        uploadProgress.value = progress;
-        uploadStatus.value =
-            "Uploading Reel... ${(progress * 100).toStringAsFixed(1)}%";
-      });
-
-      TaskSnapshot snapshot = await uploadTask;
-      String videoUrl = await snapshot.ref.getDownloadURL();
-
-      Map<String, dynamic> reelData = {
-        'postId': postId,
-        'ownerId': uid,
-        'username': username,
-        'profilePic': profilePic,
-        'postData': [videoUrl],
-        'mediaUrl': videoUrl,
-        'type': 'video',
-        'description': caption,
-        'caption': caption,
-        'likes': [],
-        'savedBy': [],
-        'isPublic': isPublic,
-        'taggedUsers': taggedFriends,
-        'timestamp': FieldValue.serverTimestamp(),
-      };
-
-      if (currentPosition != null) {
-        reelData['latitude'] = currentPosition.latitude;
-        reelData['longitude'] = currentPosition.longitude;
-      }
-
-      await FirebaseFirestore.instance
-          .collection('reels')
-          .doc(postId)
-          .set(reelData);
-      await FirebaseFirestore.instance
-          .collection('posts')
-          .doc(postId)
-          .set(reelData);
-    } catch (e) {
-      debugPrint("Background Reel Error: $e");
-    } finally {
-      VideoCompress.deleteAllCache();
-      isUploading.value = false;
-    }
-  }
-
-  Future<void> backgroundUploadAutoReel({
-    required List<File> images,
-    required String caption,
-    required bool isLocalAudio,
-    required String? localAudioPath,
-    required String trendingAudioUrl,
-  }) async {
-    isUploading.value = true;
-    uploadProgress.value = 0.0;
-    uploadStatus.value = "Starting Auto-Reel Upload...";
-
-    try {
-      Position? currentPosition = await _getUserLocation();
-      String uid = FirebaseAuth.instance.currentUser!.uid;
-      var userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(uid)
-          .get();
-      String username = userDoc.data()?['username'] ?? 'User';
-      String profilePic = userDoc.data()?['profilePic'] ?? '';
-      String postId = const Uuid().v4();
-
-      List<String> imageUrls = [];
-      for (int i = 0; i < images.length; i++) {
-        uploadStatus.value = "Uploading Photo ${i + 1}/${images.length}...";
-        Reference ref = FirebaseStorage.instance
-            .ref()
-            .child('reels')
-            .child(uid)
-            .child('${const Uuid().v4()}.jpg');
-        TaskSnapshot snap = await ref.putFile(images[i]);
-        imageUrls.add(await snap.ref.getDownloadURL());
-        uploadProgress.value = (i + 1) / (images.length + 1);
-      }
-
-      String finalAudioUrl = trendingAudioUrl;
-      if (isLocalAudio && localAudioPath != null) {
-        uploadStatus.value = "Uploading Music... 🎵";
-        Reference audioRef = FirebaseStorage.instance
-            .ref()
-            .child('reels_audio')
-            .child(uid)
-            .child('${const Uuid().v4()}.mp3');
-        TaskSnapshot audioSnap = await audioRef.putFile(File(localAudioPath));
-        finalAudioUrl = await audioSnap.ref.getDownloadURL();
-      }
-
-      uploadProgress.value = 1.0;
-      uploadStatus.value = "Finishing up...";
-
-      Map<String, dynamic> reelData = {
-        'postId': postId,
-        'ownerId': uid,
-        'username': username,
-        'profilePic': profilePic,
-        'postData': imageUrls,
-        'audioUrl': finalAudioUrl,
-        'type': 'auto_reel',
-        'caption': caption,
-        'likes': [],
-        'savedBy': [],
-        'isPublic': true,
-        'timestamp': FieldValue.serverTimestamp(),
-      };
-
-      if (currentPosition != null) {
-        reelData['latitude'] = currentPosition.latitude;
-        reelData['longitude'] = currentPosition.longitude;
-      }
-
-      // 🌟 FIX: ఇక్కడ కేవలం 'reels' లో మాత్రమే సేవ్ చేస్తున్నాం, 'posts' లో కాదు!
-      // 🌟 FIX: ఫీడ్ లో కనిపించడం కోసం posts కలెక్షన్ లో సేవ్ చేస్తున్నాం
-      await FirebaseFirestore.instance
-          .collection('posts')
-          .doc(postId)
-          .set(reelData);
-    } catch (e) {
-      debugPrint("AutoReel Upload Error: $e");
-    } finally {
-      isUploading.value = false;
-    }
-  }
-}
+import '../../services/upload_manager.dart';
 
 class AddPostScreen extends StatefulWidget {
   const AddPostScreen({super.key});
@@ -590,11 +292,23 @@ class _AddPostScreenState extends State<AddPostScreen> {
 
   Future<void> _pickVideo(ImageSource source) async {
     final picker = ImagePicker();
-    final pickedFile = await picker.pickVideo(source: source);
-    if (pickedFile != null)
-      setState(() => _selectedVideo = File(pickedFile.path));
+    try {
+      final pickedFile = await picker.pickVideo(
+        source: source,
+        maxDuration: const Duration(seconds: 60),
+      );
+      if (pickedFile != null) {
+        setState(() {
+          _selectedVideo = File(pickedFile.path);
+        });
+        debugPrint("✅ Video Selected: ${pickedFile.path}");
+      }
+    } catch (e) {
+      debugPrint("❌ Video Picker Error: $e");
+    }
   }
 
+  // 🌟 1. పోస్ట్ అప్‌లోడ్ లాజిక్ (డైలాగ్ లేకుండా బ్యాక్‌గ్రౌండ్ అప్‌లోడ్)
   void _triggerPostUpload() {
     if (_selectedImages.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -602,23 +316,20 @@ class _AddPostScreenState extends State<AddPostScreen> {
       );
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Upload started in background... 🚀"),
-        duration: Duration(seconds: 2),
-      ),
-    );
-    UploadManager().backgroundUploadPost(
-      _selectedImages,
-      _postCaptionController.text.trim(),
-      _isPostPublic,
-      _taggedUsers.map((e) => e['id']!).toList(),
+
+    // డైరెక్ట్ గా అప్‌లోడ్ స్టార్ట్ చేస్తున్నాం (await అక్కర్లేదు)
+    UploadManager().uploadMedia(
+      file: _selectedImages.first,
+      caption: _postCaptionController.text.trim(),
+      isVideo: false,
+      isReel: false,
     );
 
-    // 🌟 FIX: డైరెక్ట్ గా హోమ్ స్క్రీన్ కి
+    // వెంటనే హోమ్ స్క్రీన్ కి వెళ్ళిపోతాం
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
+  // 🌟 2. రీల్ అప్‌లోడ్ లాజిక్ (డైలాగ్ లేకుండా బ్యాక్‌గ్రౌండ్ అప్‌లోడ్)
   void _triggerReelUpload() {
     if (_selectedVideo == null) {
       ScaffoldMessenger.of(
@@ -626,20 +337,16 @@ class _AddPostScreenState extends State<AddPostScreen> {
       ).showSnackBar(const SnackBar(content: Text("Select a video first! 🎬")));
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text("Upload started in background... 🚀"),
-        duration: Duration(seconds: 2),
-      ),
-    );
-    UploadManager().backgroundUploadReel(
-      _selectedVideo!,
-      _reelCaptionController.text.trim(),
-      _isReelPublic,
-      _taggedUsers.map((e) => e['id']!).toList(),
+
+    // డైరెక్ట్ గా అప్‌లోడ్ స్టార్ట్ చేస్తున్నాం (await అక్కర్లేదు)
+    UploadManager().uploadMedia(
+      file: _selectedVideo!,
+      caption: _reelCaptionController.text.trim(),
+      isVideo: true,
+      isReel: true,
     );
 
-    // 🌟 FIX: డైరెక్ట్ గా హోమ్ స్క్రీన్ కి
+    // వెంటనే హోమ్ స్క్రీన్ కి వెళ్ళిపోతాం
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
 

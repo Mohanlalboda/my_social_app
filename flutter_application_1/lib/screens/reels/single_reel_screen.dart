@@ -21,7 +21,7 @@ class SingleReelScreen extends StatelessWidget {
       ),
       body: FutureBuilder<DocumentSnapshot>(
         future: FirebaseFirestore.instance
-            .collection('reels')
+            .collection('posts') // 👈 'reels' ని 'posts' గా మార్చండి
             .doc(reelId)
             .get(),
         builder: (context, snapshot) {

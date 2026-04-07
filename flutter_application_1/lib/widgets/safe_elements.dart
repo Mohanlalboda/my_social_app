@@ -92,7 +92,7 @@ class SafeImage extends StatelessWidget {
     if (base64String!.startsWith('http')) {
       return CachedNetworkImage(
         imageUrl: base64String!,
-        fit: fit,
+        fit: BoxFit.contain,
         // 🌟 PRO ఫీచర్: ఇమేజ్ లోడ్ అయ్యేటప్పుడు జస్ట్ బ్లాక్ స్క్రీన్ కాకుండా ఒక చిన్న స్పిన్నర్ చూపిస్తాం
         placeholder: (context, url) => Container(
           color: Colors.grey[900],

@@ -9,7 +9,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:timeago/timeago.dart' as timeago;
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-
+import '../services/social_service.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
@@ -72,61 +72,43 @@ class _PostWidgetState extends State<PostWidget> {
       isLiked ? likeCount++ : likeCount--;
     });
 
-    try {
-      var ref = FirebaseFirestore.instance
-          .collection('posts')
-          .doc(widget.post['postId']);
+    SocialService.toggleLike(
+      postId: widget.post['postId'],
+      likesArray: widget.post['likes'] ?? [],
+      isReel: false,
+    );
+
+    if (isLiked) {
       String postOwnerId = widget.post['ownerId'];
+      if (currentUid != postOwnerId) {
+        var myDoc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUid)
+            .get();
+        String myName = myDoc.data()?['username'] ?? 'User';
+        String myPic = myDoc.data()?['profilePic'] ?? '';
+        String mediaUrl =
+            (widget.post['postData'] is List &&
+                widget.post['postData'].isNotEmpty)
+            ? widget.post['postData'][0]
+            : (widget.post['storyUrl'] ?? "");
 
-      if (isLiked) {
-        await ref.update({
-          'likes': FieldValue.arrayUnion([currentUid]),
-        });
-        if (currentUid != postOwnerId) {
-          var myDoc = await FirebaseFirestore.instance
-              .collection('users')
-              .doc(currentUid)
-              .get();
-          String myName = myDoc.data()?['username'] ?? 'User';
-          String myPic = myDoc.data()?['profilePic'] ?? '';
-          String mediaUrl =
-              (widget.post['postData'] is List &&
-                  widget.post['postData'].isNotEmpty)
-              ? widget.post['postData'][0]
-              : (widget.post['storyUrl'] ?? "");
-
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(postOwnerId)
-              .collection('notifications')
-              .add({
-                'senderId': currentUid,
-                'senderName': myName,
-                'senderPic': myPic,
-                'type': 'like',
-                'postId': widget.post['postId'],
-                'mediaUrl': mediaUrl,
-                'isRead': false,
-                'timestamp': FieldValue.serverTimestamp(),
-              });
-        }
-      } else {
-        await ref.update({
-          'likes': FieldValue.arrayRemove([currentUid]),
-        });
-        if (currentUid != postOwnerId) {
-          var notifs = await FirebaseFirestore.instance
-              .collection('users')
-              .doc(postOwnerId)
-              .collection('notifications')
-              .where('senderId', isEqualTo: currentUid)
-              .where('type', isEqualTo: 'like')
-              .where('postId', isEqualTo: widget.post['postId'])
-              .get();
-          for (var doc in notifs.docs) await doc.reference.delete();
-        }
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(postOwnerId)
+            .collection('notifications')
+            .add({
+              'senderId': currentUid,
+              'senderName': myName,
+              'senderPic': myPic,
+              'type': 'like',
+              'postId': widget.post['postId'],
+              'mediaUrl': mediaUrl,
+              'isRead': false,
+              'timestamp': FieldValue.serverTimestamp(),
+            });
       }
-    } catch (e) {}
+    }
   }
 
   void _handleDoubleTap() {
@@ -137,20 +119,13 @@ class _PostWidgetState extends State<PostWidget> {
     });
   }
 
-  void _handleSave() async {
+  void _handleSave() {
     setState(() => isSaved = !isSaved);
-    try {
-      var ref = FirebaseFirestore.instance
-          .collection('posts')
-          .doc(widget.post['postId']);
-      isSaved
-          ? await ref.update({
-              'savedBy': FieldValue.arrayUnion([currentUid]),
-            })
-          : await ref.update({
-              'savedBy': FieldValue.arrayRemove([currentUid]),
-            });
-    } catch (e) {}
+    SocialService.toggleSave(
+      postId: widget.post['postId'],
+      savedArray: widget.post['savedBy'] ?? [],
+      isReel: false,
+    );
   }
 
   void _shareExternally() async {
@@ -526,7 +501,7 @@ class _PostWidgetState extends State<PostWidget> {
                         Icons.favorite,
                         color: Colors.white.withValues(alpha: 0.9),
                         size: 100,
-                      ), // 🌟 FIXED HERE
+                      ),
                     ),
                   ),
               ],
@@ -536,48 +511,31 @@ class _PostWidgetState extends State<PostWidget> {
               alignment: Alignment.topRight,
               children: [
                 Container(
-                  color: isDark ? Colors.grey[900] : Colors.grey[100],
-                  child: AspectRatio(
-                    aspectRatio: 1.0,
-                    child: PageView.builder(
-                      onPageChanged: (index) =>
-                          setState(() => _currentImageIndex = index),
-                      itemCount: images.length,
-                      itemBuilder: (context, index) {
-                        String imgData = images[index];
-                        return GestureDetector(
-                          onDoubleTap: _handleDoubleTap,
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              imgData.startsWith('http')
-                                  ? CachedMediaWidget(
-                                      mediaUrl: imgData,
-                                      type: postType,
-                                    )
-                                  : SafeImage(base64String: imgData),
-                              if (_showBigHeart)
-                                TweenAnimationBuilder<double>(
-                                  tween: Tween<double>(begin: 0.5, end: 1.2),
-                                  duration: const Duration(milliseconds: 300),
-                                  curve: Curves.elasticOut,
-                                  builder: (context, scale, child) =>
-                                      Transform.scale(
-                                        scale: scale,
-                                        child: Icon(
-                                          Icons.favorite,
-                                          color: Colors.white.withValues(
-                                            alpha: 0.9,
-                                          ),
-                                          size: 100,
-                                        ), // 🌟 FIXED HERE
-                                      ),
-                                ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
+                  constraints: BoxConstraints(
+                    maxHeight: MediaQuery.of(context).size.width * 1.3,
+                  ),
+                  width: double.infinity,
+                  color: isDark ? Colors.black : Colors.grey[100],
+                  child: PageView.builder(
+                    onPageChanged: (index) =>
+                        setState(() => _currentImageIndex = index),
+                    itemCount: images.length,
+                    itemBuilder: (context, index) {
+                      String imgData = images[index];
+                      return GestureDetector(
+                        onDoubleTap: _handleDoubleTap,
+                        child: imgData.startsWith('http')
+                            ? CachedMediaWidget(
+                                mediaUrl: imgData,
+                                type: postType,
+                                isGrid: false,
+                              )
+                            : SafeImage(
+                                base64String: imgData,
+                                fit: BoxFit.contain,
+                              ),
+                      );
+                    },
                   ),
                 ),
                 if (images.length > 1)
@@ -592,7 +550,7 @@ class _PostWidgetState extends State<PostWidget> {
                       decoration: BoxDecoration(
                         color: Colors.black.withValues(alpha: 0.7),
                         borderRadius: BorderRadius.circular(15),
-                      ), // 🌟 FIXED HERE
+                      ),
                       child: Text(
                         "${_currentImageIndex + 1}/${images.length}",
                         style: const TextStyle(
@@ -620,7 +578,7 @@ class _PostWidgetState extends State<PostWidget> {
                     color: _currentImageIndex == index
                         ? const Color(0xFFFD1D1D)
                         : Colors.grey.withValues(alpha: 0.5),
-                  ), // 🌟 FIXED HERE
+                  ),
                 ),
               ),
             ),
@@ -657,7 +615,7 @@ class _PostWidgetState extends State<PostWidget> {
                             builder: (_) => CommentsScreen(
                               postId: widget.post['postId'],
                               postOwnerId: widget.post['ownerId'],
-                              mediaUrl: images.isNotEmpty ? images[0] : "",
+                              // 🌟 ఇక్కడే ఎర్రర్ ఉండేది, దాన్ని తీసేసాం.
                             ),
                           ),
                         ),

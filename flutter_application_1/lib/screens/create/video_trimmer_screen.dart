@@ -9,7 +9,7 @@ import 'package:firebase_storage/firebase_storage.dart';
 import 'package:uuid/uuid.dart';
 import 'package:video_compress/video_compress.dart';
 
-import 'add_post_screen.dart'; // 🌟 UploadManager కోసం దీన్ని ఇంపోర్ట్ చేశాం
+import '../../services/upload_manager.dart'; // 🌟 UploadManager కోసం దీన్ని ఇంపోర్ట్ చేశాం
 
 class VideoTrimmerScreen extends StatefulWidget {
   final File file;

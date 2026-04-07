@@ -43,7 +43,7 @@ dependencies:
   video_thumbnail: ^0.5.6
   camera: ^0.12.0+1
   geolocator: ^14.0.2
-  
+  marquee: ^2.2.3
   
 
   
@@ -58,14 +58,14 @@ dev_dependencies:
 flutter_launcher_icons:
   android: true
   ios: true
-  image_path: "assets/images/app_icon_fixed.png"
+  image_path: "assets/images/app-icon.png"
   adaptive_icon_background: "#FFFFFF" # 🌟 బ్యాక్‌గ్రౌండ్ వైట్ కలర్ సెట్ అవుతుంది
-  adaptive_icon_foreground: "assets/images/app_icon_fixed.png" # 🌟 లోగో ముందుకి వస్తుంది
+  adaptive_icon_foreground: "assets/images/app-icon.png" # 🌟 లోగో ముందుకి వస్తుంది
   min_sdk_android: 21
 
 flutter:
   uses-material-design: true
   assets:
-    - assets/images/app_icon_fixed.png
+    - assets/images/app-icon.png
     - assets/service/
 
