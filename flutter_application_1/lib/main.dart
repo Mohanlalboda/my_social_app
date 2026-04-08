@@ -30,10 +30,16 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 1. ఫైర్‌బేస్ ఇనిషియలైజ్ చేస్తున్నాం
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+  // 🌟 THE MAGIC LINE: పుష్ నోటిఫికేషన్స్ సర్వీస్ ని ఇక్కడ స్టార్ట్ చేయాలి
   await PushNotificationService.initialize();
+
+  // 2. బ్యాక్‌గ్రౌండ్ మెసేజ్ హ్యాండ్లర్ సెట్ చేస్తున్నాం
+  FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
+
   runApp(const MySocialApp());
 }
 

@@ -4,7 +4,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 
-// యాప్ క్లోజ్ చేసి ఉన్నప్పుడు నోటిఫికేషన్స్ రావడానికి (ఇది పైన బయటే ఉండాలి)
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   debugPrint("Background Message Received: ${message.messageId}");
@@ -16,7 +15,6 @@ class PushNotificationService {
       FlutterLocalNotificationsPlugin();
 
   static Future<void> initialize() async {
-    // 1. నోటిఫికేషన్స్ పంపడానికి పర్మిషన్ అడగడం
     NotificationSettings settings = await _fcm.requestPermission(
       alert: true,
       badge: true,
@@ -27,31 +25,34 @@ class PushNotificationService {
       debugPrint("✅ Notifications Permission Granted!");
     }
 
-    // 2. డివైజ్ టోకెన్ (ఈ మొబైల్ కి ఒక ఐడీ లాంటిది) తీసుకొని ఫైర్‌బేస్‌లో సేవ్ చేయడం
     String? token = await _fcm.getToken();
     if (token != null) {
       debugPrint("🔥 FCM Token: $token");
       _saveTokenToDatabase(token);
     }
 
-    // 3. టోకెన్ ఎప్పుడైనా మారితే అప్‌డేట్ చేయడం
     _fcm.onTokenRefresh.listen(_saveTokenToDatabase);
 
-    // 4. లోకల్ నోటిఫికేషన్స్ సెటప్
     const AndroidInitializationSettings androidInit =
         AndroidInitializationSettings('@mipmap/ic_launcher');
+
+    const DarwinInitializationSettings iosInit = DarwinInitializationSettings();
+
     const InitializationSettings initSettings = InitializationSettings(
       android: androidInit,
+      iOS: iosInit,
     );
 
-    // 🌟 FIX 1: లేటెస్ట్ ప్యాకేజీ ప్రకారం 'initializationSettings:' అని యాడ్ చేశాం
+    // 🌟 THE FIX: ఇక్కడ ఎర్రర్ లేకుండా సెట్ చేశాను
     await _localNotifications.initialize(
-      settings: initSettings, // 🌟 లేటెస్ట్ ప్యాకేజీకి కావాల్సింది ఇదే!
+      settings: initSettings,
+      onDidReceiveNotificationResponse: (NotificationResponse details) {
+        debugPrint("Notification tapped: ${details.payload}");
+      },
     );
-    // 5. బ్యాక్‌గ్రౌండ్ మెసేజెస్ ని వినడం
+
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-    // 6. ఫర్‌గ్రౌండ్ (యాప్ వాడుతున్నప్పుడు) మెసేజెస్ వస్తే చూపించడం
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       if (message.notification != null) {
         _showLocalNotification(message);
@@ -59,7 +60,6 @@ class PushNotificationService {
     });
   }
 
-  // 🌟 ఫైర్‌బేస్ లో యూజర్ ప్రొఫైల్ లో టోకెన్ సేవ్ చేయడం
   static void _saveTokenToDatabase(String token) async {
     String? uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid != null) {
@@ -69,7 +69,6 @@ class PushNotificationService {
     }
   }
 
-  // 🌟 మొబైల్ పైన నోటిఫికేషన్ పాపప్ చూపించే డిజైన్
   static void _showLocalNotification(RemoteMessage message) async {
     const AndroidNotificationDetails androidDetails =
         AndroidNotificationDetails(
@@ -83,7 +82,6 @@ class PushNotificationService {
       android: androidDetails,
     );
 
-    // 🌟 FIX 2: లేటెస్ట్ ప్యాకేజీ ప్రకారం 'id:', 'title:', 'body:', 'notificationDetails:' అని యాడ్ చేశాం
     await _localNotifications.show(
       id: message.hashCode,
       title: message.notification?.title,
