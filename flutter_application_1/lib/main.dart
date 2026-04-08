@@ -201,6 +201,7 @@ class _MainNavigationState extends State<MainNavigation>
   }
 
   @override
+  @override
   Widget build(BuildContext context) {
     final currentUser = FirebaseAuth.instance.currentUser;
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
@@ -271,20 +272,19 @@ class _MainNavigationState extends State<MainNavigation>
                   },
                 ),
                 const SizedBox(width: 5),
+                // 🌟 THE FIX 1: ఇక్కడ మెసేజ్ ఐకాన్ తీసేసి "Add Post (+)" ఐకాన్ పెట్టాం
                 Padding(
                   padding: const EdgeInsets.only(right: 15),
-                  child: UnreadChatBadge(
-                    child: IconButton(
-                      icon: Icon(
-                        Icons.send_outlined,
-                        color: isDarkMode ? Colors.white : Colors.black,
-                        size: 26,
-                      ),
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => const InboxScreen(),
-                        ),
+                  child: IconButton(
+                    icon: Icon(
+                      Icons.add_box_outlined, // 🌟 ప్లస్ ఐకాన్
+                      color: isDarkMode ? Colors.white : Colors.black,
+                      size: 28,
+                    ),
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const AddPostScreen(),
                       ),
                     ),
                   ),
@@ -295,10 +295,11 @@ class _MainNavigationState extends State<MainNavigation>
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (i) {
+          // 🌟 THE FIX 2: కింద బటన్ నొక్కితే Add Post బదులు "Inbox (Messages)" ఓపెన్ అవుతుంది
           if (i == 2) {
             Navigator.push(
               context,
-              MaterialPageRoute(builder: (_) => const AddPostScreen()),
+              MaterialPageRoute(builder: (_) => const InboxScreen()),
             );
           } else {
             setState(() => _selectedIndex = i);
@@ -307,18 +308,28 @@ class _MainNavigationState extends State<MainNavigation>
         type: BottomNavigationBarType.fixed,
         showSelectedLabels: false,
         showUnselectedLabels: false,
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home_filled), label: "Home"),
-          BottomNavigationBarItem(icon: Icon(Icons.search), label: "Search"),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.add_box_outlined, size: 30),
-            label: "Add",
+        items: [
+          // 🌟 ఇక్కడ const తీసేయాలి ఎందుకంటే UnreadChatBadge dynamic కాబట్టి
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.home_filled),
+            label: "Home",
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
+            icon: Icon(Icons.search),
+            label: "Search",
+          ),
+
+          // 🌟 THE FIX 3: కింద మధ్యలో ప్లస్ ఐకాన్ బదులు "Messages" ఐకాన్ విత్ బ్యాడ్జ్ పెట్టాం
+          const BottomNavigationBarItem(
+            icon: UnreadChatBadge(child: Icon(Icons.send_outlined, size: 28)),
+            label: "Messages",
+          ),
+
+          const BottomNavigationBarItem(
             icon: Icon(Icons.video_library_outlined),
             label: "Reels",
           ),
-          BottomNavigationBarItem(
+          const BottomNavigationBarItem(
             icon: Icon(Icons.person_outline),
             label: "Profile",
           ),
