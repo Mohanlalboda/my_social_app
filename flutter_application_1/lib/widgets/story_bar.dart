@@ -7,7 +7,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:uuid/uuid.dart';
-import 'package:marquee/marquee.dart';
 
 import 'safe_elements.dart';
 import '../utils/constants.dart';
@@ -64,7 +63,9 @@ class _StoryBarState extends State<StoryBar> {
               title: const Text("Photo Story"),
               onTap: () {
                 Navigator.pop(ctx);
-                _uploadStory(false);
+                _pickStoryAndShowPreview(
+                  false,
+                ); // 🌟 THE FIX: డైలాగ్ ఓపెన్ అవుతుంది
               },
             ),
             ListTile(
@@ -75,7 +76,9 @@ class _StoryBarState extends State<StoryBar> {
               title: const Text("Video Story"),
               onTap: () {
                 Navigator.pop(ctx);
-                _uploadStory(true);
+                _pickStoryAndShowPreview(
+                  true,
+                ); // 🌟 THE FIX: డైలాగ్ ఓపెన్ అవుతుంది
               },
             ),
           ],
@@ -84,8 +87,8 @@ class _StoryBarState extends State<StoryBar> {
     );
   }
 
-  // 🌟 THE FIX: కంప్రెషన్ తో అప్‌డేట్ చేసిన ఫంక్షన్
-  Future<void> _uploadStory(bool isVideo) async {
+  // 🌟 1. ఫైల్ సెలెక్ట్ చేసుకొని క్యాప్షన్ డైలాగ్ చూపించడం
+  Future<void> _pickStoryAndShowPreview(bool isVideo) async {
     final ImagePicker picker = ImagePicker();
     final XFile? file = isVideo
         ? await picker.pickVideo(source: ImageSource.gallery)
@@ -95,65 +98,169 @@ class _StoryBarState extends State<StoryBar> {
           );
 
     if (file != null && myUserData != null) {
-      UploadManager().isUploading.value = true;
-      try {
-        UploadManager().uploadStatus.value = "Compressing... 🗜️";
-        File finalFile = File(file.path);
+      File mediaFile = File(file.path);
+      TextEditingController captionController = TextEditingController();
+      bool isUploadingLocal = false;
 
-        if (isVideo) {
-          finalFile = await UploadManager().compressVideo(finalFile);
-        } else {
-          finalFile = await UploadManager().compressImage(finalFile);
-        }
+      // డైలాగ్ ఓపెన్ చేస్తున్నాం
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              backgroundColor: Colors.grey[900],
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(15),
+              ),
+              title: const Text(
+                "Add Story",
+                style: TextStyle(color: Colors.white),
+              ),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: !isVideo
+                        ? Image.file(
+                            mediaFile,
+                            height: 200,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                          )
+                        : Container(
+                            height: 200,
+                            width: double.infinity,
+                            color: Colors.black,
+                            child: const Center(
+                              child: Icon(
+                                Icons.play_circle,
+                                size: 50,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                  ),
+                  const SizedBox(height: 15),
+                  TextField(
+                    controller: captionController,
+                    style: const TextStyle(color: Colors.white),
+                    decoration: InputDecoration(
+                      hintText: "Write a caption...",
+                      hintStyle: const TextStyle(color: Colors.grey),
+                      filled: true,
+                      fillColor: Colors.black54,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                        borderSide: BorderSide.none,
+                      ),
+                    ),
+                    maxLines: 2,
+                  ),
+                  if (isUploadingLocal) ...[
+                    const SizedBox(height: 15),
+                    const LinearProgressIndicator(color: Colors.blue),
+                  ],
+                ],
+              ),
+              actions: [
+                if (!isUploadingLocal)
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text(
+                      "Cancel",
+                      style: TextStyle(color: Colors.red),
+                    ),
+                  ),
+                ElevatedButton(
+                  onPressed: isUploadingLocal
+                      ? null
+                      : () async {
+                          setDialogState(() => isUploadingLocal = true);
+                          String caption = captionController.text.trim();
+                          Navigator.pop(
+                            ctx,
+                          ); // డైలాగ్ క్లోజ్ చేసి అప్‌లోడ్ స్టార్ట్ చేస్తాం
+                          await _processAndUpload(mediaFile, isVideo, caption);
+                        },
+                  child: const Text("Share"),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+    }
+  }
 
-        String storyId = const Uuid().v4();
-        Reference ref = FirebaseStorage.instance
-            .ref()
-            .child('stories')
-            .child(currentUid)
-            .child(storyId);
+  // 🌟 బ్యాక్‌గ్రౌండ్‌లో అప్‌లోడ్ జరిగే ఫంక్షన్
+  Future<void> _processAndUpload(
+    File finalFile,
+    bool isVideo,
+    String caption,
+  ) async {
+    UploadManager().isUploading.value = true;
+    try {
+      UploadManager().uploadStatus.value = "Compressing... 🗜️";
 
-        UploadTask uploadTask = ref.putFile(finalFile);
-        uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
-          UploadManager().uploadProgress.value =
-              snapshot.bytesTransferred / snapshot.totalBytes;
-          UploadManager().uploadStatus.value =
-              "Uploading Story... ☁️ ${((snapshot.bytesTransferred / snapshot.totalBytes) * 100).toStringAsFixed(0)}%";
-        });
-
-        TaskSnapshot snapshot = await uploadTask;
-        String downloadUrl = await snapshot.ref.getDownloadURL();
-        DateTime expiryTime = DateTime.now().add(const Duration(hours: 24));
-
-        UploadManager().uploadStatus.value = "Finishing up... ✍️";
-
-        await FirebaseFirestore.instance.collection('stories').add({
-          "uid": currentUid,
-          "ownerId": currentUid,
-          "username": myUserData!['username'] ?? "User",
-          "profilePic": myUserData!['profilePic'] ?? "",
-          "storyUrl": downloadUrl,
-          "type": isVideo ? "video" : "image",
-          "timestamp": FieldValue.serverTimestamp(),
-          "expiresAt": Timestamp.fromDate(expiryTime),
-          "likes": [],
-          "viewers": [],
-        });
-
-        UploadManager().uploadStatus.value = "Success! 🎉";
-        await Future.delayed(const Duration(seconds: 1));
-      } catch (e) {
-        debugPrint("Error: $e");
-        UploadManager().uploadStatus.value = "❌ Error";
-      } finally {
-        UploadManager().isUploading.value = false;
+      if (isVideo) {
+        finalFile = await UploadManager().compressVideo(finalFile);
+      } else {
+        finalFile = await UploadManager().compressImage(finalFile);
       }
+
+      String storyId = const Uuid().v4();
+      Reference ref = FirebaseStorage.instance
+          .ref()
+          .child('stories')
+          .child(currentUid)
+          .child(storyId);
+
+      UploadTask uploadTask = ref.putFile(finalFile);
+      uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
+        UploadManager().uploadProgress.value =
+            snapshot.bytesTransferred / snapshot.totalBytes;
+        UploadManager().uploadStatus.value =
+            "Uploading Story... ☁️ ${((snapshot.bytesTransferred / snapshot.totalBytes) * 100).toStringAsFixed(0)}%";
+      });
+
+      TaskSnapshot snapshot = await uploadTask;
+      String downloadUrl = await snapshot.ref.getDownloadURL();
+      DateTime expiryTime = DateTime.now().add(const Duration(hours: 24));
+
+      UploadManager().uploadStatus.value = "Finishing up... ✍️";
+
+      await FirebaseFirestore.instance.collection('stories').add({
+        "uid": currentUid,
+        "ownerId": currentUid,
+        "username": myUserData!['username'] ?? "User",
+        "profilePic": myUserData!['profilePic'] ?? "",
+        "storyUrl": downloadUrl,
+        "type": isVideo ? "video" : "image",
+        "caption": caption, // 🌟 THE FIX: క్యాప్షన్ సేవ్ చేస్తున్నాం
+        "timestamp": FieldValue.serverTimestamp(),
+        "expiresAt": Timestamp.fromDate(expiryTime),
+        "likes": [],
+        "viewers": [],
+      });
+
+      UploadManager().uploadStatus.value = "Success! 🎉";
+      await Future.delayed(const Duration(seconds: 1));
+    } catch (e) {
+      debugPrint("Error: $e");
+      UploadManager().uploadStatus.value = "❌ Error";
+    } finally {
+      UploadManager().isUploading.value = false;
     }
   }
 
   @override
   Widget build(BuildContext context) {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // 🌟 THE FIX: మనం ఎవరిని ఫాలో అవుతున్నామో ఆ లిస్ట్
+    List followingList = myUserData?['following'] ?? [];
 
     return SizedBox(
       height: 115,
@@ -166,12 +273,15 @@ class _StoryBarState extends State<StoryBar> {
         builder: (context, snapshot) {
           if (!snapshot.hasData) return const SizedBox();
 
-          // 🌟 WHATSAPP LOGIC: గ్రూపింగ్, చూడనివి ముందు, చూసినవి వెనకాల
           Map<String, List<DocumentSnapshot>> userStoriesMap = {};
+
           for (var doc in snapshot.data!.docs) {
             String uid = doc['uid'];
-            if (!userStoriesMap.containsKey(uid)) userStoriesMap[uid] = [];
-            userStoriesMap[uid]!.add(doc);
+            // 🌟 3. THE FIX: మన స్టోరీ లేదా మనం ఫాలో అయ్యే వాళ్ల స్టోరీ అయితేనే చూపిస్తాం
+            if (uid == currentUid || followingList.contains(uid)) {
+              if (!userStoriesMap.containsKey(uid)) userStoriesMap[uid] = [];
+              userStoriesMap[uid]!.add(doc);
+            }
           }
 
           List<Map<String, dynamic>> unseenUsers = [];
@@ -218,7 +328,6 @@ class _StoryBarState extends State<StoryBar> {
                 return GestureDetector(
                   onTap: hasMyStory
                       ? () {
-                          // మన స్టోరీస్ మాత్రమే చూపిస్తాం
                           var myStoryList = [
                             {
                               'uid': currentUid,
@@ -320,7 +429,7 @@ class _StoryBarState extends State<StoryBar> {
                 );
               }
 
-              // 🌟 ITEM > 0: OTHER USERS (WhatsApp Auto Next Jump) 🌟
+              // 🌟 ITEM > 0: OTHER USERS 🌟
               var user = finalUsersList[index - 1];
 
               return GestureDetector(
@@ -364,31 +473,22 @@ class _StoryBarState extends State<StoryBar> {
                         ),
                       ),
                       const SizedBox(height: 5),
+                      // 🌟 2. THE FIX: Marquee తీసేసి Ellipsis పెట్టాం
                       SizedBox(
                         width: 70,
                         height: 15,
-                        child: user['username'].length > 8
-                            ? Marquee(
-                                text: "${user['username']}   ",
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: isDark ? Colors.white : Colors.black,
-                                ),
-                                scrollAxis: Axis.horizontal,
-                                blankSpace: 20.0,
-                                velocity: 20.0,
-                              )
-                            : Align(
-                                alignment: Alignment.center,
-                                child: Text(
-                                  user['username'],
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: isDark ? Colors.white : Colors.black,
-                                  ),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
-                              ),
+                        child: Align(
+                          alignment: Alignment.center,
+                          child: Text(
+                            user['username'],
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: isDark ? Colors.white : Colors.black,
+                            ),
+                            maxLines: 1, // ఒకే లైన్
+                            overflow: TextOverflow.ellipsis, // ... వస్తుంది
+                          ),
+                        ),
                       ),
                     ],
                   ),

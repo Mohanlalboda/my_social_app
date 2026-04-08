@@ -87,6 +87,8 @@ class UploadManager {
     required String caption,
     required bool isVideo,
     required bool isReel,
+    double? latitude, // 🌟 లొకేషన్ పారామీటర్
+    double? longitude, // 🌟 లొకేషన్ పారామీటర్
   }) async {
     isUploading.value = true;
     uploadProgress.value = 0.0;
@@ -101,7 +103,7 @@ class UploadManager {
         throw Exception("ఫైల్ దొరకలేదు!");
       }
 
-      // 🌟 THE FIX: ఇక్కడే మనం ఇమేజ్/వీడియో కంప్రెస్ చేస్తున్నాం!
+      // 🌟 కంప్రెషన్
       File compressedFile;
       if (isVideo) {
         compressedFile = await compressVideo(file);
@@ -114,7 +116,7 @@ class UploadManager {
       uploadStatus.value = "3. Storage కి వెళ్తోంది... ☁️";
       String mediaUrl = await uploadFileToStorage(
         folderName,
-        compressedFile, // 🌟 కంప్రెస్ చేసిన ఫైల్ ని పంపుతున్నాం
+        compressedFile,
         isVideo,
         postId,
       );
@@ -141,6 +143,9 @@ class UploadManager {
         'commentCount': 0,
         'isPublic': userData['isPublic'] ?? true,
         'timestamp': FieldValue.serverTimestamp(),
+        // 🌟 THE FIX: డేటాబేస్ లోకి లొకేషన్ వెళ్లేలా ఇక్కడ యాడ్ చేశాను
+        'latitude': latitude,
+        'longitude': longitude,
       };
 
       await _firestore.collection('posts').doc(postId).set(postData);
@@ -238,7 +243,7 @@ class UploadManager {
     }
   }
 
-  // 🌟 6. Moments కోసం (ఇక్కడే Likes యాడ్ చేశాం)
+  // 🌟 6. Moments కోసం
   Future<void> uploadMoment(File file, bool isVideo) async {
     isUploading.value = true;
     uploadStatus.value = "Uploading Moment... ✨";
@@ -246,7 +251,6 @@ class UploadManager {
       String uid = FirebaseAuth.instance.currentUser!.uid;
       String momentId = const Uuid().v1();
 
-      // 🌟 THE FIX: Moments (Stories) కి కూడా కంప్రెషన్ యాడ్ చేశాం
       File compressedFile;
       if (isVideo) {
         compressedFile = await compressVideo(file);
@@ -256,7 +260,7 @@ class UploadManager {
 
       String url = await uploadFileToStorage(
         'moments',
-        compressedFile, // కంప్రెస్ చేసిన ఫైల్ వెళ్తుంది
+        compressedFile,
         isVideo,
         momentId,
       );

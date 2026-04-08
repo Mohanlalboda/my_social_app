@@ -20,7 +20,7 @@ class _NearMeScreenState extends State<NearMeScreen> {
   bool _isLoading = true;
   String _statusText = "Searching for nearby content... 🛰️";
   List<DocumentSnapshot> _nearbyDocs = [];
-  final double _maxDistanceInKm = 50.0;
+  final double _maxDistanceInKm = 500.0;
 
   // 🌟 PAGINATION
   DocumentSnapshot? _lastDocument;
@@ -70,9 +70,12 @@ class _NearMeScreenState extends State<NearMeScreen> {
     }
   }
 
-  // 🌟 PAGINATION LOGIC: 20-20 లాగుతాం
+  // 🌟 ADVANCED PAGINATION LOGIC
   Future<void> _fetchNearbyContent({bool isInitial = false}) async {
-    if (_currentPosition == null || (!_hasMoreData && !isInitial)) return;
+    if (_currentPosition == null || !_hasMoreData) return;
+
+    // ఒకేసారి రెండుసార్లు లాగకుండా ఆపుతున్నాం
+    if (!isInitial && _isFetchingMore) return;
 
     if (isInitial) {
       setState(() => _isLoading = true);
@@ -81,34 +84,50 @@ class _NearMeScreenState extends State<NearMeScreen> {
     }
 
     try {
-      Query q = FirebaseFirestore.instance
-          .collection('posts')
-          .orderBy('timestamp', descending: true)
-          .limit(20); // 🌟 THE FIX: 20 లిమిట్
+      List<DocumentSnapshot> newFilteredDocs = [];
+      int fetchAttempts = 0;
 
-      if (!isInitial && _lastDocument != null) {
-        q = q.startAfterDocument(_lastDocument!);
-      }
+      // 🌟 THE FIX: దగ్గర్లో ఉన్నవి దొరికే వరకు (లేదా గరిష్టంగా 5 సార్లు = 100 పోస్ట్‌లు) వెతుకుతూనే ఉంటాం!
+      while (newFilteredDocs.isEmpty && _hasMoreData && fetchAttempts < 5) {
+        fetchAttempts++;
 
-      var snapshot = await q.get();
-      if (snapshot.docs.length < 20) _hasMoreData = false;
+        Query q = FirebaseFirestore.instance
+            .collection('posts')
+            .orderBy('timestamp', descending: true)
+            .limit(20);
 
-      List<DocumentSnapshot> filtered = [];
-      if (snapshot.docs.isNotEmpty) {
-        _lastDocument = snapshot.docs.last;
+        if (_lastDocument != null) {
+          q = q.startAfterDocument(_lastDocument!);
+        }
 
-        for (var doc in snapshot.docs) {
-          var data = doc.data() as Map<String, dynamic>;
-          if (data['latitude'] != null && data['longitude'] != null) {
-            double dist =
-                Geolocator.distanceBetween(
+        var snapshot = await q.get();
+        if (snapshot.docs.length < 20) _hasMoreData = false;
+
+        if (snapshot.docs.isNotEmpty) {
+          _lastDocument = snapshot.docs.last;
+
+          for (var doc in snapshot.docs) {
+            var data = doc.data() as Map<String, dynamic>;
+
+            if (data['latitude'] != null && data['longitude'] != null) {
+              // 🌟 THE FIX: String వచ్చినా సరే డబుల్ లోకి మార్చుకుని క్రాష్ అవ్వకుండా కాపాడుతాం
+              double lat = double.tryParse(data['latitude'].toString()) ?? 0.0;
+              double lng = double.tryParse(data['longitude'].toString()) ?? 0.0;
+
+              if (lat != 0.0 && lng != 0.0) {
+                double distInMeters = Geolocator.distanceBetween(
                   _currentPosition!.latitude,
                   _currentPosition!.longitude,
-                  data['latitude'],
-                  data['longitude'],
-                ) /
-                1000;
-            if (dist <= _maxDistanceInKm) filtered.add(doc);
+                  lat,
+                  lng,
+                );
+
+                double distInKm = distInMeters / 1000;
+                if (distInKm <= _maxDistanceInKm) {
+                  newFilteredDocs.add(doc);
+                }
+              }
+            }
           }
         }
       }
@@ -116,18 +135,15 @@ class _NearMeScreenState extends State<NearMeScreen> {
       if (mounted) {
         setState(() {
           if (isInitial) {
-            _nearbyDocs = filtered;
+            _nearbyDocs = newFilteredDocs;
+            if (_nearbyDocs.isEmpty)
+              _statusText = "No posts found near you 🏕️";
             _isLoading = false;
           } else {
-            _nearbyDocs.addAll(filtered);
+            _nearbyDocs.addAll(newFilteredDocs);
             _isFetchingMore = false;
           }
         });
-      }
-
-      // ఒకవేళ లాగిన 20 లో ఏమీ దగ్గరవి దొరకకపోతే, ఇంకో రౌండ్ ఆటోమేటిక్ గా లాగుతాం!
-      if (filtered.isEmpty && _hasMoreData) {
-        _fetchNearbyContent();
       }
     } catch (e) {
       if (mounted)
@@ -167,8 +183,7 @@ class _NearMeScreenState extends State<NearMeScreen> {
               scrollDirection: Axis.vertical,
               itemCount: _nearbyDocs.length + (_hasMoreData ? 1 : 0),
               onPageChanged: (index) {
-                // 🌟 యూజర్ చివరి పేజీకి రాగానే ఆటోమేటిక్ గా నెక్స్ట్ లాగాలి
-                if (index >= _nearbyDocs.length - 2 &&
+                if (index >= _nearbyDocs.length - 1 &&
                     _hasMoreData &&
                     !_isFetchingMore) {
                   _fetchNearbyContent();

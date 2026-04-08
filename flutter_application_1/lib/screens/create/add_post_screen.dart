@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_cropper/image_cropper.dart';
+import 'package:geolocator/geolocator.dart'; // 🌟 THE FIX: లొకేషన్ కోసం ప్యాకేజీ
 
 import '../../widgets/safe_elements.dart';
 import 'auto_reel_screen.dart';
@@ -28,6 +29,33 @@ class _AddPostScreenState extends State<AddPostScreen> {
   File? _selectedVideo;
   final TextEditingController _reelCaptionController = TextEditingController();
   bool _isReelPublic = true;
+
+  // 🌟 THE FIX: అప్‌లోడ్ చేసే ముందే లొకేషన్ తీసుకునే ఫంక్షన్
+  Future<Map<String, double>?> _getCurrentLocation() async {
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) return null; // GPS ఆన్‌లో లేకపోతే null ఇస్తాం
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied ||
+            permission == LocationPermission.deniedForever) {
+          return null; // పర్మిషన్ లేకపోయినా null ఇస్తాం
+        }
+      }
+
+      Position position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+        ),
+      );
+      return {'lat': position.latitude, 'lng': position.longitude};
+    } catch (e) {
+      debugPrint("Error getting location: $e");
+      return null;
+    }
+  }
 
   void _selectFriends() async {
     showModalBottomSheet(
@@ -308,8 +336,8 @@ class _AddPostScreenState extends State<AddPostScreen> {
     }
   }
 
-  // 🌟 1. పోస్ట్ అప్‌లోడ్ లాజిక్ (డైలాగ్ లేకుండా బ్యాక్‌గ్రౌండ్ అప్‌లోడ్)
-  void _triggerPostUpload() {
+  // 🌟 THE FIX: పోస్ట్ అప్‌లోడ్ చేసేటప్పుడు లొకేషన్ పంపుతున్నాం
+  void _triggerPostUpload() async {
     if (_selectedImages.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Select an image first! 📸")),
@@ -317,20 +345,23 @@ class _AddPostScreenState extends State<AddPostScreen> {
       return;
     }
 
-    // డైరెక్ట్ గా అప్‌లోడ్ స్టార్ట్ చేస్తున్నాం (await అక్కర్లేదు)
+    // లొకేషన్ కోసం వెయిట్ చేస్తున్నాం
+    Map<String, double>? loc = await _getCurrentLocation();
+
     UploadManager().uploadMedia(
       file: _selectedImages.first,
       caption: _postCaptionController.text.trim(),
       isVideo: false,
       isReel: false,
+      latitude: loc?['lat'], // 🌟 లొకేషన్ యాడ్ చేసాం
+      longitude: loc?['lng'], // 🌟 లొకేషన్ యాడ్ చేసాం
     );
 
-    // వెంటనే హోమ్ స్క్రీన్ కి వెళ్ళిపోతాం
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
-  // 🌟 2. రీల్ అప్‌లోడ్ లాజిక్ (డైలాగ్ లేకుండా బ్యాక్‌గ్రౌండ్ అప్‌లోడ్)
-  void _triggerReelUpload() {
+  // 🌟 THE FIX: రీల్ అప్‌లోడ్ చేసేటప్పుడు లొకేషన్ పంపుతున్నాం
+  void _triggerReelUpload() async {
     if (_selectedVideo == null) {
       ScaffoldMessenger.of(
         context,
@@ -338,15 +369,18 @@ class _AddPostScreenState extends State<AddPostScreen> {
       return;
     }
 
-    // డైరెక్ట్ గా అప్‌లోడ్ స్టార్ట్ చేస్తున్నాం (await అక్కర్లేదు)
+    // లొకేషన్ కోసం వెయిట్ చేస్తున్నాం
+    Map<String, double>? loc = await _getCurrentLocation();
+
     UploadManager().uploadMedia(
       file: _selectedVideo!,
       caption: _reelCaptionController.text.trim(),
       isVideo: true,
       isReel: true,
+      latitude: loc?['lat'], // 🌟 లొకేషన్ యాడ్ చేసాం
+      longitude: loc?['lng'], // 🌟 లొకేషన్ యాడ్ చేసాం
     );
 
-    // వెంటనే హోమ్ స్క్రీన్ కి వెళ్ళిపోతాం
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
