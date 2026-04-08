@@ -9,6 +9,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 
 import 'screens/create/add_post_screen.dart';
 import 'services/notification_service.dart';
+import 'services/social_service.dart'; // 🌟 THE FIX: స్టోరీస్ క్లీన్ చేయడానికి ఇంపోర్ట్ చేశాం
 import 'firebase_options.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/home/home_screen.dart';
@@ -34,10 +35,10 @@ void main() async {
   // 1. ఫైర్‌బేస్ ఇనిషియలైజ్ చేస్తున్నాం
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // 🌟 THE MAGIC LINE: పుష్ నోటిఫికేషన్స్ సర్వీస్ ని ఇక్కడ స్టార్ట్ చేయాలి
+  // 2. పుష్ నోటిఫికేషన్స్ సర్వీస్ ని ఇక్కడ స్టార్ట్ చేయాలి
   await PushNotificationService.initialize();
 
-  // 2. బ్యాక్‌గ్రౌండ్ మెసేజ్ హ్యాండ్లర్ సెట్ చేస్తున్నాం
+  // 3. బ్యాక్‌గ్రౌండ్ మెసేజ్ హ్యాండ్లర్ సెట్ చేస్తున్నాం
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
   runApp(const MySocialApp());
@@ -128,7 +129,6 @@ class MySocialApp extends StatelessWidget {
   }
 }
 
-// 🌟 THE FIX: WidgetsBindingObserver ని ఇక్కడ యాడ్ చేశాం
 class MainNavigation extends StatefulWidget {
   const MainNavigation({super.key});
   @override
@@ -150,22 +150,25 @@ class _MainNavigationState extends State<MainNavigation>
   @override
   void initState() {
     super.initState();
-    // 🌟 యాప్ ఓపెన్ చేయగానే ఆన్‌లైన్ లో ఉన్నట్టు ఫైర్‌బేస్ కి చెప్తాం
+    // యాప్ ఓపెన్ చేయగానే ఆన్‌లైన్ లో ఉన్నట్టు ఫైర్‌బేస్ కి చెప్తాం
     _updateOnlineStatus(true);
 
-    // 🌟 యాప్ ని మినిమైజ్ చేసినా, మళ్ళీ ఓపెన్ చేసినా పసిగట్టడానికి ఇది పెడతాం
+    // యాప్ ని మినిమైజ్ చేసినా, మళ్ళీ ఓపెన్ చేసినా పసిగట్టడానికి ఇది పెడతాం
     WidgetsBinding.instance.addObserver(this);
+
+    // 🌟 THE MAGIC: యాప్ ఓపెన్ అవ్వగానే బ్యాక్‌గ్రౌండ్‌లో పాత స్టోరీలన్నీ క్లీన్ అయిపోతాయి
+    SocialService.cleanupOldMoments();
   }
 
   @override
   void dispose() {
-    // 🌟 యాప్ పూర్తిగా క్లోజ్ చేసినప్పుడు అబ్జర్వర్ ని తీసేసి, ఆఫ్‌లైన్ అని చెప్తాం
+    // యాప్ పూర్తిగా క్లోజ్ చేసినప్పుడు అబ్జర్వర్ ని తీసేసి, ఆఫ్‌లైన్ అని చెప్తాం
     _updateOnlineStatus(false);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
-  // 🌟 యాప్ బ్యాక్‌గ్రౌండ్ కి వెళ్తే కనుక్కునే మ్యాజిక్ ఇక్కడే జరుగుతుంది
+  // యాప్ బ్యాక్‌గ్రౌండ్ కి వెళ్తే కనుక్కునే మ్యాజిక్ ఇక్కడే జరుగుతుంది
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
@@ -179,7 +182,7 @@ class _MainNavigationState extends State<MainNavigation>
     }
   }
 
-  // 🌟 ఫైర్‌బేస్ లో స్టేటస్ అప్‌డేట్ చేసే ఫంక్షన్
+  // ఫైర్‌బేస్ లో స్టేటస్ అప్‌డేట్ చేసే ఫంక్షన్
   void _updateOnlineStatus(bool isOnline) async {
     User? currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser != null) {

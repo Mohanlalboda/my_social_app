@@ -240,7 +240,7 @@ class _ChatScreenState extends State<ChatScreen> {
       'timestamp': timestamp,
       'unread_${widget.receiverId}': FieldValue.increment(1),
       'deletedBy': [],
-      'typing_$currentUid': false, 
+      'typing_$currentUid': false,
     }, SetOptions(merge: true));
 
     batch.set(newMsgRef, {
@@ -458,7 +458,7 @@ class _ChatScreenState extends State<ChatScreen> {
     String currentText,
     bool isTextMsg,
     bool isMe,
-    String mediaUrl, 
+    String mediaUrl,
   ) {
     const List<String> emojis = ['❤️', '😂', '😮', '😢', '🙏', '👍'];
     showModalBottomSheet(
@@ -626,13 +626,17 @@ class _ChatScreenState extends State<ChatScreen> {
         WriteBatch batch = FirebaseFirestore.instance.batch();
 
         for (var doc in messages.docs) {
-          var data = doc.data() as Map<String, dynamic>;
+          var data = doc.data();
           List deletedBy = data['deletedBy'] ?? [];
           String mediaUrl = data['mediaUrl'] ?? '';
 
-          if (mediaUrl.isNotEmpty && deletedBy.isNotEmpty && !deletedBy.contains(currentUid)) {
+          if (mediaUrl.isNotEmpty &&
+              deletedBy.isNotEmpty &&
+              !deletedBy.contains(currentUid)) {
             try {
-              Reference storageRef = FirebaseStorage.instance.refFromURL(mediaUrl);
+              Reference storageRef = FirebaseStorage.instance.refFromURL(
+                mediaUrl,
+              );
               await storageRef.delete();
             } catch (e) {
               debugPrint("Storage Cleanup Error: $e");
@@ -722,8 +726,7 @@ class _ChatScreenState extends State<ChatScreen> {
                       return const Text(
                         "typing...",
                         style: TextStyle(
-                          color: Colors
-                              .greenAccent, 
+                          color: Colors.greenAccent,
                           fontSize: 12,
                           fontStyle: FontStyle.italic,
                           fontWeight: FontWeight.bold,
@@ -900,7 +903,13 @@ class _ChatScreenState extends State<ChatScreen> {
                       return GestureDetector(
                         onLongPress: () =>
                             // 🌟 THE FIX: mediaUrl పాస్ చేసాం
-                            _showMessageOptions(msgId, "", false, isMe, msgData['mediaUrl'] ?? ""),
+                            _showMessageOptions(
+                              msgId,
+                              "",
+                              false,
+                              isMe,
+                              msgData['mediaUrl'] ?? "",
+                            ),
                         onTap: () {
                           if (msgType == 'shared_reel')
                             Navigator.push(
@@ -955,7 +964,8 @@ class _ChatScreenState extends State<ChatScreen> {
                         msgData['text'] ?? "",
                         msgType == 'text',
                         isMe,
-                        msgData['mediaUrl'] ?? "", // 🌟 THE FIX: mediaUrl పాస్ చేసాం
+                        msgData['mediaUrl'] ??
+                            "", // 🌟 THE FIX: mediaUrl పాస్ చేసాం
                       ),
                       child: Align(
                         alignment: isMe
@@ -1092,8 +1102,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   Expanded(
                     child: TextField(
                       controller: _msgController,
-                      onChanged:
-                          _onTyping, 
+                      onChanged: _onTyping,
                       style: TextStyle(
                         color: isDark ? Colors.white : Colors.black,
                       ),
