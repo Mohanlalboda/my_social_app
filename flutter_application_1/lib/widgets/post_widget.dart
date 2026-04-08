@@ -18,6 +18,8 @@ import 'cached_media_widget.dart';
 import '../screens/posts/comments_screen.dart';
 import '../screens/profile/other_user_profile_screen.dart';
 import '../screens/profile/user_list_screen.dart';
+// 🌟 THE FIX: మీరు క్రియేట్ చేసిన ఫుల్ స్క్రీన్ ఫైల్ ని ఇక్కడ ఇంపోర్ట్ చేసాం
+import '../screens/posts/full_screen_image_screen.dart';
 
 class PostWidget extends StatefulWidget {
   final Map<String, dynamic> post;
@@ -522,8 +524,22 @@ class _PostWidgetState extends State<PostWidget> {
                     itemCount: images.length,
                     itemBuilder: (context, index) {
                       String imgData = images[index];
+                      // 🌟 THE FIX: ఇక్కడ onTap కనెక్ట్ చేసాం
                       return GestureDetector(
                         onDoubleTap: _handleDoubleTap,
+                        onTap: () {
+                          // పోస్ట్ ఫోటో మీద నొక్కితే ఫుల్ స్క్రీన్ కి వెళ్తుంది
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => FullScreenImageScreen(
+                                imageUrls: images, // అన్ని ఫోటోలు పంపుతున్నాం
+                                initialIndex:
+                                    index, // ఏ ఫోటో మీద నొక్కారో దాని ఇండెక్స్
+                              ),
+                            ),
+                          );
+                        },
                         child: imgData.startsWith('http')
                             ? CachedMediaWidget(
                                 mediaUrl: imgData,
@@ -615,7 +631,6 @@ class _PostWidgetState extends State<PostWidget> {
                             builder: (_) => CommentsScreen(
                               postId: widget.post['postId'],
                               postOwnerId: widget.post['ownerId'],
-                              // 🌟 ఇక్కడే ఎర్రర్ ఉండేది, దాన్ని తీసేసాం.
                             ),
                           ),
                         ),
@@ -717,7 +732,7 @@ class _AutoReelPlayerForFeedState extends State<AutoReelPlayerForFeed> {
       AudioContext(
         iOS: AudioContextIOS(
           category: AVAudioSessionCategory.playback,
-          options: {AVAudioSessionOptions.mixWithOthers},
+          options: const {AVAudioSessionOptions.mixWithOthers},
         ),
         android: const AudioContextAndroid(audioFocus: AndroidAudioFocus.gain),
       ),
