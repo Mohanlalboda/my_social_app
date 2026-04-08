@@ -6,7 +6,7 @@ import 'package:flutter/material.dart';
 class SocialService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
-  // 🌟 1. లైక్/అన్‌లైక్ లాజిక్
+  // 🌟 1. పోస్ట్/రీల్ లైక్ లాజిక్
   static Future<void> toggleLike({
     required String postId,
     required List likesArray,
@@ -14,7 +14,6 @@ class SocialService {
   }) async {
     String currentUid = FirebaseAuth.instance.currentUser!.uid;
     String collection = isReel ? 'reels' : 'posts';
-
     try {
       if (likesArray.contains(currentUid)) {
         await _firestore.collection(collection).doc(postId).update({
@@ -30,7 +29,40 @@ class SocialService {
     }
   }
 
-  // 🌟 2. సేవ్/అన్‌సేవ్ లాజిక్
+  // 🌟 2. స్టోరీ (Story) లైక్ లాజిక్ & నోటిఫికేషన్ (NEW)
+  static Future<void> toggleStoryLike({
+    required String storyId,
+    required String ownerId,
+    required List likesArray,
+  }) async {
+    String currentUid = FirebaseAuth.instance.currentUser!.uid;
+    try {
+      if (likesArray.contains(currentUid)) {
+        await _firestore.collection('stories').doc(storyId).update({
+          'likes': FieldValue.arrayRemove([currentUid]),
+        });
+      } else {
+        await _firestore.collection('stories').doc(storyId).update({
+          'likes': FieldValue.arrayUnion([currentUid]),
+        });
+
+        // 🔔 నోటిఫికేషన్ పంపడం
+        if (currentUid != ownerId) {
+          await _firestore.collection('users').doc(ownerId).collection('notifications').add({
+            'type': 'story_like',
+            'senderId': currentUid,
+            'storyId': storyId,
+            'isRead': false,
+            'timestamp': FieldValue.serverTimestamp(),
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint("Error story like: $e");
+    }
+  }
+
+  // 🌟 3. సేవ్/అన్‌సేవ్ లాజిక్
   static Future<void> toggleSave({
     required String postId,
     required List savedArray,
@@ -38,7 +70,6 @@ class SocialService {
   }) async {
     String currentUid = FirebaseAuth.instance.currentUser!.uid;
     String collection = isReel ? 'reels' : 'posts';
-
     try {
       if (savedArray.contains(currentUid)) {
         await _firestore.collection(collection).doc(postId).update({
@@ -54,41 +85,21 @@ class SocialService {
     }
   }
 
-  // 🌟 3. 24 గంటలు దాటిన స్టోరీలను ఆటోమేటిక్‌గా డిలీట్ చేసే ఫంక్షన్
+  // 🌟 4. క్లీన్ అప్ (పాత స్టోరీస్ డిలీట్)
   static Future<void> cleanupOldMoments() async {
     try {
-      // 24 గంటల క్రితం టైమ్ (నిన్నటి టైమ్)
       DateTime yesterday = DateTime.now().subtract(const Duration(hours: 24));
-
-      // నిన్నటికంటే పాతవైన (24 గంటలు దాటిన) స్టోరీల కోసం వెతుకుతున్నాం
-      var oldMomentsSnap = await _firestore
-          .collection('moments')
-          .where('timestamp', isLessThan: yesterday)
-          .get();
-
+      var oldMomentsSnap = await _firestore.collection('stories').where('expiresAt', isLessThan: yesterday).get();
       for (var doc in oldMomentsSnap.docs) {
-        var data = doc.data();
-        String mediaUrl = data['mediaUrl'] ?? '';
-
-        // 1. ముందు ఫైర్‌బేస్ స్టోరేజ్ నుండి ఫోటో/వీడియో డిలీట్ చేయాలి
+        String mediaUrl = doc.data()['storyUrl'] ?? '';
         if (mediaUrl.isNotEmpty) {
           try {
-            Reference storageRef = FirebaseStorage.instance.refFromURL(
-              mediaUrl,
-            );
-            await storageRef.delete();
-          } catch (e) {
-            debugPrint("Storage Delete Error: $e");
-          }
+            await FirebaseStorage.instance.refFromURL(mediaUrl).delete();
+          } catch (e) { debugPrint("Storage Delete Error: $e"); }
         }
-
-        // 2. ఆ తర్వాత ఫైర్‌స్టోర్ (డేటాబేస్) నుండి ఆ డాక్యుమెంట్ డిలీట్ చేయాలి
         await doc.reference.delete();
       }
-
-      debugPrint("✅ 24 hours పాత స్టోరీలన్నీ డిలీట్ అయిపోయాయి!");
-    } catch (e) {
-      debugPrint("Cleanup Error: $e");
-    }
+      debugPrint("✅ Old stories cleaned!");
+    } catch (e) { debugPrint("Cleanup Error: $e"); }
   }
 }
