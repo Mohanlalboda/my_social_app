@@ -139,16 +139,13 @@ class _ChatScreenState extends State<ChatScreen> {
     super.dispose();
   }
 
-  // 🌟 THE FIX: టైపింగ్ లాజిక్ పక్కాగా సెట్ చేసాం
   void _onTyping(String val) {
     bool hasText = val.trim().isNotEmpty;
 
-    // సెండ్ బటన్ చూపించడానికి/హైడ్ చేయడానికి
     if (_isTypingNotifier.value != hasText) {
       _isTypingNotifier.value = hasText;
     }
 
-    // 1. కీబోర్డ్ మీద టైప్ చేస్తున్నప్పుడు Firebase లో true అని పెడతాం
     if (hasText && !_isCurrentlyTypingInFirebase) {
       _isCurrentlyTypingInFirebase = true;
       FirebaseFirestore.instance.collection('chatRooms').doc(roomId).set({
@@ -156,10 +153,8 @@ class _ChatScreenState extends State<ChatScreen> {
       }, SetOptions(merge: true));
     }
 
-    // పాత టైమర్ క్యాన్సిల్ చేసి మళ్ళీ స్టార్ట్ చేస్తాం
     if (_typingTimer?.isActive ?? false) _typingTimer!.cancel();
 
-    // 2. యూజర్ టైప్ చేయడం ఆపేసి 2 సెకన్లు అవ్వగానే Firebase లో false అని మారుస్తాం
     _typingTimer = Timer(const Duration(milliseconds: 2000), () {
       if (mounted && _isCurrentlyTypingInFirebase) {
         _isCurrentlyTypingInFirebase = false;
@@ -229,7 +224,6 @@ class _ChatScreenState extends State<ChatScreen> {
 
     _isTypingNotifier.value = false;
 
-    // 🌟 మెసేజ్ సెండ్ చేయగానే టైపింగ్ ఆపేయాలి
     _isCurrentlyTypingInFirebase = false;
     if (_typingTimer?.isActive ?? false) _typingTimer!.cancel();
 
@@ -246,7 +240,7 @@ class _ChatScreenState extends State<ChatScreen> {
       'timestamp': timestamp,
       'unread_${widget.receiverId}': FieldValue.increment(1),
       'deletedBy': [],
-      'typing_$currentUid': false, // సెండ్ చేయగానే ఆపేయాలి
+      'typing_$currentUid': false, 
     }, SetOptions(merge: true));
 
     batch.set(newMsgRef, {
@@ -458,11 +452,13 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  // 🌟 THE FIX: mediaUrl ని కూడా పాస్ చేస్తున్నాం
   void _showMessageOptions(
     String msgId,
     String currentText,
     bool isTextMsg,
     bool isMe,
+    String mediaUrl, 
   ) {
     const List<String> emojis = ['❤️', '😂', '😮', '😢', '🙏', '👍'];
     showModalBottomSheet(
@@ -521,7 +517,8 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
-                  _deleteMessageForEveryone(msgId);
+                  // 🌟 THE FIX: ఇక్కడ mediaUrl పంపుతున్నాం
+                  _deleteMessageForEveryone(msgId, mediaUrl);
                 },
               ),
           ],
@@ -573,7 +570,17 @@ class _ChatScreenState extends State<ChatScreen> {
         });
   }
 
-  void _deleteMessageForEveryone(String msgId) async {
+  // 🌟 THE FIX: అందరికీ డిలీట్ చేస్తే Storage లో ఫైల్ ఎగిరిపోతుంది
+  void _deleteMessageForEveryone(String msgId, String mediaUrl) async {
+    if (mediaUrl.isNotEmpty) {
+      try {
+        Reference storageRef = FirebaseStorage.instance.refFromURL(mediaUrl);
+        await storageRef.delete();
+      } catch (e) {
+        debugPrint("Storage File Delete Error: $e");
+      }
+    }
+
     await FirebaseFirestore.instance
         .collection('chatRooms')
         .doc(roomId)
@@ -587,6 +594,7 @@ class _ChatScreenState extends State<ChatScreen> {
         });
   }
 
+  // 🌟 THE FIX: క్లియర్ చాట్ చేస్తే, అవతలి వాళ్ళు అప్పటికే డిలీట్ చేసుంటే Storage లో ఫైల్ ఎగిరిపోతుంది
   void _clearChat() async {
     bool? confirm = await showDialog<bool>(
       context: context,
@@ -616,7 +624,21 @@ class _ChatScreenState extends State<ChatScreen> {
             .collection('messages')
             .get();
         WriteBatch batch = FirebaseFirestore.instance.batch();
+
         for (var doc in messages.docs) {
+          var data = doc.data() as Map<String, dynamic>;
+          List deletedBy = data['deletedBy'] ?? [];
+          String mediaUrl = data['mediaUrl'] ?? '';
+
+          if (mediaUrl.isNotEmpty && deletedBy.isNotEmpty && !deletedBy.contains(currentUid)) {
+            try {
+              Reference storageRef = FirebaseStorage.instance.refFromURL(mediaUrl);
+              await storageRef.delete();
+            } catch (e) {
+              debugPrint("Storage Cleanup Error: $e");
+            }
+          }
+
           batch.update(doc.reference, {
             'deletedBy': FieldValue.arrayUnion([currentUid]),
           });
@@ -696,13 +718,12 @@ class _ChatScreenState extends State<ChatScreen> {
                           false;
                     }
 
-                    // 🌟 THE FIX: అవతలి వాళ్ళు టైప్ చేస్తే, ఆన్లైన్/ఆఫ్లైన్ బదులు typing అని చూపిస్తాం
                     if (isTyping) {
                       return const Text(
                         "typing...",
                         style: TextStyle(
                           color: Colors
-                              .greenAccent, // 🌟 గ్రీన్ కలర్ లో ఇటాలిక్ గా
+                              .greenAccent, 
                           fontSize: 12,
                           fontStyle: FontStyle.italic,
                           fontWeight: FontWeight.bold,
@@ -710,7 +731,6 @@ class _ChatScreenState extends State<ChatScreen> {
                       );
                     }
 
-                    // వాళ్ళు టైప్ చేయకపోతే అప్పుడు వాళ్ళ ఆన్‌లైన్ స్టేటస్ చూపిస్తాం
                     return StreamBuilder<DocumentSnapshot>(
                       stream: FirebaseFirestore.instance
                           .collection('users')
@@ -879,7 +899,8 @@ class _ChatScreenState extends State<ChatScreen> {
                     if (msgType == 'shared_reel' || msgType == 'shared_post') {
                       return GestureDetector(
                         onLongPress: () =>
-                            _showMessageOptions(msgId, "", false, isMe),
+                            // 🌟 THE FIX: mediaUrl పాస్ చేసాం
+                            _showMessageOptions(msgId, "", false, isMe, msgData['mediaUrl'] ?? ""),
                         onTap: () {
                           if (msgType == 'shared_reel')
                             Navigator.push(
@@ -934,6 +955,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         msgData['text'] ?? "",
                         msgType == 'text',
                         isMe,
+                        msgData['mediaUrl'] ?? "", // 🌟 THE FIX: mediaUrl పాస్ చేసాం
                       ),
                       child: Align(
                         alignment: isMe
@@ -1071,7 +1093,7 @@ class _ChatScreenState extends State<ChatScreen> {
                     child: TextField(
                       controller: _msgController,
                       onChanged:
-                          _onTyping, // 🌟 ఇక్కడ టైపింగ్ లాజిక్ ట్రిగ్గర్ అవుతుంది
+                          _onTyping, 
                       style: TextStyle(
                         color: isDark ? Colors.white : Colors.black,
                       ),
