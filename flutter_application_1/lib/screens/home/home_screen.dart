@@ -127,159 +127,169 @@ class _HomeScreenState extends State<HomeScreen> {
     return Scaffold(
       backgroundColor: isDark ? Colors.black : Colors.white,
       body: SafeArea(
-        child: Stack(
+        child: Column(
+          // 🌟 Stack తీసేసి నేరుగా Column వాడుతున్నాం
           children: [
-            // ---------------- 1. MAIN HOME SCREEN ----------------
-            Column(
-              children: [
-                const StoryBar(),
-                Divider(
-                  height: 1,
-                  color: isDark ? Colors.grey[900] : Colors.grey[200],
-                ),
-                Expanded(
-                  child: _isInitialLoading
-                      ? const Center(
-                          child: CircularProgressIndicator(
-                            color: Color(0xFF00E5FF),
-                          ),
-                        )
-                      : _postsList.isEmpty
-                      ? const Center(
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                Icons.photo_camera_outlined,
-                                size: 60,
-                                color: Colors.grey,
-                              ),
-                              SizedBox(height: 15),
-                              Text(
-                                "No posts yet. Follow people!",
-                                style: TextStyle(color: Colors.grey),
-                              ),
-                              SizedBox(height: 30),
-                              SuggestedFriendsWidget(), // సజెస్టెడ్ ఫ్రెండ్స్
-                            ],
-                          ),
-                        )
-                      : RefreshIndicator(
-                          color: const Color(0xFF00E5FF),
-                          onRefresh:
-                              _loadInitialData, // 🌟 స్వైప్ చేస్తే రీఫ్రెష్
-                          child: ListView.builder(
-                            controller:
-                                _scrollController, // 🌟 స్క్రోల్ కంట్రోలర్ ఇక్కడ కనెక్ట్ చేసాం
-                            physics: const AlwaysScrollableScrollPhysics(
-                              parent: BouncingScrollPhysics(),
-                            ),
-                            itemCount:
-                                _postsList.length + (_hasMoreData ? 1 : 0),
-                            itemBuilder: (context, index) {
-                              // 🌟 కిందకి రాగానే లోడింగ్ ఐకాన్ చూపించడం
-                              if (index == _postsList.length) {
-                                return const Padding(
-                                  padding: EdgeInsets.all(20.0),
-                                  child: Center(
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                    ),
-                                  ),
-                                );
-                              }
-
-                              var postDoc = _postsList[index];
-                              var post = postDoc.data() as Map<String, dynamic>;
-                              post['postId'] = postDoc.id;
-
-                              return PostWidget(post: post);
-                            },
-                          ),
-                        ),
-                ),
-              ],
+            // 1. పైన స్టోరీ బార్
+            const StoryBar(),
+            Divider(
+              height: 1,
+              color: isDark ? Colors.grey[900] : Colors.grey[200],
             ),
 
-            // ---------------- 2. GLOBAL UPLOAD PROGRESS BAR ----------------
-            Positioned(
-              bottom: 20,
-              left: 20,
-              right: 20,
-              child: ValueListenableBuilder<bool>(
-                valueListenable: UploadManager().isUploading,
-                builder: (context, isUploading, child) {
-                  if (!isUploading) return const SizedBox.shrink();
+            // 🌟 2. NEW UPLOAD PROGRESS BAR (స్టోరీస్ కింద, పోస్ట్‌ల పైన వస్తుంది)
+            ValueListenableBuilder<bool>(
+              valueListenable: UploadManager().isUploading,
+              builder: (context, isUploading, child) {
+                if (!isUploading) return const SizedBox.shrink();
 
-                  return Material(
-                    elevation: 10,
-                    borderRadius: BorderRadius.circular(15),
-                    color: isDark ? Colors.grey[900] : Colors.white,
-                    child: Padding(
-                      padding: const EdgeInsets.all(15.0),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          ValueListenableBuilder<String>(
-                            valueListenable: UploadManager().uploadStatus,
-                            builder: (context, status, child) {
-                              bool isSuccess =
-                                  status.contains("Success") ||
-                                  status.contains("Ready");
-                              return Row(
+                return ValueListenableBuilder<double>(
+                  valueListenable: UploadManager().uploadProgress,
+                  builder: (context, progress, child) {
+                    return ValueListenableBuilder<String>(
+                      valueListenable: UploadManager().uploadStatus,
+                      builder: (context, status, child) {
+                        bool isSuccess = status.contains("Success");
+                        bool isError = status.contains("Error");
+                        String type = UploadManager()
+                            .uploadType
+                            .value; // Post, Reel, Story etc.
+                        int percentage = (progress * 100).toInt();
+
+                        return Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 15,
+                            vertical: 10,
+                          ),
+                          color: isDark ? Colors.grey[900] : Colors.grey[50],
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
                                 children: [
+                                  // చిన్న ఐకాన్
                                   Icon(
                                     isSuccess
                                         ? Icons.check_circle
-                                        : Icons.cloud_upload_outlined,
+                                        : (isError
+                                              ? Icons.error
+                                              : Icons.cloud_upload),
+                                    size: 16,
                                     color: isSuccess
                                         ? Colors.green
-                                        : const Color(0xFFFD1D1D),
+                                        : (isError
+                                              ? Colors.red
+                                              : Colors.lightBlue),
                                   ),
-                                  const SizedBox(width: 10),
+                                  const SizedBox(width: 8),
+                                  // టెక్స్ట్ (Uploading... 45% లేదా Post Success)
                                   Expanded(
                                     child: Text(
-                                      status,
+                                      isSuccess || isError
+                                          ? status
+                                          : "Uploading $type... $percentage%",
                                       style: TextStyle(
+                                        fontSize: 13,
                                         fontWeight: FontWeight.bold,
-                                        fontSize: 14,
-                                        color: isDark
-                                            ? Colors.white
-                                            : Colors.black,
+                                        color: isSuccess
+                                            ? Colors.green
+                                            : (isDark
+                                                  ? Colors.white
+                                                  : Colors.black87),
                                       ),
                                     ),
                                   ),
                                 ],
-                              );
-                            },
-                          ),
-                          const SizedBox(height: 10),
-                          ValueListenableBuilder<double>(
-                            valueListenable: UploadManager().uploadProgress,
-                            builder: (context, progress, child) {
-                              return ClipRRect(
-                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              const SizedBox(height: 6),
+                              // 🌟 లైట్ బ్లూ కలర్ ఫిల్లింగ్ బార్
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(5),
                                 child: LinearProgressIndicator(
-                                  value: progress > 0 ? progress : null,
+                                  value: isSuccess
+                                      ? 1.0
+                                      : (progress > 0 ? progress : null),
+                                  minHeight: 4,
                                   backgroundColor: isDark
-                                      ? Colors.grey[800]
+                                      ? Colors.black54
                                       : Colors.grey[300],
                                   valueColor: AlwaysStoppedAnimation<Color>(
-                                    progress >= 1.0
+                                    isSuccess
                                         ? Colors.green
-                                        : const Color(0xFFFD1D1D),
+                                        : (isError
+                                              ? Colors.red
+                                              : Colors.lightBlue),
                                   ),
-                                  minHeight: 6,
                                 ),
-                              );
-                            },
+                              ),
+                            ],
                           ),
+                        );
+                      },
+                    );
+                  },
+                );
+              },
+            ),
+
+            // 3. కింద పోస్ట్ ఫీడ్
+            Expanded(
+              child: _isInitialLoading
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                        color: Color(0xFF00E5FF),
+                      ),
+                    )
+                  : _postsList.isEmpty
+                  ? const Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.photo_camera_outlined,
+                            size: 60,
+                            color: Colors.grey,
+                          ),
+                          SizedBox(height: 15),
+                          Text(
+                            "No posts yet. Follow people!",
+                            style: TextStyle(color: Colors.grey),
+                          ),
+                          SizedBox(height: 30),
+                          SuggestedFriendsWidget(), // సజెస్టెడ్ ఫ్రెండ్స్
                         ],
                       ),
+                    )
+                  : RefreshIndicator(
+                      color: const Color(0xFF00E5FF),
+                      onRefresh: _loadInitialData,
+                      child: ListView.builder(
+                        controller: _scrollController,
+                        physics: const AlwaysScrollableScrollPhysics(
+                          parent: BouncingScrollPhysics(),
+                        ),
+                        itemCount: _postsList.length + (_hasMoreData ? 1 : 0),
+                        itemBuilder: (context, index) {
+                          if (index == _postsList.length) {
+                            return const Padding(
+                              padding: EdgeInsets.all(20.0),
+                              child: Center(
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                ),
+                              ),
+                            );
+                          }
+
+                          var postDoc = _postsList[index];
+                          var post = postDoc.data() as Map<String, dynamic>;
+                          post['postId'] = postDoc.id;
+
+                          return PostWidget(post: post);
+                        },
+                      ),
                     ),
-                  );
-                },
-              ),
             ),
           ],
         ),

@@ -9,7 +9,7 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 
 import 'screens/create/add_post_screen.dart';
 import 'services/notification_service.dart';
-import 'services/social_service.dart'; // 🌟 THE FIX: స్టోరీస్ క్లీన్ చేయడానికి ఇంపోర్ట్ చేశాం
+import 'services/social_service.dart';
 import 'firebase_options.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/home/home_screen.dart';
@@ -32,13 +32,8 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // 1. ఫైర్‌బేస్ ఇనిషియలైజ్ చేస్తున్నాం
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
-  // 2. పుష్ నోటిఫికేషన్స్ సర్వీస్ ని ఇక్కడ స్టార్ట్ చేయాలి
   await PushNotificationService.initialize();
-
-  // 3. బ్యాక్‌గ్రౌండ్ మెసేజ్ హ్యాండ్లర్ సెట్ చేస్తున్నాం
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
   runApp(const MySocialApp());
@@ -139,10 +134,14 @@ class _MainNavigationState extends State<MainNavigation>
     with WidgetsBindingObserver {
   int _selectedIndex = 0;
 
+  // 🌟 THE FIX: స్వైప్ చేయడానికి PageController ని యాడ్ చేశాం
+  late PageController _pageController;
+
+  // 🌟 THE FIX: ఇప్పుడు InboxScreen ని ఒక టాబ్ లాగా పెట్టేసాం
   final List<Widget> _screens = [
     const HomeScreen(),
     const SearchScreen(),
-    const SizedBox(), // + బటన్ కోసం ప్లేస్‌హోల్డర్
+    const InboxScreen(),
     const ReelsScreen(),
     const ProfileScreen(),
   ];
@@ -150,39 +149,34 @@ class _MainNavigationState extends State<MainNavigation>
   @override
   void initState() {
     super.initState();
-    // యాప్ ఓపెన్ చేయగానే ఆన్‌లైన్ లో ఉన్నట్టు ఫైర్‌బేస్ కి చెప్తాం
+    // 🌟 PageController ని మొదటి స్క్రీన్ (0) తో స్టార్ట్ చేస్తున్నాం
+    _pageController = PageController(initialPage: _selectedIndex);
+
     _updateOnlineStatus(true);
-
-    // యాప్ ని మినిమైజ్ చేసినా, మళ్ళీ ఓపెన్ చేసినా పసిగట్టడానికి ఇది పెడతాం
     WidgetsBinding.instance.addObserver(this);
-
-    // 🌟 THE MAGIC: యాప్ ఓపెన్ అవ్వగానే బ్యాక్‌గ్రౌండ్‌లో పాత స్టోరీలన్నీ క్లీన్ అయిపోతాయి
     SocialService.cleanupOldMoments();
   }
 
   @override
   void dispose() {
-    // యాప్ పూర్తిగా క్లోజ్ చేసినప్పుడు అబ్జర్వర్ ని తీసేసి, ఆఫ్‌లైన్ అని చెప్తాం
+    // 🌟 కంట్రోలర్ ని క్లోజ్ చేయాలి
+    _pageController.dispose();
     _updateOnlineStatus(false);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
-  // యాప్ బ్యాక్‌గ్రౌండ్ కి వెళ్తే కనుక్కునే మ్యాజిక్ ఇక్కడే జరుగుతుంది
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // యూజర్ మళ్ళీ యాప్ లోకి వచ్చాడు (Online)
       _updateOnlineStatus(true);
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.detached ||
         state == AppLifecycleState.inactive) {
-      // యూజర్ వేరే యాప్ కి వెళ్ళాడు లేదా క్లోజ్ చేసాడు (Offline)
       _updateOnlineStatus(false);
     }
   }
 
-  // ఫైర్‌బేస్ లో స్టేటస్ అప్‌డేట్ చేసే ఫంక్షన్
   void _updateOnlineStatus(bool isOnline) async {
     User? currentUser = FirebaseAuth.instance.currentUser;
     if (currentUser != null) {
@@ -201,13 +195,15 @@ class _MainNavigationState extends State<MainNavigation>
   }
 
   @override
-  @override
   Widget build(BuildContext context) {
     final currentUser = FirebaseAuth.instance.currentUser;
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
+    // 🌟 Inbox, Reels, Profile స్క్రీన్స్ కి పైన యాప్ బార్ వద్దు కాబట్టి హైడ్ చేస్తున్నాం
+    bool hideAppBar = _selectedIndex >= 2;
+
     return Scaffold(
-      appBar: _selectedIndex == 3 || _selectedIndex == 4
+      appBar: hideAppBar
           ? null
           : AppBar(
               title: ShaderMask(
@@ -272,12 +268,11 @@ class _MainNavigationState extends State<MainNavigation>
                   },
                 ),
                 const SizedBox(width: 5),
-                // 🌟 THE FIX 1: ఇక్కడ మెసేజ్ ఐకాన్ తీసేసి "Add Post (+)" ఐకాన్ పెట్టాం
                 Padding(
                   padding: const EdgeInsets.only(right: 15),
                   child: IconButton(
                     icon: Icon(
-                      Icons.add_box_outlined, // 🌟 ప్లస్ ఐకాన్
+                      Icons.add_box_outlined, // 🌟 పైన ప్లస్ ఐకాన్
                       color: isDarkMode ? Colors.white : Colors.black,
                       size: 28,
                     ),
@@ -291,25 +286,34 @@ class _MainNavigationState extends State<MainNavigation>
                 ),
               ],
             ),
-      body: _screens[_selectedIndex],
+
+      // 🌟 THE FIX: ఇక్కడ PageView తో స్వైప్ చేసేలా సెట్ చేశాం
+      body: PageView(
+        controller: _pageController,
+        physics: const BouncingScrollPhysics(), // స్మూత్ స్వైపింగ్ కోసం
+        onPageChanged: (index) {
+          // స్క్రీన్ స్వైప్ చేసినప్పుడు కింద టాబ్ కలర్ కూడా మారాలి
+          setState(() {
+            _selectedIndex = index;
+          });
+        },
+        children: _screens,
+      ),
+
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (i) {
-          // 🌟 THE FIX 2: కింద బటన్ నొక్కితే Add Post బదులు "Inbox (Messages)" ఓపెన్ అవుతుంది
-          if (i == 2) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const InboxScreen()),
-            );
-          } else {
-            setState(() => _selectedIndex = i);
-          }
+          // కింద టాబ్స్ మీద టచ్ చేసినా సరే స్మూత్ గా ఆ స్క్రీన్ కి స్లైడ్ అవుతుంది
+          _pageController.animateToPage(
+            i,
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeInOut,
+          );
         },
         type: BottomNavigationBarType.fixed,
         showSelectedLabels: false,
         showUnselectedLabels: false,
         items: [
-          // 🌟 ఇక్కడ const తీసేయాలి ఎందుకంటే UnreadChatBadge dynamic కాబట్టి
           const BottomNavigationBarItem(
             icon: Icon(Icons.home_filled),
             label: "Home",
@@ -318,13 +322,10 @@ class _MainNavigationState extends State<MainNavigation>
             icon: Icon(Icons.search),
             label: "Search",
           ),
-
-          // 🌟 THE FIX 3: కింద మధ్యలో ప్లస్ ఐకాన్ బదులు "Messages" ఐకాన్ విత్ బ్యాడ్జ్ పెట్టాం
           const BottomNavigationBarItem(
             icon: UnreadChatBadge(child: Icon(Icons.send_outlined, size: 28)),
             label: "Messages",
           ),
-
           const BottomNavigationBarItem(
             icon: Icon(Icons.video_library_outlined),
             label: "Reels",
@@ -369,8 +370,8 @@ class UnreadChatBadge extends StatelessWidget {
             child,
             if (totalUnread > 0)
               Positioned(
-                right: 0,
-                top: 5,
+                right: -2,
+                top: -2,
                 child: Container(
                   padding: const EdgeInsets.all(4),
                   decoration: const BoxDecoration(

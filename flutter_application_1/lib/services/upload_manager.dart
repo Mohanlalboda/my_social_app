@@ -20,12 +20,14 @@ class UploadManager {
   final ValueNotifier<double> uploadProgress = ValueNotifier(0.0);
   final ValueNotifier<String> uploadStatus = ValueNotifier("");
 
+  // 🌟 క్రొత్తది: మనం ఏం అప్‌లోడ్ చేస్తున్నామో ఇక్కడ సేవ్ చేస్తాం (Post, Reel, Story, Auto Reel)
+  final ValueNotifier<String> uploadType = ValueNotifier("Post");
+
   final FirebaseStorage _storage = FirebaseStorage.instance;
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   // 🗜️ 1. ఇమేజ్ కంప్రెషన్
   Future<File> compressImage(File file) async {
-    uploadStatus.value = "Compressing Image... 🗜️";
     final tempDir = await getTemporaryDirectory();
     final path = tempDir.path;
     int rand = DateTime.now().millisecondsSinceEpoch;
@@ -34,14 +36,13 @@ class UploadManager {
     var result = await FlutterImageCompress.compressAndGetFile(
       file.absolute.path,
       targetPath,
-      quality: 70, // 🌟 60 నుండి 70 కి మార్చాను, క్వాలిటీ బాగుంటుంది
+      quality: 70,
     );
     return File(result!.path);
   }
 
   // 🗜️ 2. వీడియో కంప్రెషన్
   Future<File> compressVideo(File file) async {
-    uploadStatus.value = "Compressing Video... ⏳";
     MediaInfo? mediaInfo = await VideoCompress.compressVideo(
       file.path,
       quality: VideoQuality.MediumQuality,
@@ -64,64 +65,46 @@ class UploadManager {
           .child(childName)
           .child(FirebaseAuth.instance.currentUser!.uid)
           .child(id);
-
       UploadTask uploadTask = ref.putFile(file);
       uploadTask.snapshotEvents.listen((TaskSnapshot snapshot) {
         double progress = snapshot.bytesTransferred / snapshot.totalBytes;
-        uploadProgress.value = progress;
-        uploadStatus.value =
-            "Uploading to Cloud... ☁️ ${(progress * 100).toStringAsFixed(0)}%";
+        uploadProgress.value = progress; // 🌟 ప్రోగ్రెస్ అప్‌డేట్
       });
-
       TaskSnapshot snap = await uploadTask;
-      String downloadUrl = await snap.ref.getDownloadURL();
-      return downloadUrl;
+      return await snap.ref.getDownloadURL();
     } catch (e) {
       throw Exception("Storage Upload Error: $e");
     }
   }
 
-  // 🚀 4. ఫైనల్ అప్‌లోడ్ ఫంక్షన్ (ఇక్కడే మ్యాజిక్ జరుగుతుంది)
+  // 🚀 4. ఫైనల్ అప్‌లోడ్ ఫంక్షన్ (Post & Reel)
   Future<bool> uploadMedia({
     required File file,
     required String caption,
     required bool isVideo,
     required bool isReel,
-    double? latitude, // 🌟 లొకేషన్ పారామీటర్
-    double? longitude, // 🌟 లొకేషన్ పారామీటర్
+    double? latitude,
+    double? longitude,
   }) async {
+    // 🌟 టైప్ సెట్ చేస్తున్నాం
+    uploadType.value = isReel ? "Reel" : "Post";
     isUploading.value = true;
     uploadProgress.value = 0.0;
+    uploadStatus.value = "Uploading...";
 
     try {
-      uploadStatus.value = "1. Start అవుతోంది... ⏳";
       String uid = FirebaseAuth.instance.currentUser!.uid;
       String postId = const Uuid().v1();
 
-      uploadStatus.value = "2. File రెడీ చేస్తున్నాం... 📁";
-      if (!await file.exists()) {
-        throw Exception("ఫైల్ దొరకలేదు!");
-      }
-
-      // 🌟 కంప్రెషన్
-      File compressedFile;
-      if (isVideo) {
-        compressedFile = await compressVideo(file);
-      } else {
-        compressedFile = await compressImage(file);
-      }
-
-      String folderName = 'posts';
-
-      uploadStatus.value = "3. Storage కి వెళ్తోంది... ☁️";
+      File compressedFile = isVideo
+          ? await compressVideo(file)
+          : await compressImage(file);
       String mediaUrl = await uploadFileToStorage(
-        folderName,
+        'posts',
         compressedFile,
         isVideo,
         postId,
       );
-
-      uploadStatus.value = "4. Saving to Database... ✍️";
 
       DocumentSnapshot userDoc = await _firestore
           .collection('users')
@@ -129,7 +112,7 @@ class UploadManager {
           .get();
       var userData = userDoc.data() as Map<String, dynamic>;
 
-      Map<String, dynamic> postData = {
+      await _firestore.collection('posts').doc(postId).set({
         'postId': postId,
         'ownerId': uid,
         'username': userData['username'],
@@ -143,26 +126,26 @@ class UploadManager {
         'commentCount': 0,
         'isPublic': userData['isPublic'] ?? true,
         'timestamp': FieldValue.serverTimestamp(),
-        // 🌟 THE FIX: డేటాబేస్ లోకి లొకేషన్ వెళ్లేలా ఇక్కడ యాడ్ చేశాను
         'latitude': latitude,
         'longitude': longitude,
-      };
+      });
 
-      await _firestore.collection('posts').doc(postId).set(postData);
-
-      uploadStatus.value = "5. Success! 🎉";
-      await Future.delayed(const Duration(seconds: 2));
-
+      // 🌟 సక్సెస్ మెసేజ్
+      uploadStatus.value = "${uploadType.value} Success! 🎉";
+      await Future.delayed(
+        const Duration(seconds: 2),
+      ); // 2 సెకన్లు ఆగి బార్ తీసేస్తాం
       isUploading.value = false;
       return true;
     } catch (e) {
-      uploadStatus.value = "❌ Error: $e";
+      uploadStatus.value = "Error ❌";
+      await Future.delayed(const Duration(seconds: 2));
       isUploading.value = false;
       return false;
     }
   }
 
-  // 🌟 5. Auto Reel కోసం స్పెషల్ అప్‌లోడ్ ఫంక్షన్
+  // 🌟 5. Auto Reel కోసం స్పెషల్ అప్‌లోడ్ ఫంక్షన్ (RE-ADDED)
   Future<void> backgroundUploadAutoReel({
     required List<File> images,
     required String caption,
@@ -170,6 +153,7 @@ class UploadManager {
     String? localAudioPath,
     required String trendingAudioUrl,
   }) async {
+    uploadType.value = "Auto Reel"; // 🌟 టైప్ సెట్ చేశాం
     isUploading.value = true;
     uploadStatus.value = "Preparing Auto Reel... 🎞️";
     uploadProgress.value = 0.0;
@@ -180,10 +164,9 @@ class UploadManager {
       List<String> imageUrls = [];
 
       for (int i = 0; i < images.length; i++) {
-        uploadStatus.value = "Compressing Image ${i + 1}/${images.length}...";
+        uploadStatus.value = "Uploading Image ${i + 1}/${images.length}...";
         File compressed = await compressImage(images[i]);
 
-        uploadStatus.value = "Uploading Image ${i + 1}/${images.length}...";
         String url = await uploadFileToStorage(
           'auto_reels/$postId',
           compressed,
@@ -191,7 +174,8 @@ class UploadManager {
           'img_$i.jpg',
         );
         imageUrls.add(url);
-        uploadProgress.value = (i + 1) / images.length;
+        uploadProgress.value =
+            (i + 1) / images.length; // 🌟 ప్రోగ్రెస్ అప్‌డేట్
       }
 
       uploadStatus.value = "Uploading Audio... 🎵";
@@ -233,38 +217,37 @@ class UploadManager {
         'timestamp': FieldValue.serverTimestamp(),
       });
 
-      uploadStatus.value = "Auto Reel Ready! 🎉";
-      await Future.delayed(const Duration(milliseconds: 500));
-
+      // 🌟 సక్సెస్ మెసేజ్
+      uploadStatus.value = "Auto Reel Success! 🎉";
+      await Future.delayed(const Duration(seconds: 2));
       isUploading.value = false;
     } catch (e) {
       debugPrint("Auto Reel Upload Error: $e");
+      uploadStatus.value = "Error ❌";
+      await Future.delayed(const Duration(seconds: 2));
       isUploading.value = false;
     }
   }
 
-  // 🌟 6. Moments కోసం
+  // 🌟 6. Moments/Stories కోసం
   Future<void> uploadMoment(File file, bool isVideo) async {
+    uploadType.value = "Story"; // 🌟 టైప్ స్టోరీ
     isUploading.value = true;
-    uploadStatus.value = "Uploading Moment... ✨";
+    uploadProgress.value = 0.0;
+    uploadStatus.value = "Uploading...";
+
     try {
       String uid = FirebaseAuth.instance.currentUser!.uid;
       String momentId = const Uuid().v1();
-
-      File compressedFile;
-      if (isVideo) {
-        compressedFile = await compressVideo(file);
-      } else {
-        compressedFile = await compressImage(file);
-      }
-
+      File compressedFile = isVideo
+          ? await compressVideo(file)
+          : await compressImage(file);
       String url = await uploadFileToStorage(
         'moments',
         compressedFile,
         isVideo,
         momentId,
       );
-
       DateTime expiry = DateTime.now().add(const Duration(hours: 24));
 
       await _firestore.collection('moments').doc(momentId).set({
@@ -277,9 +260,14 @@ class UploadManager {
         'viewers': [],
         'likes': [],
       });
+
+      // 🌟 సక్సెస్ మెసేజ్
+      uploadStatus.value = "Story Success! 🎉";
+      await Future.delayed(const Duration(seconds: 2));
       isUploading.value = false;
     } catch (e) {
-      debugPrint("Moment Error: $e");
+      uploadStatus.value = "Error ❌";
+      await Future.delayed(const Duration(seconds: 2));
       isUploading.value = false;
     }
   }
