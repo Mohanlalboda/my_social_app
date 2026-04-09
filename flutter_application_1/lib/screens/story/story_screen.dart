@@ -135,6 +135,8 @@ class _StoryScreenState extends State<StoryScreen>
     bool isVideo = story['type'] == 'video';
 
     return Scaffold(
+      // 🌟 THE FIX 1: ఎప్పుడైనా కీబోర్డ్ దొంగతనంగా ఓపెన్ అయ్యి ఉంటే ఈ స్క్రీన్ ఇరుక్కుపోకుండా ఆపుతుంది.
+      resizeToAvoidBottomInset: false,
       backgroundColor: Colors.black,
       body: GestureDetector(
         onTapDown: (details) {
@@ -155,32 +157,39 @@ class _StoryScreenState extends State<StoryScreen>
           if (isVideo) _videoController?.play();
         },
         child: Stack(
-          fit: StackFit.expand,
+          fit: StackFit.expand, // 🌟 స్క్రీన్ మొత్తం పక్కాగా కవర్ చేస్తుంది
           children: [
-            if (isVideo)
-              _videoController != null && _videoController!.value.isInitialized
-                  ? FittedBox(
+            // 🌟 THE FIX 2: వీడియో లేదా ఫోటో స్క్రీన్ దాటి కిందకి రాకుండా పక్కాగా సైజు లాక్ చేశాను.
+            Positioned.fill(
+              child: isVideo
+                  ? (_videoController != null &&
+                            _videoController!.value.isInitialized)
+                        ? SizedBox.expand(
+                            child: FittedBox(
+                              fit: BoxFit.cover,
+                              child: SizedBox(
+                                width: _videoController!.value.size.width,
+                                height: _videoController!.value.size.height,
+                                child: VideoPlayer(_videoController!),
+                              ),
+                            ),
+                          )
+                        : const Center(
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                            ),
+                          )
+                  : CachedNetworkImage(
+                      imageUrl: story['storyUrl'],
                       fit: BoxFit.cover,
-                      child: SizedBox(
-                        width: _videoController!.value.size.width,
-                        height: _videoController!.value.size.height,
-                        child: VideoPlayer(_videoController!),
+                      placeholder: (context, url) => const Center(
+                        child: CircularProgressIndicator(color: Colors.white),
                       ),
-                    )
-                  : const Center(
-                      child: CircularProgressIndicator(color: Colors.white),
-                    )
-            else
-              CachedNetworkImage(
-                imageUrl: story['storyUrl'],
-                fit: BoxFit.cover,
-                placeholder: (context, url) => const Center(
-                  child: CircularProgressIndicator(color: Colors.white),
-                ),
-                errorWidget: (context, url, error) => const Center(
-                  child: Icon(Icons.broken_image, color: Colors.white),
-                ),
-              ),
+                      errorWidget: (context, url, error) => const Center(
+                        child: Icon(Icons.broken_image, color: Colors.white),
+                      ),
+                    ),
+            ),
 
             Positioned(
               top: MediaQuery.of(context).padding.top + 10,
