@@ -195,6 +195,7 @@ class _AddPostScreenState extends State<AddPostScreen> {
     );
   }
 
+  // 🌟 THE FIX: మీరు ఇచ్చిన కొత్త ఫంక్షన్‌ని ఇక్కడ పెట్టాను
   void _showPickerOptions({required bool isPost}) {
     showModalBottomSheet(
       context: context,
@@ -207,7 +208,9 @@ class _AddPostScreenState extends State<AddPostScreen> {
             Padding(
               padding: const EdgeInsets.all(15.0),
               child: Text(
-                isPost ? "Add Photo" : "Add Video",
+                isPost
+                    ? "Add Photo / Auto Reel"
+                    : "Add Video", // 🌟 టెక్స్ట్ మార్చాం
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -238,14 +241,15 @@ class _AddPostScreenState extends State<AddPostScreen> {
                   _pickVideo(ImageSource.gallery);
               },
             ),
-            if (!isPost)
+            // 🌟 THE FIX: isPost దగ్గరే ఈ ఆప్షన్ వచ్చేలా సెట్ చేసాం
+            if (isPost)
               ListTile(
                 leading: const Icon(
                   Icons.auto_awesome,
                   color: Colors.redAccent,
                 ),
                 title: const Text(
-                  "Create Auto-Sync Reel 🪄",
+                  "Create Auto-Sync Post 🪄", // టెక్స్ట్ మార్చాం
                   style: TextStyle(fontWeight: FontWeight.bold),
                 ),
                 onTap: () {

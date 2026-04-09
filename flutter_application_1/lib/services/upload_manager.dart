@@ -145,7 +145,7 @@ class UploadManager {
     }
   }
 
-  // 🌟 5. Auto Reel కోసం స్పెషల్ అప్‌లోడ్ ఫంక్షన్ (RE-ADDED)
+  // 🌟 5. Auto Reel కోసం స్పెషల్ అప్‌లోడ్ ఫంక్షన్
   Future<void> backgroundUploadAutoReel({
     required List<File> images,
     required String caption,
@@ -155,7 +155,7 @@ class UploadManager {
   }) async {
     uploadType.value = "Auto Reel"; // 🌟 టైప్ సెట్ చేశాం
     isUploading.value = true;
-    uploadStatus.value = "Preparing Auto Reel... 🎞️";
+    uploadStatus.value = "Preparing Auto-Sync Post... 🎞️";
     uploadProgress.value = 0.0;
 
     try {
@@ -191,7 +191,7 @@ class UploadManager {
         finalAudioUrl = await (await uploadTask).ref.getDownloadURL();
       }
 
-      uploadStatus.value = "Finalizing Auto Reel... ✍️";
+      uploadStatus.value = "Finalizing Auto-Sync Post... ✍️";
 
       DocumentSnapshot userDoc = await _firestore
           .collection('users')
@@ -209,7 +209,8 @@ class UploadManager {
         'isLocalAudio': isLocalAudio,
         'caption': caption,
         'type': 'auto_reel',
-        'isReel': true,
+        // 🌟 THE FIX: ఇక్కడ true బదులు false పెట్టాం. దీనివల్ల ఫైర్‌బేస్‌కి ఇది పోస్ట్ అని తెలుస్తుంది.
+        'isReel': false,
         'likes': [],
         'savedBy': [],
         'commentCount': 0,
@@ -218,7 +219,7 @@ class UploadManager {
       });
 
       // 🌟 సక్సెస్ మెసేజ్
-      uploadStatus.value = "Auto Reel Success! 🎉";
+      uploadStatus.value = "Auto-Sync Post Success! 🎉";
       await Future.delayed(const Duration(seconds: 2));
       isUploading.value = false;
     } catch (e) {

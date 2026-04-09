@@ -147,7 +147,8 @@ class _ScrollingReelsScreenState extends State<ScrollingReelsScreen> {
           var data = doc.data() as Map<String, dynamic>;
           String type = data['type'] ?? 'image';
 
-          if (type != 'video' && type != 'auto_reel') continue;
+          // 🌟 THE FIX: కేవలం ఒరిజినల్ వీడియోలే రావాలి, 'auto_reel' ఇక్కడ రాకూడదు!
+          if (type != 'video') continue;
 
           bool isPublic = data['isPublic'] ?? true;
           String ownerId = data['ownerId'] ?? "";
