@@ -1,5 +1,6 @@
 // ignore_for_file: curly_braces_in_flow_control_structures, deprecated_member_use
 
+import 'dart:math'; // 🌟 THE FIX: రాండమ్ గా జంబుల్ చేయడానికి ఇది కావాలి
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -7,7 +8,6 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../widgets/story_bar.dart';
 import '../../widgets/post_widget.dart';
 import '../../services/upload_manager.dart';
-import '../../widgets/suggested_friends.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -18,35 +18,31 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> {
   final String currentUid = FirebaseAuth.instance.currentUser!.uid;
 
-  // 🌟 PAGINATION VARIABLES 🌟
   final ScrollController _scrollController = ScrollController();
   final List<DocumentSnapshot> _postsList = [];
   List<dynamic> _followingList = [];
   DocumentSnapshot? _lastDocument;
   bool _isLoading = false;
   bool _hasMoreData = true;
-  bool _isInitialLoading = true; // ఫస్ట్ టైమ్ లోడింగ్ కోసం
+  bool _isInitialLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadInitialData(); // యాప్ ఓపెన్ అవ్వగానే డేటా లాగడం
+    _loadInitialData();
 
-    // 🌟 యూజర్ కిందకి స్క్రోల్ చేస్తున్నాడో లేదో కనిపెట్టే లాజిక్
     _scrollController.addListener(() {
       if (_scrollController.position.pixels >=
           _scrollController.position.maxScrollExtent - 200) {
-        _fetchMorePosts(); // కిందకి రాగానే ఇంకో 10 పోస్ట్‌లు లాగుతాం
+        _fetchMorePosts();
       }
     });
   }
 
-  // 🌟 మొదటి 10 పోస్ట్‌లు లాగే ఫంక్షన్
   Future<void> _loadInitialData() async {
     setState(() => _isInitialLoading = true);
 
     try {
-      // 1. మన Following లిస్ట్ లాగుతున్నాం
       var userDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(currentUid)
@@ -57,7 +53,6 @@ class _HomeScreenState extends State<HomeScreen> {
       _postsList.clear();
       _hasMoreData = true;
 
-      // 2. మొదటి 10 పోస్ట్‌లు
       await _fetchMorePosts();
     } catch (e) {
       debugPrint("Error loading initial data: $e");
@@ -66,46 +61,79 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // 🌟 మిగతా 10 పోస్ట్‌లు లాగే ఫంక్షన్ (Pagination Logic)
   Future<void> _fetchMorePosts() async {
     if (_isLoading || !_hasMoreData) return;
     setState(() => _isLoading = true);
 
     try {
-      // 🌟 మ్యాజిక్ ఇక్కడే: ఒకేసారి అన్నీ లాగకుండా limit(10) పెట్టాం!
+      // 🌟 ఒకేసారి 100 లాగుతున్నాం, అప్పుడే మన బకెట్ అల్గారిథమ్ పక్కాగా పనిచేస్తుంది
       Query q = FirebaseFirestore.instance
           .collection('posts')
           .orderBy('timestamp', descending: true)
-          .limit(10);
+          .limit(100);
 
-      // పాత డాక్యుమెంట్ ఎక్కడ ఆగిపోయిందో, అక్కడి నుండి స్టార్ట్ చేయాలి
       if (_lastDocument != null) {
         q = q.startAfterDocument(_lastDocument!);
       }
 
       var snapshot = await q.get();
 
-      if (snapshot.docs.length < 10) {
-        _hasMoreData = false; // ఇంక లాగడానికి పోస్ట్‌లు లేవు అని ఫిక్స్
+      if (snapshot.docs.length < 100) {
+        _hasMoreData = false;
       }
 
       if (snapshot.docs.isNotEmpty) {
-        _lastDocument = snapshot.docs.last; // లాస్ట్ డాక్యుమెంట్ ని సేవ్ చేసాం
+        _lastDocument = snapshot.docs.last;
 
-        // 🌟 వచ్చిన 10 పోస్ట్‌లలో పనికొచ్చేవి (Images & Public/Following) ఫిల్టర్ చేస్తున్నాం
-        var validPosts = snapshot.docs.where((doc) {
+        List<DocumentSnapshot> bucketFollowingUnseen = [];
+        List<DocumentSnapshot> bucketNewRandom = [];
+        List<DocumentSnapshot> bucketSeenJumbled = [];
+
+        for (var doc in snapshot.docs) {
           var data = doc.data() as Map<String, dynamic>;
+
           bool isPublic = data['isPublic'] ?? true;
           bool isNotReel = data['type'] != 'video';
           String ownerId = data['ownerId'] ?? "";
 
-          return (isPublic ||
-                  _followingList.contains(ownerId) ||
-                  ownerId == currentUid) &&
-              isNotReel;
-        }).toList();
+          // రీల్స్ మరియు ప్రైవేట్ పోస్ట్స్ (మనం ఫాలో అవ్వనివి) తీసేస్తున్నాం
+          if (!isNotReel ||
+              (!isPublic &&
+                  ownerId != currentUid &&
+                  !_followingList.contains(ownerId))) {
+            continue;
+          }
 
-        _postsList.addAll(validPosts);
+          bool isFollowing =
+              _followingList.contains(ownerId) || ownerId == currentUid;
+          List viewedBy = data['viewedBy'] is List ? data['viewedBy'] : [];
+          bool isSeen = viewedBy.contains(currentUid);
+
+          // 🌟 BUCKET LOGIC: ఏది ఎందులో పడాలో డిసైడ్ చేస్తున్నాం
+          if (isSeen) {
+            bucketSeenJumbled.add(doc); // చూసేసినవన్నీ బకెట్ 3 లోకి
+          } else {
+            if (isFollowing) {
+              bucketFollowingUnseen.add(doc); // ఫాలో అవుతూ చూడనివి బకెట్ 1 లోకి
+            } else {
+              bucketNewRandom.add(doc); // వేరే వాళ్ళ కొత్తవి బకెట్ 2 లోకి
+            }
+          }
+        }
+
+        // 🌟 SHUFFLING (జంబుల్ చేయడం)
+        final random = Random();
+        bucketNewRandom.shuffle(random); // కొత్తవి రాండమ్ గా వస్తాయి
+        bucketSeenJumbled.shuffle(random); // చూసేసినవి మొత్తం జంబుల్ అయిపోతాయి
+
+        // మూడింటిని ఒకే లైన్ లో కలుపుతున్నాం (First: Following, Next: New Random, Last: Seen Jumbled)
+        List<DocumentSnapshot> finalSortedPosts = [
+          ...bucketFollowingUnseen,
+          ...bucketNewRandom,
+          ...bucketSeenJumbled,
+        ];
+
+        _postsList.addAll(finalSortedPosts);
       }
     } catch (e) {
       debugPrint("Error fetching more posts: $e");
@@ -128,16 +156,13 @@ class _HomeScreenState extends State<HomeScreen> {
       backgroundColor: isDark ? Colors.black : Colors.white,
       body: SafeArea(
         child: Column(
-          // 🌟 Stack తీసేసి నేరుగా Column వాడుతున్నాం
           children: [
-            // 1. పైన స్టోరీ బార్
             const StoryBar(),
             Divider(
               height: 1,
               color: isDark ? Colors.grey[900] : Colors.grey[200],
             ),
 
-            // 🌟 2. NEW UPLOAD PROGRESS BAR (స్టోరీస్ కింద, పోస్ట్‌ల పైన వస్తుంది)
             ValueListenableBuilder<bool>(
               valueListenable: UploadManager().isUploading,
               builder: (context, isUploading, child) {
@@ -151,9 +176,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       builder: (context, status, child) {
                         bool isSuccess = status.contains("Success");
                         bool isError = status.contains("Error");
-                        String type = UploadManager()
-                            .uploadType
-                            .value; // Post, Reel, Story etc.
+                        String type = UploadManager().uploadType.value;
                         int percentage = (progress * 100).toInt();
 
                         return Container(
@@ -168,7 +191,6 @@ class _HomeScreenState extends State<HomeScreen> {
                             children: [
                               Row(
                                 children: [
-                                  // చిన్న ఐకాన్
                                   Icon(
                                     isSuccess
                                         ? Icons.check_circle
@@ -183,7 +205,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                               : Colors.lightBlue),
                                   ),
                                   const SizedBox(width: 8),
-                                  // టెక్స్ట్ (Uploading... 45% లేదా Post Success)
                                   Expanded(
                                     child: Text(
                                       isSuccess || isError
@@ -203,7 +224,6 @@ class _HomeScreenState extends State<HomeScreen> {
                                 ],
                               ),
                               const SizedBox(height: 6),
-                              // 🌟 లైట్ బ్లూ కలర్ ఫిల్లింగ్ బార్
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(5),
                                 child: LinearProgressIndicator(
@@ -233,7 +253,6 @@ class _HomeScreenState extends State<HomeScreen> {
               },
             ),
 
-            // 3. కింద పోస్ట్ ఫీడ్
             Expanded(
               child: _isInitialLoading
                   ? const Center(
@@ -247,17 +266,19 @@ class _HomeScreenState extends State<HomeScreen> {
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
                           Icon(
-                            Icons.photo_camera_outlined,
+                            Icons.check_circle_outline,
                             size: 60,
                             color: Colors.grey,
                           ),
                           SizedBox(height: 15),
                           Text(
-                            "No posts yet. Follow people!",
-                            style: TextStyle(color: Colors.grey),
+                            "You're all caught up! 🚀",
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
-                          SizedBox(height: 30),
-                          SuggestedFriendsWidget(), // సజెస్టెడ్ ఫ్రెండ్స్
                         ],
                       ),
                     )
@@ -269,15 +290,23 @@ class _HomeScreenState extends State<HomeScreen> {
                         physics: const AlwaysScrollableScrollPhysics(
                           parent: BouncingScrollPhysics(),
                         ),
-                        itemCount: _postsList.length + (_hasMoreData ? 1 : 0),
+                        itemCount: _postsList.length + 1,
                         itemBuilder: (context, index) {
                           if (index == _postsList.length) {
-                            return const Padding(
-                              padding: EdgeInsets.all(20.0),
+                            return Padding(
+                              padding: const EdgeInsets.all(30.0),
                               child: Center(
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
+                                child: _hasMoreData
+                                    ? const CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                      )
+                                    : const Text(
+                                        "You're all caught up! 🚀",
+                                        style: TextStyle(
+                                          color: Colors.grey,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
                               ),
                             );
                           }
