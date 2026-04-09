@@ -1,24 +1,47 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../../widgets/safe_elements.dart';
 import 'other_user_profile_screen.dart';
 
-class UserListScreen extends StatelessWidget {
+class UserListScreen extends StatefulWidget {
   final String title;
   final List userIds;
 
   const UserListScreen({super.key, required this.title, required this.userIds});
 
   @override
+  State<UserListScreen> createState() => _UserListScreenState();
+}
+
+class _UserListScreenState extends State<UserListScreen> {
+  final String currentUid = FirebaseAuth.instance.currentUser!.uid;
+
+  // 🌟 GHOST CLEANUP TRIGGER
+  void _removeGhostUser(String ghostId) async {
+    try {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(currentUid)
+          .update({
+            'followers': FieldValue.arrayRemove([ghostId]),
+            'following': FieldValue.arrayRemove([ghostId]),
+          });
+      debugPrint("🧹 Cleaned up Ghost ID: $ghostId");
+    } catch (e) {
+      debugPrint("Error cleaning ghost user: $e");
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    // 🌟 డార్క్ మోడ్ సపోర్ట్
     bool isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Scaffold(
       backgroundColor: isDark ? Colors.black : Colors.white,
       appBar: AppBar(
         title: Text(
-          title,
+          widget.title,
           style: TextStyle(
             color: isDark ? Colors.white : Colors.black,
             fontWeight: FontWeight.bold,
@@ -28,25 +51,23 @@ class UserListScreen extends StatelessWidget {
         iconTheme: IconThemeData(color: isDark ? Colors.white : Colors.black),
         elevation: 0.5,
       ),
-      body: userIds.isEmpty
+      body: widget.userIds.isEmpty
           ? Center(
               child: Text(
-                "No $title yet.",
+                "No ${widget.title} yet.",
                 style: const TextStyle(color: Colors.grey, fontSize: 16),
               ),
             )
           : ListView.builder(
-              itemCount: userIds.length,
+              itemCount: widget.userIds.length,
               itemBuilder: (context, index) {
-                // 🌟 ఫాస్ట్ గా లోడ్ అవ్వడానికి Stream బదులు Future వాడాం (లిస్ట్ ఊరికే మారదు కాబట్టి డేటా సేవ్ అవుతుంది)
                 return FutureBuilder<DocumentSnapshot>(
                   future: FirebaseFirestore.instance
                       .collection('users')
-                      .doc(userIds[index])
+                      .doc(widget.userIds[index])
                       .get(),
                   builder: (context, snapshot) {
                     if (snapshot.connectionState == ConnectionState.waiting) {
-                      // 🌟 డేటా వచ్చేలోపు చిన్న లోడింగ్ షిమ్మర్ లాంటిది
                       return ListTile(
                         leading: CircleAvatar(
                           backgroundColor: isDark
@@ -61,7 +82,10 @@ class UserListScreen extends StatelessWidget {
                         ),
                       );
                     }
+
+                    // 🌟 THE FIX: డాక్యుమెంట్ లేకపోతే (యూజర్ డిలీట్ అయితే) సైలెంట్ గా పీకేస్తాం
                     if (!snapshot.hasData || !snapshot.data!.exists) {
+                      _removeGhostUser(widget.userIds[index]);
                       return const SizedBox();
                     }
 
@@ -89,8 +113,9 @@ class UserListScreen extends StatelessWidget {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) =>
-                                OtherUserProfileScreen(userId: userIds[index]),
+                            builder: (context) => OtherUserProfileScreen(
+                              userId: widget.userIds[index],
+                            ),
                           ),
                         );
                       },

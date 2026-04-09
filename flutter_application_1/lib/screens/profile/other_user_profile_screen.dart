@@ -21,6 +21,45 @@ class OtherUserProfileScreen extends StatefulWidget {
 class _OtherUserProfileScreenState extends State<OtherUserProfileScreen> {
   final String currentUid = FirebaseAuth.instance.currentUser!.uid;
 
+  // 🌟 THE GHOST CLEANUP FUNCTION (బ్యాక్‌గ్రౌండ్ లో రన్ అవుతుంది)
+  Future<void> _cleanGhostUsers(
+    List currentFollowers,
+    List currentFollowing,
+  ) async {
+    List<String> validFollowers = [];
+    List<String> validFollowing = [];
+    bool needsUpdate = false;
+
+    for (String id in currentFollowers) {
+      var doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(id)
+          .get();
+      if (doc.exists)
+        validFollowers.add(id);
+      else
+        needsUpdate = true;
+    }
+
+    for (String id in currentFollowing) {
+      var doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(id)
+          .get();
+      if (doc.exists)
+        validFollowing.add(id);
+      else
+        needsUpdate = true;
+    }
+
+    if (needsUpdate) {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(widget.userId)
+          .update({'followers': validFollowers, 'following': validFollowing});
+    }
+  }
+
   void _showFullProfilePic(String base64String, String fallbackName) {
     showDialog(
       context: context,
@@ -92,6 +131,9 @@ class _OtherUserProfileScreenState extends State<OtherUserProfileScreen> {
           String bio = userData['bio'] ?? "";
           List followers = userData['followers'] ?? [];
           List following = userData['following'] ?? [];
+
+          // 🌟 THE FIX: ఇక్కడ కూడా స్కాన్ రన్ అవుతుంది, దెయ్యాలు ఉంటే ఎగిరిపోతాయి!
+          _cleanGhostUsers(followers, following);
 
           bool isPrivate = userData['isPrivate'] ?? false;
           bool isFollowing = followers.contains(currentUid);
@@ -248,10 +290,8 @@ class _OtherUserProfileScreenState extends State<OtherUserProfileScreen> {
                               ],
                               const SizedBox(height: 15),
 
-                              // 🌟 Follow & Message Buttons (మ్యాజిక్ ఇక్కడే జరిగింది!)
                               Row(
                                 children: [
-                                  // 🌟 అకౌంట్ పబ్లిక్ అయినా, లేదా మీరు ఇప్పటికే వాళ్లని ఫాలో అవుతున్నా సరే... ఈ బటన్ కనిపిస్తుంది.
                                   if (!isPrivate || isFollowing) ...[
                                     Expanded(
                                       child: ElevatedButton(

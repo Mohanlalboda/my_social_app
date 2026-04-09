@@ -168,12 +168,11 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  // 🌟 2. సజెస్టెడ్ ఫ్రెండ్స్ లిస్ట్ (Mutual Friends & Follow బటన్ అప్‌డేట్)
+  // 🌟 2. సజెస్టెడ్ ఫ్రెండ్స్ లిస్ట్
   Widget _buildSuggestedFriends() {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
 
     return StreamBuilder<DocumentSnapshot>(
-      // 🌟 ముందు మన డేటా (మనం ఎవరిని ఫాలో అవుతున్నామో) తెచ్చుకోవాలి
       stream: FirebaseFirestore.instance
           .collection('users')
           .doc(currentUid)
@@ -185,7 +184,6 @@ class _SearchScreenState extends State<SearchScreen> {
         List myFollowing = myData['following'] ?? [];
 
         return StreamBuilder<QuerySnapshot>(
-          // 🌟 లైవ్ లో అప్‌డేట్ అవ్వడానికి (Follow నొక్కగానే మారడానికి) StreamBuilder వాడాం
           stream: FirebaseFirestore.instance
               .collection('users')
               .limit(15)
@@ -209,7 +207,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   ),
                 ),
                 SizedBox(
-                  height: 160, // 🌟 బటన్ వస్తుంది కాబట్టి కార్డ్ ఎత్తు పెంచాం
+                  height: 160,
                   child: ListView.builder(
                     scrollDirection: Axis.horizontal,
                     physics: const BouncingScrollPhysics(),
@@ -220,13 +218,11 @@ class _SearchScreenState extends State<SearchScreen> {
                           users[index].data() as Map<String, dynamic>;
                       String targetUid = users[index].id;
 
-                      // 🌟 Mutual ఫ్రెండ్స్ కౌంట్ లాజిక్
                       List targetFollowers = userData['followers'] ?? [];
                       int mutualCount = myFollowing
                           .where((id) => targetFollowers.contains(id))
                           .length;
 
-                      // 🌟 Follow/Following స్టేటస్ లాజిక్
                       bool isFollowing = myFollowing.contains(targetUid);
 
                       return GestureDetector(
@@ -238,7 +234,7 @@ class _SearchScreenState extends State<SearchScreen> {
                           ),
                         ),
                         child: Container(
-                          width: 120, // 🌟 బటన్ పట్టడానికి వెడల్పు పెంచాం
+                          width: 120,
                           margin: const EdgeInsets.symmetric(horizontal: 5),
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
@@ -270,7 +266,6 @@ class _SearchScreenState extends State<SearchScreen> {
                                 ),
                               ),
                               const SizedBox(height: 2),
-                              // 🌟 Mutual ఫ్రండ్స్ ఉంటే ఆ నంబర్ చూపుతుంది, లేకపోతే 'Suggested' అంటుంది
                               Text(
                                 mutualCount > 0
                                     ? "$mutualCount mutual friends"
@@ -283,7 +278,6 @@ class _SearchScreenState extends State<SearchScreen> {
                                 overflow: TextOverflow.ellipsis,
                               ),
                               const Spacer(),
-                              // 🌟 THE FIX: ఇక్కడే Follow/Following బటన్ వస్తుంది
                               SizedBox(
                                 width: double.infinity,
                                 height: 28,
@@ -300,7 +294,6 @@ class _SearchScreenState extends State<SearchScreen> {
                                   ),
                                   onPressed: () async {
                                     if (isFollowing) {
-                                      // Unfollow లాజిక్
                                       await FirebaseFirestore.instance
                                           .collection('users')
                                           .doc(currentUid)
@@ -318,7 +311,6 @@ class _SearchScreenState extends State<SearchScreen> {
                                             ),
                                           });
                                     } else {
-                                      // Follow లాజిక్
                                       await FirebaseFirestore.instance
                                           .collection('users')
                                           .doc(currentUid)
@@ -364,7 +356,7 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  // 🌟 3. ఎక్స్‌ప్లోర్ ట్యాబ్స్ (ట్రెండింగ్ పోస్ట్‌లు & రీల్స్ వేరుగా)
+  // 🌟 3. ఎక్స్‌ప్లోర్ ట్యాబ్స్
   Widget _buildExploreTabs() {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('posts').snapshots(),
@@ -418,7 +410,7 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  // 🌟 4. గ్రిడ్ డిజైన్ (ఇక్కడ రెడ్ హార్ట్ & లైక్స్ కౌంట్ వస్తుంది)
+  // 🌟 4. గ్రిడ్ డిజైన్ (THE FIX IS HERE)
   Widget _buildGrid(List<DocumentSnapshot> items, {required bool isReelTab}) {
     if (items.isEmpty) {
       return Center(
@@ -428,6 +420,9 @@ class _SearchScreenState extends State<SearchScreen> {
         ),
       );
     }
+
+    // 🌟 THE FIX: గ్రిడ్ లో ఉన్న అన్ని ఐటెమ్స్ యొక్క ఐడీలని ఒక లిస్ట్ లాగా తయారు చేశాం.
+    List<String> allItemIds = items.map((doc) => doc.id).toList();
 
     return GridView.builder(
       physics: const BouncingScrollPhysics(),
@@ -441,7 +436,6 @@ class _SearchScreenState extends State<SearchScreen> {
       itemCount: items.length,
       itemBuilder: (context, index) {
         var data = items[index].data() as Map<String, dynamic>;
-        String id = items[index].id;
         String type = data['type'] ?? 'image';
         int likesCount = (data['likes'] as List?)?.length ?? 0;
 
@@ -454,20 +448,25 @@ class _SearchScreenState extends State<SearchScreen> {
 
         return GestureDetector(
           onTap: () {
+            // 🌟 THE FIX: కేవలం ఒక్క ID కాకుండా, మొత్తం లిస్ట్ ని, అలాగే ఏ ఐటెమ్ నొక్కాడో ఆ ఇండెక్స్ ని పంపుతున్నాం
             if (isReelTab) {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) =>
-                      ScrollingReelsScreen(reelIds: [id], initialIndex: 0),
+                  builder: (_) => ScrollingReelsScreen(
+                    reelIds: allItemIds, // అన్ని రీల్స్ ఐడీలు
+                    initialIndex: index, // ఏది నొక్కాడో దాని పొజిషన్
+                  ),
                 ),
               );
             } else {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (_) =>
-                      ScrollingPostsScreen(postIds: [id], initialIndex: 0),
+                  builder: (_) => ScrollingPostsScreen(
+                    postIds: allItemIds, // అన్ని పోస్ట్‌ల ఐడీలు
+                    initialIndex: index, // ఏది నొక్కాడో దాని పొజిషన్
+                  ),
                 ),
               );
             }
@@ -477,7 +476,7 @@ class _SearchScreenState extends State<SearchScreen> {
             children: [
               CachedMediaWidget(mediaUrl: mediaUrl, type: type, isGrid: true),
 
-              // గ్రేడియంట్ షాడో (లైక్స్ కౌంట్ క్లియర్ గా కనిపించడానికి)
+              // గ్రేడియంట్ షాడో
               Positioned(
                 bottom: 0,
                 left: 0,
@@ -518,7 +517,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 ),
               ),
 
-              // కలెక్షన్ ఐకాన్ (మల్టిపుల్ ఇమేజెస్ ఉంటే)
+              // కలెక్షన్ ఐకాన్
               if (!isReelTab &&
                   data['postData'] is List &&
                   (data['postData'] as List).length > 1)

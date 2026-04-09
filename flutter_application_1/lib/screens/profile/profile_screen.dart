@@ -26,6 +26,47 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final String uid = FirebaseAuth.instance.currentUser!.uid;
 
+  // 🌟 THE GHOST CLEANUP FUNCTION (బ్యాక్‌గ్రౌండ్ లో రన్ అవుతుంది)
+  Future<void> _cleanGhostUsers(
+    List currentFollowers,
+    List currentFollowing,
+  ) async {
+    List<String> validFollowers = [];
+    List<String> validFollowing = [];
+    bool needsUpdate = false;
+
+    for (String id in currentFollowers) {
+      var doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(id)
+          .get();
+      if (doc.exists) {
+        validFollowers.add(id);
+      } else {
+        needsUpdate = true;
+      }
+    }
+
+    for (String id in currentFollowing) {
+      var doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(id)
+          .get();
+      if (doc.exists) {
+        validFollowing.add(id);
+      } else {
+        needsUpdate = true;
+      }
+    }
+
+    if (needsUpdate) {
+      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        'followers': validFollowers,
+        'following': validFollowing,
+      });
+    }
+  }
+
   // ⚙️ Settings
   void _showSettings(bool currentPrivateStatus) {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
@@ -310,6 +351,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
           List followers = userData['followers'] ?? [];
           List following = userData['following'] ?? [];
 
+          // 🌟 THE FIX: ఇక్కడ స్కాన్ రన్ అవుతుంది, దెయ్యాలు ఉంటే ఎగిరిపోతాయి!
+          _cleanGhostUsers(followers, following);
+
           return Scaffold(
             backgroundColor: isDark ? Colors.black : Colors.white,
             appBar: AppBar(
@@ -550,25 +594,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ),
                 ),
               ],
-              // 🌟🌟 FIX: ORDER BY ని తీసేశాం (INDEX ఎర్రర్ రాకుండా) 🌟🌟
               body: TabBarView(
                 children: [
-                  // 1. My Posts Tab
                   PaginatedGrid(
                     query: FirebaseFirestore.instance
                         .collection('posts')
                         .where('ownerId', isEqualTo: uid)
-                        .where('type', isEqualTo: 'image'), // ❌ orderBy తీసేశాం
+                        .where('type', isEqualTo: 'image'),
                   ),
-                  // 2. My Reels Tab
                   PaginatedGrid(
                     query: FirebaseFirestore.instance
                         .collection('posts')
                         .where('ownerId', isEqualTo: uid)
-                        .where('type', isEqualTo: 'video'), // ❌ orderBy తీసేశాం
+                        .where('type', isEqualTo: 'video'),
                     isReel: true,
                   ),
-                  // 3. Saved Tab
                   _buildSavedTab(uid, isDark),
                 ],
               ),
@@ -579,7 +619,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // 🌟 SAVED TAB WIDGET
   Widget _buildSavedTab(String uid, bool isDark) {
     return ListView(
       padding: EdgeInsets.zero,
@@ -594,12 +633,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
         ),
-        // Saved Images
         PaginatedGrid(
           query: FirebaseFirestore.instance
               .collection('posts')
               .where('savedBy', arrayContains: uid)
-              .where('type', isEqualTo: 'image'), // ❌ orderBy తీసేశాం
+              .where('type', isEqualTo: 'image'),
           isScrollable: false,
         ),
         const Divider(height: 30),
@@ -613,12 +651,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
         ),
-        // Saved Reels
         PaginatedGrid(
           query: FirebaseFirestore.instance
               .collection('posts')
               .where('savedBy', arrayContains: uid)
-              .where('type', isEqualTo: 'video'), // ❌ orderBy తీసేశాం
+              .where('type', isEqualTo: 'video'),
           isReel: true,
           isScrollable: false,
         ),

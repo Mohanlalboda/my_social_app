@@ -4,7 +4,6 @@ import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:timeago/timeago.dart' as timeago;
-import 'package:marquee/marquee.dart'; // 🌟 THE FIX: స్క్రోలింగ్ టెక్స్ట్ కోసం
 
 import '../../widgets/safe_elements.dart';
 import 'chat_screen.dart';
@@ -152,7 +151,7 @@ class _InboxScreenState extends State<InboxScreen> {
         title: const Text("Share a thought..."),
         content: TextField(
           controller: noteController,
-          maxLength: 100,
+          maxLength: 60, // 🌟 THE FIX: నోట్ మరీ పెద్దగా లేకుండా 60 కి మార్చాను
           decoration: InputDecoration(
             hintText: "What's on your mind?",
             hintStyle: const TextStyle(color: Colors.grey),
@@ -250,45 +249,51 @@ class _InboxScreenState extends State<InboxScreen> {
         String myNoteText = hasMyNote ? myNoteData!['text'] : "Note...";
 
         return Container(
-          // 🌟 THE FIX: Overflow ఎర్రర్ రాకుండా హైట్ 145 నుండి 155 కి పెంచాను
-          height: 155,
-          padding: const EdgeInsets.only(top: 25, bottom: 5),
+          height: 145, // 🌟 THE FIX: పర్ఫెక్ట్ హైట్
+          padding: const EdgeInsets.only(top: 15, bottom: 5),
           child: ListView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 10),
             children: [
-              // 1. My Note
+              // ------------------- 1. My Note -------------------
               GestureDetector(
                 onTap: () => _showAddNoteDialog(myUserData),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Container(
+                  width:
+                      80, // 🌟 THE FIX: ఫిక్స్‌డ్ విడ్త్ వల్ల బబుల్స్ ఓవర్‌లాప్ అవ్వవు
+                  margin: const EdgeInsets.symmetric(horizontal: 5),
                   child: Column(
                     children: [
                       Stack(
                         clipBehavior: Clip.none,
                         alignment: Alignment.topCenter,
                         children: [
-                          SafeProfilePic(
-                            base64String: myUserData['profilePic'] ?? '',
-                            radius: 35,
-                            fallbackText:
-                                (myUserData['username'] != null &&
-                                    myUserData['username']
-                                        .toString()
-                                        .isNotEmpty)
-                                ? myUserData['username'][0].toUpperCase()
-                                : 'U',
+                          Padding(
+                            padding: const EdgeInsets.only(
+                              top: 18,
+                            ), // బబుల్ కి ప్లేస్ ఇచ్చాం
+                            child: SafeProfilePic(
+                              base64String: myUserData['profilePic'] ?? '',
+                              radius: 32,
+                              fallbackText:
+                                  (myUserData['username'] != null &&
+                                      myUserData['username']
+                                          .toString()
+                                          .isNotEmpty)
+                                  ? myUserData['username'][0].toUpperCase()
+                                  : 'U',
+                            ),
                           ),
                           Positioned(
-                            top: -18,
+                            top: 0,
                             child: Container(
                               constraints: const BoxConstraints(
-                                maxHeight: 60,
-                                maxWidth: 100,
+                                maxWidth: 80,
+                                maxHeight: 40,
                               ),
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 6,
+                                horizontal: 8,
+                                vertical: 4,
                               ),
                               decoration: BoxDecoration(
                                 color: isDark ? Colors.grey[800] : Colors.white,
@@ -300,72 +305,53 @@ class _InboxScreenState extends State<InboxScreen> {
                                   ),
                                 ],
                               ),
-                              // 🌟 THE FIX: టెక్స్ట్ పెద్దగా ఉంటే Marquee (స్క్రోలింగ్), చిన్నగా ఉంటే నార్మల్ టెక్స్ట్
-                              child: myNoteText.length > 12
-                                  ? SizedBox(
-                                      width: 80,
-                                      height: 16,
-                                      child: Marquee(
-                                        text: myNoteText,
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: hasMyNote
-                                              ? FontWeight.bold
-                                              : FontWeight.normal,
-                                          color: hasMyNote
-                                              ? (isDark
-                                                    ? Colors.white
-                                                    : Colors.black)
-                                              : Colors.grey,
-                                        ),
-                                        scrollAxis: Axis.horizontal,
-                                        blankSpace: 20.0,
-                                        velocity: 30.0, // స్క్రోల్ అయ్యే స్పీడ్
-                                      ),
-                                    )
-                                  : Text(
-                                      myNoteText,
-                                      textAlign: TextAlign.center,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: hasMyNote
-                                            ? FontWeight.bold
-                                            : FontWeight.normal,
-                                        color: hasMyNote
-                                            ? (isDark
-                                                  ? Colors.white
-                                                  : Colors.black)
-                                            : Colors.grey,
-                                      ),
-                                    ),
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (!hasMyNote)
-                        Positioned(
-                          bottom: 0,
-                          right: 0,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              color: Colors.blue,
-                              shape: BoxShape.circle,
-                              border: Border.all(
-                                color: isDark ? Colors.black : Colors.white,
-                                width: 2,
+                              // 🌟 THE FIX: Marquee తీసేసి నార్మల్ Text వాడాం, క్లీన్ గా కనిపిస్తుంది
+                              child: Text(
+                                myNoteText,
+                                textAlign: TextAlign.center,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  height: 1.2,
+                                  fontWeight: hasMyNote
+                                      ? FontWeight.bold
+                                      : FontWeight.w500,
+                                  color: hasMyNote
+                                      ? (isDark ? Colors.white : Colors.black)
+                                      : Colors.grey,
+                                ),
                               ),
                             ),
-                            padding: const EdgeInsets.all(2),
-                            child: const Icon(
-                              Icons.add,
-                              color: Colors.white,
-                              size: 14,
-                            ),
                           ),
-                        ),
-                      const SizedBox(height: 8),
+                          if (!hasMyNote)
+                            Positioned(
+                              bottom: 0,
+                              right: 2,
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.blue,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: isDark ? Colors.black : Colors.white,
+                                    width: 2,
+                                  ),
+                                ),
+                                padding: const EdgeInsets.all(2),
+                                child: const Icon(
+                                  Icons.add,
+                                  color: Colors.white,
+                                  size: 14,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
                       Text(
                         "Your note",
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 12,
                           color: isDark ? Colors.white54 : Colors.grey[600],
@@ -376,7 +362,7 @@ class _InboxScreenState extends State<InboxScreen> {
                 ),
               ),
 
-              // 2. Friends' Notes
+              // ------------------- 2. Friends' Notes -------------------
               ...allNotes.map((doc) {
                 var noteData = doc.data() as Map<String, dynamic>;
                 String friendId = noteData['uid'];
@@ -397,27 +383,31 @@ class _InboxScreenState extends State<InboxScreen> {
                           false;
                     }
 
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                    return Container(
+                      width: 80, // 🌟 THE FIX: ఇక్కడ కూడా ఫిక్స్‌డ్ విడ్త్
+                      margin: const EdgeInsets.symmetric(horizontal: 5),
                       child: Column(
                         children: [
                           Stack(
                             clipBehavior: Clip.none,
                             alignment: Alignment.topCenter,
                             children: [
-                              SafeProfilePic(
-                                base64String: noteData['profilePic'] ?? '',
-                                radius: 35,
-                                fallbackText: friendName.isNotEmpty
-                                    ? friendName[0].toUpperCase()
-                                    : 'U',
+                              Padding(
+                                padding: const EdgeInsets.only(top: 18),
+                                child: SafeProfilePic(
+                                  base64String: noteData['profilePic'] ?? '',
+                                  radius: 32,
+                                  fallbackText: friendName.isNotEmpty
+                                      ? friendName[0].toUpperCase()
+                                      : 'U',
+                                ),
                               ),
                               Positioned(
                                 bottom: 0,
-                                right: 0,
+                                right: 2,
                                 child: Container(
-                                  width: 16,
-                                  height: 16,
+                                  width: 14,
+                                  height: 14,
                                   decoration: BoxDecoration(
                                     color: isOnline ? Colors.green : Colors.red,
                                     shape: BoxShape.circle,
@@ -431,15 +421,15 @@ class _InboxScreenState extends State<InboxScreen> {
                                 ),
                               ),
                               Positioned(
-                                top: -18,
+                                top: 0,
                                 child: Container(
                                   constraints: const BoxConstraints(
-                                    maxHeight: 60,
-                                    maxWidth: 100,
+                                    maxWidth: 80,
+                                    maxHeight: 40,
                                   ),
                                   padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 6,
+                                    horizontal: 8,
+                                    vertical: 4,
                                   ),
                                   decoration: BoxDecoration(
                                     color: isDark
@@ -455,48 +445,31 @@ class _InboxScreenState extends State<InboxScreen> {
                                       ),
                                     ],
                                   ),
-                                  // 🌟 THE FIX: ఫ్రెండ్స్ టెక్స్ట్ పెద్దగా ఉంటే Marquee (స్క్రోలింగ్)
-                                  child: friendNoteText.length > 12
-                                      ? SizedBox(
-                                          width: 80,
-                                          height: 16,
-                                          child: Marquee(
-                                            text: friendNoteText,
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                            scrollAxis: Axis.horizontal,
-                                            blankSpace: 20.0,
-                                            velocity: 30.0,
-                                          ),
-                                        )
-                                      : Text(
-                                          friendNoteText,
-                                          textAlign: TextAlign.center,
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.bold,
-                                          ),
-                                        ),
+                                  // 🌟 THE FIX: ఇక్కడ కూడా Marquee తీసేసి నార్మల్ Text వాడాం
+                                  child: Text(
+                                    friendNoteText,
+                                    textAlign: TextAlign.center,
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      height: 1.2,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                                 ),
                               ),
                             ],
                           ),
-                          const SizedBox(height: 8),
-                          SizedBox(
-                            width: 70,
-                            child: Text(
-                              friendName,
-                              textAlign: TextAlign.center,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: isDark
-                                    ? Colors.white54
-                                    : Colors.grey[600],
-                              ),
+                          const SizedBox(height: 6),
+                          Text(
+                            friendName,
+                            textAlign: TextAlign.center,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: isDark ? Colors.white54 : Colors.grey[600],
                             ),
                           ),
                         ],
@@ -750,7 +723,6 @@ class _InboxScreenState extends State<InboxScreen> {
                                                 : Colors.black,
                                           ),
                                         ),
-                                        // 🌟 THE FIX: లాస్ట్ మెసేజ్ తీసేసి, కేవలం టైపింగ్ మాత్రమే ఉంచాను.
                                         subtitle:
                                             roomData['typing_$otherUserId'] ==
                                                 true
@@ -763,7 +735,7 @@ class _InboxScreenState extends State<InboxScreen> {
                                                   fontWeight: FontWeight.bold,
                                                 ),
                                               )
-                                            : null, // ఇక్కడ null ఇస్తే కింద ఏమీ కనిపించదు
+                                            : null,
                                         trailing: Column(
                                           mainAxisAlignment:
                                               MainAxisAlignment.center,
