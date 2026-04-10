@@ -4,6 +4,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart'; // 🌟 THE FIX: యాడ్స్ ప్యాకేజీ ఇంపోర్ట్ చేసాం
 import '../../widgets/reel_item.dart';
 
 class ReelsScreen extends StatefulWidget {
@@ -34,26 +35,74 @@ class _ScrollingReelsScreenState extends State<ScrollingReelsScreen> {
 
   late PageController _pageController;
 
-  // 🌟 THE FIX: కేవలం ఒకటే ఫైనల్ లిస్ట్ మెయింటైన్ చేస్తాం
   final List<DocumentSnapshot> _reels = [];
-
   List<dynamic> _followingList = [];
   DocumentSnapshot? _lastDoc;
 
   bool _isLoading = false;
   bool _hasMore = true;
 
+  // 🌟 యాడ్స్ మరియు ఆడియో కంట్రోల్ వేరియబుల్స్
+  int _swipeCount = 0;
+  int _currentPageIndex = 0; // ఏ రీల్ ప్లే అవుతుందో తెలుసుకోవడానికి
+  InterstitialAd? _interstitialAd;
+  bool _isAdShowing = false; // యాడ్ ప్లే అవుతున్నప్పుడు రీల్ పాజ్ చేయడానికి
+
   @override
   void initState() {
     super.initState();
+    _currentPageIndex = widget.initialIndex;
     _pageController = PageController(initialPage: widget.initialIndex);
     _loadInitialData();
+    _loadAd(); // 🌟 స్క్రీన్ ఓపెన్ అవ్వగానే బ్యాక్ గ్రౌండ్ లో యాడ్ రెడీ చేస్తాం
   }
 
   @override
   void dispose() {
     _pageController.dispose();
+    _interstitialAd?.dispose(); // 🌟 మెమరీ లీక్ అవ్వకుండా డిస్పోజ్
     super.dispose();
+  }
+
+  // 🌟 యాడ్ ని ముందుగానే లోడ్ చేసి ఉంచే ఫంక్షన్
+  void _loadAd() {
+    InterstitialAd.load(
+      adUnitId: 'ca-app-pub-3940256099942544/1033173712', // Google Test ID
+      request: const AdRequest(),
+      adLoadCallback: InterstitialAdLoadCallback(
+        onAdLoaded: (ad) => _interstitialAd = ad,
+        onAdFailedToLoad: (error) => _interstitialAd = null,
+      ),
+    );
+  }
+
+  // 🌟 యాడ్ ని ప్లే చేసే ఫంక్షన్ & ఆడియో కంట్రోల్
+  void _showAd() {
+    if (_interstitialAd == null) {
+      _loadAd();
+      return;
+    }
+
+    _interstitialAd!.fullScreenContentCallback = FullScreenContentCallback(
+      onAdShowedFullScreenContent: (ad) {
+        // 🌟 యాడ్ ప్లే అవ్వగానే రీల్ ఆడియో పాజ్ అవుతుంది
+        if (mounted) setState(() => _isAdShowing = true);
+      },
+      onAdDismissedFullScreenContent: (ad) {
+        // 🌟 యాడ్ క్లోజ్ అవ్వగానే మళ్ళీ రీల్ ఆడియో ఆన్ అవుతుంది
+        if (mounted) setState(() => _isAdShowing = false);
+        ad.dispose();
+        _loadAd(); // నెక్స్ట్ యాడ్ కి రెడీ చేస్తాం
+      },
+      onAdFailedToShowFullScreenContent: (ad, error) {
+        if (mounted) setState(() => _isAdShowing = false);
+        ad.dispose();
+        _loadAd();
+      },
+    );
+
+    _interstitialAd!.show();
+    _interstitialAd = null;
   }
 
   Future<void> _refreshReels() async {
@@ -62,6 +111,7 @@ class _ScrollingReelsScreenState extends State<ScrollingReelsScreen> {
       _reels.clear();
       _lastDoc = null;
       _hasMore = true;
+      _swipeCount = 0;
     });
     await _loadInitialData();
   }
@@ -88,7 +138,6 @@ class _ScrollingReelsScreenState extends State<ScrollingReelsScreen> {
   Future<void> _fetchReels() async {
     if (!_hasMore) return;
 
-    // 🌟 1. Specific Reels (ప్రొఫైల్/సెర్చ్ గ్రిడ్ నుండి వచ్చినప్పుడు)
     if (widget.reelIds != null && widget.reelIds!.isNotEmpty) {
       try {
         List<DocumentSnapshot> fetchedDocs = [];
@@ -120,7 +169,6 @@ class _ScrollingReelsScreenState extends State<ScrollingReelsScreen> {
       return;
     }
 
-    // 🌟 2. Global Reels (అల్గారిథమ్ వాడేది ఇక్కడే)
     if (mounted) setState(() => _isLoading = true);
     try {
       Query query = FirebaseFirestore.instance
@@ -147,7 +195,6 @@ class _ScrollingReelsScreenState extends State<ScrollingReelsScreen> {
           var data = doc.data() as Map<String, dynamic>;
           String type = data['type'] ?? 'image';
 
-          // 🌟 THE FIX: కేవలం ఒరిజినల్ వీడియోలే రావాలి, 'auto_reel' ఇక్కడ రాకూడదు!
           if (type != 'video') continue;
 
           bool isPublic = data['isPublic'] ?? true;
@@ -157,13 +204,11 @@ class _ScrollingReelsScreenState extends State<ScrollingReelsScreen> {
               !_followingList.contains(ownerId))
             continue;
 
-          // డూప్లికేట్స్ రాకుండా చెక్
           if (!_reels.any((r) => r.id == doc.id)) {
             newlyFetchedValidReels.add(doc);
           }
         }
 
-        // 🌟 వచ్చిన కొత్త రీల్స్ ని మాత్రమే అల్గారిథమ్ కి పంపుతున్నాం
         _sortAndAppendNewReels(newlyFetchedValidReels);
       }
     } catch (e) {
@@ -173,7 +218,6 @@ class _ScrollingReelsScreenState extends State<ScrollingReelsScreen> {
     }
   }
 
-  // 🌟🌟 NEW CHUNK BUCKET ALGORITHM 🌟🌟
   void _sortAndAppendNewReels(List<DocumentSnapshot> newReelsChunk) {
     List<DocumentSnapshot> bucketFollowingUnseen = [];
     List<DocumentSnapshot> bucketNewRandom = [];
@@ -202,7 +246,6 @@ class _ScrollingReelsScreenState extends State<ScrollingReelsScreen> {
     bucketSeenJumbled.shuffle(random);
 
     setState(() {
-      // 🌟 THE FIX: పాత రీల్స్ (_reels) ని అలాగే ఉంచి, కొత్త వాటిని సార్ట్ చేసి కింద కలుపుతున్నాం!
       _reels.addAll([
         ...bucketFollowingUnseen,
         ...bucketNewRandom,
@@ -252,6 +295,16 @@ class _ScrollingReelsScreenState extends State<ScrollingReelsScreen> {
           physics: const BouncingScrollPhysics(),
           itemCount: _reels.length + 1,
           onPageChanged: (i) {
+            setState(
+              () => _currentPageIndex = i,
+            ); // 🌟 ఏ రీల్ దగ్గర ఉన్నామో అప్డేట్ చేస్తాం
+
+            // 🌟 ప్రతి 5 రీల్స్ చూసిన తర్వాత యాడ్ వస్తుంది
+            _swipeCount++;
+            if (_swipeCount > 0 && _swipeCount % 5 == 0) {
+              _showAd();
+            }
+
             if (i >= _reels.length - 2 && _hasMore && !_isLoading) {
               _fetchReels();
             }
@@ -290,11 +343,15 @@ class _ScrollingReelsScreenState extends State<ScrollingReelsScreen> {
             var data = _reels[index].data() as Map<String, dynamic>;
             String reelId = _reels[index].id;
 
+            // 🌟 THE MAIN AUDIO FIX: యాడ్ వస్తున్నప్పుడు ఈ వాల్యూ false అవుతుంది, రీల్ పాజ్ అవుతుంది.
+            bool isCurrentlyPlaying =
+                (index == _currentPageIndex) && !_isAdShowing;
+
             return ReelItem(
               key: ValueKey(reelId),
               reel: data,
               reelId: reelId,
-              isCurrentPage: true,
+              isCurrentPage: isCurrentlyPlaying, // 🌟 ఇక్కడ పాస్ చేశాం
             );
           },
         ),

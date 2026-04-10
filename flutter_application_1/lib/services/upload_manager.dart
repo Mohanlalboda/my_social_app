@@ -10,6 +10,9 @@ import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:video_compress/video_compress.dart';
 import 'package:path_provider/path_provider.dart';
 
+// 🌟 THE FIX: యాడ్స్ ని ట్రిగ్గర్ చేయడానికి హెల్పర్ ని ఇంపోర్ట్ చేసాం
+import 'ad_helper.dart';
+
 class UploadManager {
   // ఇది Singleton క్లాస్
   static final UploadManager _instance = UploadManager._internal();
@@ -20,7 +23,7 @@ class UploadManager {
   final ValueNotifier<double> uploadProgress = ValueNotifier(0.0);
   final ValueNotifier<String> uploadStatus = ValueNotifier("");
 
-  // 🌟 క్రొత్తది: మనం ఏం అప్‌లోడ్ చేస్తున్నామో ఇక్కడ సేవ్ చేస్తాం (Post, Reel, Story, Auto Reel)
+  // 🌟 మనం ఏం అప్‌లోడ్ చేస్తున్నామో ఇక్కడ సేవ్ చేస్తాం (Post, Reel, Story, Auto Reel)
   final ValueNotifier<String> uploadType = ValueNotifier("Post");
 
   final FirebaseStorage _storage = FirebaseStorage.instance;
@@ -86,7 +89,6 @@ class UploadManager {
     double? latitude,
     double? longitude,
   }) async {
-    // 🌟 టైప్ సెట్ చేస్తున్నాం
     uploadType.value = isReel ? "Reel" : "Post";
     isUploading.value = true;
     uploadProgress.value = 0.0;
@@ -132,10 +134,12 @@ class UploadManager {
 
       // 🌟 సక్సెస్ మెసేజ్
       uploadStatus.value = "${uploadType.value} Success! 🎉";
-      await Future.delayed(
-        const Duration(seconds: 2),
-      ); // 2 సెకన్లు ఆగి బార్ తీసేస్తాం
+      await Future.delayed(const Duration(seconds: 2));
       isUploading.value = false;
+
+      // 🌟 THE FIX: పోస్ట్/రీల్ అప్‌లోడ్ అవ్వగానే ఫుల్ స్క్రీన్ యాడ్ బ్లాస్ట్ అవుతుంది
+      AdHelper.showInterstitial();
+
       return true;
     } catch (e) {
       uploadStatus.value = "Error ❌";
@@ -153,7 +157,7 @@ class UploadManager {
     String? localAudioPath,
     required String trendingAudioUrl,
   }) async {
-    uploadType.value = "Auto Reel"; // 🌟 టైప్ సెట్ చేశాం
+    uploadType.value = "Auto Reel";
     isUploading.value = true;
     uploadStatus.value = "Preparing Auto-Sync Post... 🎞️";
     uploadProgress.value = 0.0;
@@ -174,8 +178,7 @@ class UploadManager {
           'img_$i.jpg',
         );
         imageUrls.add(url);
-        uploadProgress.value =
-            (i + 1) / images.length; // 🌟 ప్రోగ్రెస్ అప్‌డేట్
+        uploadProgress.value = (i + 1) / images.length;
       }
 
       uploadStatus.value = "Uploading Audio... 🎵";
@@ -209,7 +212,6 @@ class UploadManager {
         'isLocalAudio': isLocalAudio,
         'caption': caption,
         'type': 'auto_reel',
-        // 🌟 THE FIX: ఇక్కడ true బదులు false పెట్టాం. దీనివల్ల ఫైర్‌బేస్‌కి ఇది పోస్ట్ అని తెలుస్తుంది.
         'isReel': false,
         'likes': [],
         'savedBy': [],
@@ -218,10 +220,12 @@ class UploadManager {
         'timestamp': FieldValue.serverTimestamp(),
       });
 
-      // 🌟 సక్సెస్ మెసేజ్
       uploadStatus.value = "Auto-Sync Post Success! 🎉";
       await Future.delayed(const Duration(seconds: 2));
       isUploading.value = false;
+
+      // 🌟 THE FIX: ఆటో-రీల్ అప్‌లోడ్ అవ్వగానే ఫుల్ స్క్రీన్ యాడ్
+      AdHelper.showInterstitial();
     } catch (e) {
       debugPrint("Auto Reel Upload Error: $e");
       uploadStatus.value = "Error ❌";
@@ -232,7 +236,7 @@ class UploadManager {
 
   // 🌟 6. Moments/Stories కోసం
   Future<void> uploadMoment(File file, bool isVideo) async {
-    uploadType.value = "Story"; // 🌟 టైప్ స్టోరీ
+    uploadType.value = "Story";
     isUploading.value = true;
     uploadProgress.value = 0.0;
     uploadStatus.value = "Uploading...";
@@ -262,10 +266,12 @@ class UploadManager {
         'likes': [],
       });
 
-      // 🌟 సక్సెస్ మెసేజ్
       uploadStatus.value = "Story Success! 🎉";
       await Future.delayed(const Duration(seconds: 2));
       isUploading.value = false;
+
+      // 🌟 THE FIX: స్టోరీ (Moment) అప్‌లోడ్ అవ్వగానే యాడ్
+      AdHelper.showInterstitial();
     } catch (e) {
       uploadStatus.value = "Error ❌";
       await Future.delayed(const Duration(seconds: 2));

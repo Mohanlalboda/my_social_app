@@ -13,6 +13,9 @@ import '../utils/constants.dart';
 import '../services/upload_manager.dart';
 import '../screens/story/story_view_screen.dart';
 
+// 🌟 THE FIX: యాడ్స్ హెల్పర్ ఫైల్ ని ఇంపోర్ట్ చేసుకుంటున్నాం
+import '../services/ad_helper.dart';
+
 class StoryBar extends StatefulWidget {
   const StoryBar({super.key});
 
@@ -278,6 +281,7 @@ class _StoryBarState extends State<StoryBar> {
     }
   }
 
+  // 🌟 THE FIX: అప్‌లోడ్ అయ్యాక యాడ్ వస్తుంది
   Future<void> _processAndUpload(
     File finalFile,
     bool isVideo,
@@ -324,6 +328,9 @@ class _StoryBarState extends State<StoryBar> {
 
       UploadManager().uploadStatus.value = "Success! 🎉";
       await Future.delayed(const Duration(seconds: 1));
+
+      // 🌟 THE FIX: స్టోరీ అప్‌లోడ్ అయ్యాక ఇంటర్‌స్టీషియల్ యాడ్ వస్తుంది
+      AdHelper.showInterstitial();
     } catch (e) {
       UploadManager().uploadStatus.value = "❌ Error";
     } finally {
@@ -411,16 +418,14 @@ class _StoryBarState extends State<StoryBar> {
     );
   }
 
+  // 🌟 THE FIX: "My Story" విడ్జెట్ ని అప్‌డేట్ చేశాం (యాడ్ స్టోరీ మెనూ & ఎప్పటికీ ఉండే + ఐకాన్)
   Widget _buildMyStoryItem(bool isDark, bool hasStory, bool hasUnseen) {
     return GestureDetector(
       onTap: hasStory
-          ? () => _viewStories([
-              {
-                'uid': currentUid,
-                'username': myUserData?['username'],
-                'profilePic': myUserData?['profilePic'],
-              },
-            ], 0)
+          ? () =>
+                _showMyStoryOptions(
+                  isDark,
+                ) // 🌟 స్టోరీ ఉంటే మెనూ ఓపెన్ అవుతుంది
           : _showStoryPicker,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 8),
@@ -458,18 +463,26 @@ class _StoryBarState extends State<StoryBar> {
                     ),
                   ),
                 ),
-                if (!hasStory)
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.blueAccent,
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: isDark ? Colors.black : Colors.white,
-                        width: 2,
-                      ),
+                // 🌟 THE FIX: ఇక్కడ ఎప్పుడూ ఒక ప్లస్ ఐకాన్ కనిపించేలా చేద్దాం (Instagram Style)
+                Container(
+                  decoration: BoxDecoration(
+                    color: hasStory
+                        ? (isDark ? Colors.grey[800] : Colors.grey[300])
+                        : Colors.blueAccent,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: isDark ? Colors.black : Colors.white,
+                      width: 2,
                     ),
-                    child: const Icon(Icons.add, color: Colors.white, size: 16),
                   ),
+                  child: Icon(
+                    Icons.add,
+                    color: hasStory
+                        ? (isDark ? Colors.white : Colors.black)
+                        : Colors.white,
+                    size: 16,
+                  ),
+                ),
               ],
             ),
             const SizedBox(height: 5),
@@ -479,6 +492,51 @@ class _StoryBarState extends State<StoryBar> {
                 fontSize: 11,
                 color: isDark ? Colors.white : Colors.black,
               ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // 🌟 THE NEW FUNCTION: స్టోరీ ఉన్నప్పుడు ప్రొఫైల్ పిక్ మీద క్లిక్ చేస్తే ఈ మెనూ వస్తుంది
+  void _showMyStoryOptions(bool isDark) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: isDark ? Colors.grey[900] : Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Wrap(
+          children: [
+            ListTile(
+              leading: const Icon(Icons.visibility, color: Colors.blue),
+              title: Text(
+                "View Story",
+                style: TextStyle(color: isDark ? Colors.white : Colors.black),
+              ),
+              onTap: () {
+                Navigator.pop(ctx);
+                _viewStories([
+                  {
+                    'uid': currentUid,
+                    'username': myUserData?['username'],
+                    'profilePic': myUserData?['profilePic'],
+                  },
+                ], 0);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.add_box, color: Colors.green),
+              title: Text(
+                "Add to Story",
+                style: TextStyle(color: isDark ? Colors.white : Colors.black),
+              ),
+              onTap: () {
+                Navigator.pop(ctx);
+                _showStoryPicker(); // 🌟 మళ్ళీ కొత్త స్టోరీ యాడ్ చేయడానికి
+              },
             ),
           ],
         ),
@@ -542,7 +600,6 @@ class _StoryBarState extends State<StoryBar> {
     );
   }
 
-  // 🌟 THE FIX: ఇక్కడ dynamic లిస్ట్ ని Map లిస్ట్ గా పక్కాగా మారుస్తున్నాం
   void _viewStories(List<dynamic> users, int index) {
     List<Map<String, dynamic>> formattedUsers = users
         .map((e) => e as Map<String, dynamic>)

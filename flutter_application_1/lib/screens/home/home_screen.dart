@@ -8,6 +8,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../widgets/story_bar.dart';
 import '../../widgets/post_widget.dart';
 import '../../services/upload_manager.dart';
+// 🌟 THE FIX: మన నేటివ్ యాడ్ విడ్జెట్ ని ఇంపోర్ట్ చేసుకుంటున్నాం
+import '../../widgets/my_native_ad_widget.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -290,9 +292,13 @@ class _HomeScreenState extends State<HomeScreen> {
                         physics: const AlwaysScrollableScrollPhysics(
                           parent: BouncingScrollPhysics(),
                         ),
-                        itemCount: _postsList.length + 1,
+                        // 🌟 THE FIX: యాడ్స్ కౌంట్ ని కూడా కలుపుతున్నాం
+                        itemCount:
+                            _postsList.length + (_postsList.length ~/ 5) + 1,
                         itemBuilder: (context, index) {
-                          if (index == _postsList.length) {
+                          // 1. అన్నీ అయిపోయాక లాస్ట్ లో లోడింగ్ స్పిన్నర్
+                          if (index ==
+                              _postsList.length + (_postsList.length ~/ 5)) {
                             return Padding(
                               padding: const EdgeInsets.all(30.0),
                               child: Center(
@@ -311,7 +317,15 @@ class _HomeScreenState extends State<HomeScreen> {
                             );
                           }
 
-                          var postDoc = _postsList[index];
+                          // 2. 🌟 THE FIX: ప్రతి 5 పోస్ట్‌లకి ఒకసారి నేటివ్ యాడ్ విడ్జెట్ ని కాల్ చేస్తున్నాం
+                          if (index > 0 && index % 6 == 5) {
+                            return const MyNativeAdWidget();
+                          }
+
+                          // 3. మిగిలిన ఇండెక్స్‌లలో యాడ్స్ స్కిప్ చేసి కరెక్ట్ పోస్ట్ ఇండెక్స్ తీసుకుంటున్నాం
+                          int postIndex = index - (index ~/ 6);
+
+                          var postDoc = _postsList[postIndex];
                           var post = postDoc.data() as Map<String, dynamic>;
                           post['postId'] = postDoc.id;
 

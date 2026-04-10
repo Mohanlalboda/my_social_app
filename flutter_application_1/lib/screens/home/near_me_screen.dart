@@ -8,6 +8,10 @@ import '../../widgets/post_widget.dart';
 import '../../widgets/reel_item.dart';
 import '../../utils/constants.dart';
 
+// 🌟 THE FIX: యాడ్స్ ఇంపోర్ట్స్ పక్కాగా ఉండాలి
+import '../../services/ad_helper.dart';
+import '../../widgets/my_native_ad_widget.dart';
+
 class NearMeScreen extends StatefulWidget {
   const NearMeScreen({super.key});
 
@@ -22,15 +26,18 @@ class _NearMeScreenState extends State<NearMeScreen> {
   List<DocumentSnapshot> _nearbyDocs = [];
   final double _maxDistanceInKm = 500.0;
 
-  // 🌟 PAGINATION
   DocumentSnapshot? _lastDocument;
   bool _hasMoreData = true;
   bool _isFetchingMore = false;
+
+  // 🌟 ఇంటర్‌స్టీషియల్ యాడ్స్ కోసం స్వైప్ కౌంటర్
+  int _swipeCount = 0;
 
   @override
   void initState() {
     super.initState();
     _getUserLocationAndPosts();
+    AdHelper.loadInterstitial(); // 🌟 యాడ్ ముందుగానే లోడ్ చేసి ఉంచుతాం
   }
 
   Future<void> _getUserLocationAndPosts() async {
@@ -70,11 +77,9 @@ class _NearMeScreenState extends State<NearMeScreen> {
     }
   }
 
-  // 🌟 ADVANCED PAGINATION LOGIC
   Future<void> _fetchNearbyContent({bool isInitial = false}) async {
     if (_currentPosition == null || !_hasMoreData) return;
 
-    // ఒకేసారి రెండుసార్లు లాగకుండా ఆపుతున్నాం
     if (!isInitial && _isFetchingMore) return;
 
     if (isInitial) {
@@ -87,7 +92,6 @@ class _NearMeScreenState extends State<NearMeScreen> {
       List<DocumentSnapshot> newFilteredDocs = [];
       int fetchAttempts = 0;
 
-      // 🌟 THE FIX: దగ్గర్లో ఉన్నవి దొరికే వరకు (లేదా గరిష్టంగా 5 సార్లు = 100 పోస్ట్‌లు) వెతుకుతూనే ఉంటాం!
       while (newFilteredDocs.isEmpty && _hasMoreData && fetchAttempts < 5) {
         fetchAttempts++;
 
@@ -110,7 +114,6 @@ class _NearMeScreenState extends State<NearMeScreen> {
             var data = doc.data() as Map<String, dynamic>;
 
             if (data['latitude'] != null && data['longitude'] != null) {
-              // 🌟 THE FIX: String వచ్చినా సరే డబుల్ లోకి మార్చుకుని క్రాష్ అవ్వకుండా కాపాడుతాం
               double lat = double.tryParse(data['latitude'].toString()) ?? 0.0;
               double lng = double.tryParse(data['longitude'].toString()) ?? 0.0;
 
@@ -159,6 +162,10 @@ class _NearMeScreenState extends State<NearMeScreen> {
   Widget build(BuildContext context) {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
 
+    // 🌟 THE FIX: ప్రతి 3 పోస్ట్‌లకు 1 నేటివ్ యాడ్ వచ్చేలా క్యాలిక్యులేషన్ మార్చాను
+    int adCount = _nearbyDocs.length ~/ 3;
+    int totalItems = _nearbyDocs.length + adCount + (_hasMoreData ? 1 : 0);
+
     return Scaffold(
       backgroundColor: isDark ? Colors.black : Colors.white,
       appBar: AppBar(
@@ -181,16 +188,24 @@ class _NearMeScreenState extends State<NearMeScreen> {
             )
           : PageView.builder(
               scrollDirection: Axis.vertical,
-              itemCount: _nearbyDocs.length + (_hasMoreData ? 1 : 0),
+              itemCount: totalItems,
               onPageChanged: (index) {
-                if (index >= _nearbyDocs.length - 1 &&
+                _swipeCount++;
+
+                // 🌟 THE FIX: ప్రతి 4 స్వైప్స్ కి ఒక ఫుల్ స్క్రీన్ యాడ్ వస్తుంది (Interstitial)
+                if (_swipeCount > 0 && _swipeCount % 4 == 0) {
+                  AdHelper.showInterstitial();
+                }
+
+                if (index >= totalItems - 2 &&
                     _hasMoreData &&
                     !_isFetchingMore) {
                   _fetchNearbyContent();
                 }
               },
               itemBuilder: (context, index) {
-                if (index == _nearbyDocs.length) {
+                // లాస్ట్ ఐటెమ్ (లోడింగ్ స్పిన్నర్)
+                if (index == totalItems - 1 && _hasMoreData) {
                   return Center(
                     child: CircularProgressIndicator(
                       color: brandGradient.colors[0],
@@ -198,14 +213,29 @@ class _NearMeScreenState extends State<NearMeScreen> {
                   );
                 }
 
-                var data = _nearbyDocs[index].data() as Map<String, dynamic>;
+                // 🌟 THE FIX: ప్రతి 3 పోస్ట్‌లకి నేటివ్ యాడ్ వస్తుంది (index 3, 7, 11...)
+                if (index > 0 && index % 4 == 3) {
+                  return Scaffold(
+                    backgroundColor: isDark ? Colors.black : Colors.white,
+                    body: const Center(
+                      child: MyNativeAdWidget(), // నేటివ్ యాడ్ విడ్జెట్
+                    ),
+                  );
+                }
+
+                // ఒరిజినల్ పోస్ట్ ఇండెక్స్ కి మారుస్తున్నాం
+                int docIndex = index - (index ~/ 4);
+                if (docIndex >= _nearbyDocs.length)
+                  return const SizedBox(); // సేఫ్టీ చెక్
+
+                var data = _nearbyDocs[docIndex].data() as Map<String, dynamic>;
                 String type = data['type'] ?? "image";
 
                 if (type == 'video') {
                   return ReelItem(
                     reel: data,
-                    reelId: _nearbyDocs[index].id,
-                    isCurrentPage: true,
+                    reelId: _nearbyDocs[docIndex].id,
+                    isCurrentPage: true, // ఇక్కడ వీడియో ప్లే అవుతుంది
                   );
                 } else {
                   return Center(

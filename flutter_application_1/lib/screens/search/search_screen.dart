@@ -9,6 +9,8 @@ import '../../widgets/cached_media_widget.dart';
 import '../profile/other_user_profile_screen.dart';
 import '../posts/scrolling_posts_screen.dart';
 import '../reels/scrolling_reels_screen.dart';
+// 🌟 THE FIX: యాడ్స్ కోసం ఇంపోర్ట్
+import '../../services/ad_helper.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -22,10 +24,28 @@ class _SearchScreenState extends State<SearchScreen> {
   bool isShowUsers = false;
   final String currentUid = FirebaseAuth.instance.currentUser!.uid;
 
+  // యాడ్స్ కోసం ట్యాప్ కౌంటర్
+  int _tapCount = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    AdHelper.loadInterstitial(); // 🌟 యాడ్ లోడ్ చేసి ఉంచుతాం
+  }
+
   @override
   void dispose() {
     searchController.dispose();
     super.dispose();
+  }
+
+  // 🌟 యాడ్ చూపించడానికి ఫంక్షన్
+  void _handlePostTap() {
+    _tapCount++;
+    // ప్రతి 3 పోస్ట్‌లు ఓపెన్ చేసినప్పుడు ఒక యాడ్ వస్తుంది (యూజర్‌ని చిరాకు పెట్టకుండా)
+    if (_tapCount % 3 == 0) {
+      AdHelper.showInterstitial();
+    }
   }
 
   @override
@@ -79,7 +99,7 @@ class _SearchScreenState extends State<SearchScreen> {
             ? _buildUserSearch()
             : Column(
                 children: [
-                  _buildSuggestedFriends(), // 🌟 సజెస్టెడ్ ఫ్రెండ్స్
+                  _buildSuggestedFriends(),
                   const TabBar(
                     indicatorColor: Color(0xFF00E5FF),
                     labelColor: Color(0xFF00E5FF),
@@ -96,7 +116,6 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  // 🌟 1. యూజర్లను వెతికే స్క్రీన్
   Widget _buildUserSearch() {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -168,7 +187,6 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  // 🌟 2. సజెస్టెడ్ ఫ్రెండ్స్ లిస్ట్
   Widget _buildSuggestedFriends() {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -356,7 +374,6 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  // 🌟 3. ఎక్స్‌ప్లోర్ ట్యాబ్స్
   Widget _buildExploreTabs() {
     return StreamBuilder<QuerySnapshot>(
       stream: FirebaseFirestore.instance.collection('posts').snapshots(),
@@ -410,7 +427,6 @@ class _SearchScreenState extends State<SearchScreen> {
     );
   }
 
-  // 🌟 4. గ్రిడ్ డిజైన్ (THE FIX IS HERE)
   Widget _buildGrid(List<DocumentSnapshot> items, {required bool isReelTab}) {
     if (items.isEmpty) {
       return Center(
@@ -421,7 +437,6 @@ class _SearchScreenState extends State<SearchScreen> {
       );
     }
 
-    // 🌟 THE FIX: గ్రిడ్ లో ఉన్న అన్ని ఐటెమ్స్ యొక్క ఐడీలని ఒక లిస్ట్ లాగా తయారు చేశాం.
     List<String> allItemIds = items.map((doc) => doc.id).toList();
 
     return GridView.builder(
@@ -448,14 +463,16 @@ class _SearchScreenState extends State<SearchScreen> {
 
         return GestureDetector(
           onTap: () {
-            // 🌟 THE FIX: కేవలం ఒక్క ID కాకుండా, మొత్తం లిస్ట్ ని, అలాగే ఏ ఐటెమ్ నొక్కాడో ఆ ఇండెక్స్ ని పంపుతున్నాం
+            // 🌟 THE FIX: యాడ్ చూపించే ఫంక్షన్ కాల్ చేస్తున్నాం
+            _handlePostTap();
+
             if (isReelTab) {
               Navigator.push(
                 context,
                 MaterialPageRoute(
                   builder: (_) => ScrollingReelsScreen(
-                    reelIds: allItemIds, // అన్ని రీల్స్ ఐడీలు
-                    initialIndex: index, // ఏది నొక్కాడో దాని పొజిషన్
+                    reelIds: allItemIds,
+                    initialIndex: index,
                   ),
                 ),
               );
@@ -464,8 +481,8 @@ class _SearchScreenState extends State<SearchScreen> {
                 context,
                 MaterialPageRoute(
                   builder: (_) => ScrollingPostsScreen(
-                    postIds: allItemIds, // అన్ని పోస్ట్‌ల ఐడీలు
-                    initialIndex: index, // ఏది నొక్కాడో దాని పొజిషన్
+                    postIds: allItemIds,
+                    initialIndex: index,
                   ),
                 ),
               );
@@ -475,8 +492,6 @@ class _SearchScreenState extends State<SearchScreen> {
             fit: StackFit.expand,
             children: [
               CachedMediaWidget(mediaUrl: mediaUrl, type: type, isGrid: true),
-
-              // గ్రేడియంట్ షాడో
               Positioned(
                 bottom: 0,
                 left: 0,
@@ -492,8 +507,6 @@ class _SearchScreenState extends State<SearchScreen> {
                   ),
                 ),
               ),
-
-              // 🌟 రెడ్ హార్ట్ మరియు లైక్స్ కౌంట్
               Positioned(
                 bottom: 5,
                 left: 8,
@@ -516,8 +529,6 @@ class _SearchScreenState extends State<SearchScreen> {
                   ],
                 ),
               ),
-
-              // కలెక్షన్ ఐకాన్
               if (!isReelTab &&
                   data['postData'] is List &&
                   (data['postData'] as List).length > 1)
