@@ -1,4 +1,4 @@
-// ignore_for_file: curly_braces_in_flow_control_structures
+// ignore_for_file: curly_braces_in_flow_control_structures, use_build_context_synchronously
 
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -52,8 +52,61 @@ class _NearMeScreenState extends State<NearMeScreen> {
     }
 
     LocationPermission permission = await Geolocator.checkPermission();
+
+    // 🌟 THE FIX: ఇక్కడే ప్లే స్టోర్ కి కావాల్సిన Disclosure Pop-up పెట్టాం
     if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
+      bool? userAgreed = await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          backgroundColor: Theme.of(context).brightness == Brightness.dark
+              ? Colors.grey[900]
+              : Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(15),
+          ),
+          title: const Row(
+            children: [
+              Icon(Icons.location_on, color: Colors.red),
+              SizedBox(width: 10),
+              Text("Use your location?", style: TextStyle(fontSize: 18)),
+            ],
+          ),
+          content: const Text(
+            "MyBanjara collects location data to enable the 'Near Me' feature, allowing you to discover and connect with nearby creators and posts. We only access this data while the app is in use.",
+            style: TextStyle(fontSize: 15, height: 1.4),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text(
+                "NO THANKS",
+                style: TextStyle(color: Colors.grey),
+              ),
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blueAccent,
+              ),
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text("ALLOW", style: TextStyle(color: Colors.white)),
+            ),
+          ],
+        ),
+      );
+
+      // యూజర్ ALLOW నొక్కితేనే సిస్టమ్ పర్మిషన్ అడుగుతాం
+      if (userAgreed == true) {
+        permission = await Geolocator.requestPermission();
+      } else {
+        if (mounted)
+          setState(() {
+            _statusText = "Location access is required 🛑";
+            _isLoading = false;
+          });
+        return;
+      }
+
       if (permission == LocationPermission.denied) {
         if (mounted)
           setState(() {
@@ -62,6 +115,15 @@ class _NearMeScreenState extends State<NearMeScreen> {
           });
         return;
       }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      if (mounted)
+        setState(() {
+          _statusText = "Location permissions are permanently denied.";
+          _isLoading = false;
+        });
+      return;
     }
 
     try {
@@ -162,8 +224,13 @@ class _NearMeScreenState extends State<NearMeScreen> {
   Widget build(BuildContext context) {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // 🌟 THE FIX: ప్రతి 3 పోస్ట్‌లకు 1 నేటివ్ యాడ్ వచ్చేలా క్యాలిక్యులేషన్ మార్చాను
-    int adCount = _nearbyDocs.length ~/ 3;
+    // ఎంతమంది నేటివ్ యాడ్స్ వస్తాయో ముందుగానే లెక్కిస్తున్నాం
+    // ప్రతి 11 పోస్టులకి ఒక యాడ్ (4, 15, 26...)
+    int adCount = 0;
+    if (_nearbyDocs.length >= 4) {
+      adCount = 1 + ((_nearbyDocs.length - 4) ~/ 11);
+    }
+
     int totalItems = _nearbyDocs.length + adCount + (_hasMoreData ? 1 : 0);
 
     return Scaffold(
@@ -192,8 +259,10 @@ class _NearMeScreenState extends State<NearMeScreen> {
               onPageChanged: (index) {
                 _swipeCount++;
 
-                // 🌟 THE FIX: ప్రతి 4 స్వైప్స్ కి ఒక ఫుల్ స్క్రీన్ యాడ్ వస్తుంది (Interstitial)
-                if (_swipeCount > 0 && _swipeCount % 4 == 0) {
+                // 🌟 THE FIX: కస్టమ్ Interstitial Ad లాజిక్ (10, 21, 32...)
+                // 10వ పోస్ట్ దగ్గర, ఆ తర్వాత ప్రతి 11 పోస్ట్ లకి (21, 32)
+                if (_swipeCount == 10 ||
+                    (_swipeCount > 10 && (_swipeCount - 10) % 11 == 0)) {
                   AdHelper.showInterstitial();
                 }
 
@@ -213,8 +282,9 @@ class _NearMeScreenState extends State<NearMeScreen> {
                   );
                 }
 
-                // 🌟 THE FIX: ప్రతి 3 పోస్ట్‌లకి నేటివ్ యాడ్ వస్తుంది (index 3, 7, 11...)
-                if (index > 0 && index % 4 == 3) {
+                // 🌟 THE FIX: కస్టమ్ Native Ad లాజిక్ (4, 15, 26...)
+                // 4వ పోస్ట్ దగ్గర (index 3), ఆ తర్వాత ప్రతి 11 పోస్ట్ లకి
+                if (index == 3 || (index > 3 && (index - 3) % 11 == 0)) {
                   return Scaffold(
                     backgroundColor: isDark ? Colors.black : Colors.white,
                     body: const Center(
@@ -224,9 +294,16 @@ class _NearMeScreenState extends State<NearMeScreen> {
                 }
 
                 // ఒరిజినల్ పోస్ట్ ఇండెక్స్ కి మారుస్తున్నాం
-                int docIndex = index - (index ~/ 4);
-                if (docIndex >= _nearbyDocs.length)
+                int adCountBeforeThisIndex = 0;
+                if (index > 3) {
+                  adCountBeforeThisIndex = 1 + ((index - 4) ~/ 11);
+                }
+
+                int docIndex = index - adCountBeforeThisIndex;
+
+                if (docIndex >= _nearbyDocs.length || docIndex < 0) {
                   return const SizedBox(); // సేఫ్టీ చెక్
+                }
 
                 var data = _nearbyDocs[docIndex].data() as Map<String, dynamic>;
                 String type = data['type'] ?? "image";
@@ -235,7 +312,7 @@ class _NearMeScreenState extends State<NearMeScreen> {
                   return ReelItem(
                     reel: data,
                     reelId: _nearbyDocs[docIndex].id,
-                    isCurrentPage: true, // ఇక్కడ వీడియో ప్లే అవుతుంది
+                    isCurrentPage: true,
                   );
                 } else {
                   return Center(

@@ -1,3 +1,6 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
     id("com.google.gms.google-services")
@@ -5,10 +8,14 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
+}
 
 android {
-    namespace = "com.example.flutter_application_1"
+    namespace = "in.mybanjara.app"
     compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
@@ -23,20 +30,34 @@ android {
     }
 
     defaultConfig {
-        applicationId = "com.example.flutter_application_1"
-        
-        // 🌟 FIX 2: ffmpeg కి ఖచ్చితంగా 24 కావాలి, కాబట్టి డైరెక్ట్ గా 24 ఇచ్చేస్తున్నాం
-        minSdk = flutter.minSdkVersion  
-        
-        targetSdk = 34 
+        applicationId = "in.mybanjara.app"
+        minSdk = 24
+        targetSdk = 34
         versionCode = flutter.versionCode
         versionName = flutter.versionName
-        multiDexEnabled = true 
-        ndk { abiFilters.addAll(listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")) }
+        multiDexEnabled = true
+    }
+
+    signingConfigs {
+        create("release") {
+            keyAlias = keystoreProperties.getProperty("keyAlias") ?: ""
+            keyPassword = keystoreProperties.getProperty("keyPassword") ?: ""
+            val storeFilePath = keystoreProperties.getProperty("storeFile")
+            if (storeFilePath != null) {
+                storeFile = file(storeFilePath)
+            }
+            storePassword = keystoreProperties.getProperty("storePassword") ?: ""
+        }
     }
 
     buildTypes {
-        release {
+        getByName("release") {
+            // రియల్ యాప్ కోసం సైనింగ్ కాన్ఫిగరేషన్
+            signingConfig = signingConfigs.getByName("release")
+            isMinifyEnabled = false
+            isShrinkResources = false
+        }
+        getByName("debug") {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
@@ -49,5 +70,4 @@ flutter {
 dependencies {
     implementation("androidx.multidex:multidex:2.0.1")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
-    
 }

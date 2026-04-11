@@ -1,4 +1,4 @@
-package com.example.flutter_application_1 // మీ ప్యాకేజీ పేరు ఇక్కడ మార్చండి
+package `in`.mybanjara.app  // 👈 ఇక్కడ కూడా బ్యాక్-టిక్స్ పెట్టాం
 
 import android.view.LayoutInflater
 import android.widget.Button

@@ -11,6 +11,7 @@ import 'package:video_compress/video_compress.dart';
 import 'package:path_provider/path_provider.dart';
 
 // 🌟 THE FIX: యాడ్స్ ని ట్రిగ్గర్ చేయడానికి హెల్పర్ ని ఇంపోర్ట్ చేసాం
+// (మీ పాత్ బట్టి 'ad_helper.dart' లేదా వేరే ఫోల్డర్ లో ఉంటే '../../ad_helper.dart' వాడండి)
 import 'ad_helper.dart';
 
 class UploadManager {
@@ -44,15 +45,28 @@ class UploadManager {
     return File(result!.path);
   }
 
-  // 🗜️ 2. వీడియో కంప్రెషన్
+  // 🗜️ 2. వీడియో కంప్రెషన్ (🌟 THE FIX: ఇక్కడ సేఫ్టీ యాడ్ చేశాం)
   Future<File> compressVideo(File file) async {
-    MediaInfo? mediaInfo = await VideoCompress.compressVideo(
-      file.path,
-      quality: VideoQuality.MediumQuality,
-      deleteOrigin: false,
-      includeAudio: true,
-    );
-    return File(mediaInfo!.file!.path);
+    try {
+      uploadStatus.value = "Compressing Video... ⏳";
+
+      MediaInfo? mediaInfo = await VideoCompress.compressVideo(
+        file.path,
+        quality: VideoQuality.MediumQuality,
+        deleteOrigin: false,
+        includeAudio: true,
+      );
+
+      // కంప్రెషన్ సక్సెస్ అయితే దాన్ని పంపుతాం
+      if (mediaInfo != null && mediaInfo.file != null) {
+        return File(mediaInfo.file!.path);
+      }
+    } catch (e) {
+      debugPrint("Video Compression Error: $e");
+    }
+
+    // ఒకవేళ కంప్రెషన్ ఫెయిల్ అయితే, ఒరిజినల్ ఫైల్ నే తిరిగి పంపుతాం (యాప్ క్రాష్ అవ్వకుండా)
+    return file;
   }
 
   // ☁️ 3. స్టోరేజ్ లోకి ఎక్కించడం
@@ -92,7 +106,7 @@ class UploadManager {
     uploadType.value = isReel ? "Reel" : "Post";
     isUploading.value = true;
     uploadProgress.value = 0.0;
-    uploadStatus.value = "Uploading...";
+    uploadStatus.value = "Preparing Upload...";
 
     try {
       String uid = FirebaseAuth.instance.currentUser!.uid;
@@ -101,6 +115,9 @@ class UploadManager {
       File compressedFile = isVideo
           ? await compressVideo(file)
           : await compressImage(file);
+
+      uploadStatus.value = "Uploading to Server... ☁️";
+
       String mediaUrl = await uploadFileToStorage(
         'posts',
         compressedFile,
@@ -137,13 +154,14 @@ class UploadManager {
       await Future.delayed(const Duration(seconds: 2));
       isUploading.value = false;
 
-      // 🌟 THE FIX: పోస్ట్/రీల్ అప్‌లోడ్ అవ్వగానే ఫుల్ స్క్రీన్ యాడ్ బ్లాస్ట్ అవుతుంది
+      // 🌟 యాడ్ డిస్ప్లే
       AdHelper.showInterstitial();
 
       return true;
     } catch (e) {
-      uploadStatus.value = "Error ❌";
-      await Future.delayed(const Duration(seconds: 2));
+      debugPrint("Upload Media Error: $e");
+      uploadStatus.value = "Upload Failed ❌"; // ఎర్రర్ యూజర్ కి చూపిస్తాం
+      await Future.delayed(const Duration(seconds: 3));
       isUploading.value = false;
       return false;
     }
@@ -224,12 +242,11 @@ class UploadManager {
       await Future.delayed(const Duration(seconds: 2));
       isUploading.value = false;
 
-      // 🌟 THE FIX: ఆటో-రీల్ అప్‌లోడ్ అవ్వగానే ఫుల్ స్క్రీన్ యాడ్
       AdHelper.showInterstitial();
     } catch (e) {
       debugPrint("Auto Reel Upload Error: $e");
-      uploadStatus.value = "Error ❌";
-      await Future.delayed(const Duration(seconds: 2));
+      uploadStatus.value = "Upload Failed ❌";
+      await Future.delayed(const Duration(seconds: 3));
       isUploading.value = false;
     }
   }
@@ -270,11 +287,11 @@ class UploadManager {
       await Future.delayed(const Duration(seconds: 2));
       isUploading.value = false;
 
-      // 🌟 THE FIX: స్టోరీ (Moment) అప్‌లోడ్ అవ్వగానే యాడ్
       AdHelper.showInterstitial();
     } catch (e) {
-      uploadStatus.value = "Error ❌";
-      await Future.delayed(const Duration(seconds: 2));
+      debugPrint("Moment Upload Error: $e");
+      uploadStatus.value = "Upload Failed ❌";
+      await Future.delayed(const Duration(seconds: 3));
       isUploading.value = false;
     }
   }

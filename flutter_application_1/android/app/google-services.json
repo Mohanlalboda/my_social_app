@@ -49,6 +49,50 @@
           ]
         }
       }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:12244963383:android:3460d04073a19ead5cafb2",
+        "android_client_info": {
+          "package_name": "in.mybanjara.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "12244963383-4lao9rsb39lkfb9l6q9lrdur4i3hso4c.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "in.mybanjara.app",
+            "certificate_hash": "e447089dcb372d5b45a1d02806cabea98a553eb8"
+          }
+        },
+        {
+          "client_id": "12244963383-2gmlb474hioghbeonfuhq5c6n27cmrjr.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC26t2B_IwvVvbkrriuPadKueVlnWjfrZM"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "12244963383-2gmlb474hioghbeonfuhq5c6n27cmrjr.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "12244963383-sfi57fopjcru5023uc65du7s3ejpcd3i.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.flutterApplication1"
+              }
+            }
+          ]
+        }
+      }
     }
   ],
   "configuration_version": "1"
