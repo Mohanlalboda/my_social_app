@@ -20,6 +20,7 @@ import '../posts/scrolling_posts_screen.dart';
 import '../reels/scrolling_reels_screen.dart';
 import '../../widgets/audio_message_widget.dart';
 import '../common/full_screen_media.dart';
+import 'call_screen.dart'; // 🌟 కాలింగ్ స్క్రీన్ కి వెళ్ళడానికి ఇది యాడ్ చేసాం
 
 class ChatScreen extends StatefulWidget {
   final String receiverId;
@@ -393,6 +394,42 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  // 🌟 THE FIX: కాల్ చేయగానే ఫైర్‌బేస్ లో 'కాల్ వెళ్తోంది' అని సేవ్ చేయడానికి
+  void _startCall(bool isVideo) async {
+    var myDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(currentUid)
+        .get();
+    String myName = myDoc.data()?['username'] ?? 'User';
+    String myPic = myDoc.data()?['profilePic'] ?? '';
+
+    // ఫైర్‌బేస్ లో కాల్ డేటా క్రియేట్ చేస్తున్నాం
+    await FirebaseFirestore.instance.collection('calls').doc(roomId).set({
+      'callerId': currentUid,
+      'callerName': myName,
+      'callerPic': myPic,
+      'receiverId': widget.receiverId,
+      'channelId': roomId,
+      'isVideoCall': isVideo,
+      'status': 'ringing', // రింగ్ అవుతోంది అని సిగ్నల్
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+
+    _sendPushNotification(
+      isVideo ? "📞 Incoming Video Call..." : "📞 Incoming Voice Call...",
+    );
+
+    // మనల్ని కాల్ స్క్రీన్ కి తీసుకెళ్తుంది
+    if (mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CallScreen(channelName: roomId, isVideoCall: isVideo),
+        ),
+      );
+    }
+  }
+
   Future<void> _pickSingleMedia(ImageSource source, bool isVideo) async {
     final picker = ImagePicker();
     XFile? file = isVideo
@@ -452,7 +489,6 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  // 🌟 THE FIX: mediaUrl ని కూడా పాస్ చేస్తున్నాం
   void _showMessageOptions(
     String msgId,
     String currentText,
@@ -517,7 +553,6 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
-                  // 🌟 THE FIX: ఇక్కడ mediaUrl పంపుతున్నాం
                   _deleteMessageForEveryone(msgId, mediaUrl);
                 },
               ),
@@ -570,7 +605,6 @@ class _ChatScreenState extends State<ChatScreen> {
         });
   }
 
-  // 🌟 THE FIX: అందరికీ డిలీట్ చేస్తే Storage లో ఫైల్ ఎగిరిపోతుంది
   void _deleteMessageForEveryone(String msgId, String mediaUrl) async {
     if (mediaUrl.isNotEmpty) {
       try {
@@ -594,7 +628,6 @@ class _ChatScreenState extends State<ChatScreen> {
         });
   }
 
-  // 🌟 THE FIX: క్లియర్ చాట్ చేస్తే, అవతలి వాళ్ళు అప్పటికే డిలీట్ చేసుంటే Storage లో ఫైల్ ఎగిరిపోతుంది
   void _clearChat() async {
     bool? confirm = await showDialog<bool>(
       context: context,
@@ -762,6 +795,15 @@ class _ChatScreenState extends State<ChatScreen> {
           ],
         ),
         actions: [
+          // 🌟 THE FIX: ఇక్కడ కాల్ బటన్స్ ని _startCall తో అప్డేట్ చేసాం
+          IconButton(
+            icon: const Icon(Icons.videocam, color: Colors.white),
+            onPressed: () => _startCall(true), // వీడియో కాల్
+          ),
+          IconButton(
+            icon: const Icon(Icons.call, color: Colors.white),
+            onPressed: () => _startCall(false), // ఆడియో కాల్
+          ),
           IconButton(
             icon: Icon(
               _isVanishMode ? Icons.auto_fix_normal : Icons.auto_fix_high,
@@ -901,15 +943,13 @@ class _ChatScreenState extends State<ChatScreen> {
 
                     if (msgType == 'shared_reel' || msgType == 'shared_post') {
                       return GestureDetector(
-                        onLongPress: () =>
-                            // 🌟 THE FIX: mediaUrl పాస్ చేసాం
-                            _showMessageOptions(
-                              msgId,
-                              "",
-                              false,
-                              isMe,
-                              msgData['mediaUrl'] ?? "",
-                            ),
+                        onLongPress: () => _showMessageOptions(
+                          msgId,
+                          "",
+                          false,
+                          isMe,
+                          msgData['mediaUrl'] ?? "",
+                        ),
                         onTap: () {
                           if (msgType == 'shared_reel')
                             Navigator.push(
@@ -964,8 +1004,7 @@ class _ChatScreenState extends State<ChatScreen> {
                         msgData['text'] ?? "",
                         msgType == 'text',
                         isMe,
-                        msgData['mediaUrl'] ??
-                            "", // 🌟 THE FIX: mediaUrl పాస్ చేసాం
+                        msgData['mediaUrl'] ?? "",
                       ),
                       child: Align(
                         alignment: isMe

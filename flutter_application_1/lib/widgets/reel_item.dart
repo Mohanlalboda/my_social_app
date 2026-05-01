@@ -44,7 +44,6 @@ class _ReelItemState extends State<ReelItem> {
   bool _hasError = false;
   bool _showBigHeart = false;
 
-  // Live data
   List _currentLikes = [];
   List _currentSavedBy = [];
   String _currentCaption = "";
@@ -63,7 +62,6 @@ class _ReelItemState extends State<ReelItem> {
     _initializePlayer();
     _checkFollowStatus();
 
-    // 🌟 LIVE SYNC
     _postSubscription = FirebaseFirestore.instance
         .collection('posts')
         .doc(widget.reelId)
@@ -230,7 +228,6 @@ class _ReelItemState extends State<ReelItem> {
     }
   }
 
-  // 🌟 EDIT REEL
   void _editReel() {
     TextEditingController editController = TextEditingController(
       text: _currentCaption,
@@ -272,7 +269,6 @@ class _ReelItemState extends State<ReelItem> {
     );
   }
 
-  // 🌟 DELETE REEL
   void _deleteReel() async {
     bool? confirm = await showDialog<bool>(
       context: context,
@@ -305,9 +301,108 @@ class _ReelItemState extends State<ReelItem> {
     }
   }
 
-  // 🌟 MORE OPTIONS MENU (3-Dots)
+  // 🌟 NEW: Report Reel Logic
+  void _reportReel() {
+    List<String> reasons = [
+      "Spam",
+      "Nudity or sexual content",
+      "Hate speech or symbols",
+      "Violence or dangerous organizations",
+      "False information",
+      "Bullying or harassment",
+    ];
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(15.0),
+            child: Text(
+              "Why are you reporting this reel?",
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+          ),
+          ...reasons.map(
+            (reason) => ListTile(
+              title: Text(reason),
+              onTap: () async {
+                Navigator.pop(ctx);
+                await FirebaseFirestore.instance.collection('reports').add({
+                  'reporterId': currentUid,
+                  'postId': widget.reelId,
+                  'reportedUserId': widget.reel['ownerId'],
+                  'reason': reason,
+                  'timestamp': FieldValue.serverTimestamp(),
+                });
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        "Reel reported successfully. Admin will review it.",
+                      ),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              },
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  // 🌟 NEW: Block User Logic
+  void _blockUser() async {
+    bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Block User?"),
+        content: const Text(
+          "Are you sure? You will no longer see posts or reels from this user.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("Block", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUid)
+            .update({
+              'blockedUsers': FieldValue.arrayUnion([widget.reel['ownerId']]),
+            });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("User blocked. Refresh feed to apply changes."),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
+      } catch (e) {
+        debugPrint("Error: $e");
+      }
+    }
+  }
+
+  // 🌟 THE FIX: Show Options based on Owner vs Other User
   void _showReelOptions() {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
+    bool isOwner = widget.reel['ownerId'] == currentUid;
+
     showModalBottomSheet(
       context: context,
       backgroundColor: isDark ? Colors.grey[900] : Colors.white,
@@ -317,33 +412,60 @@ class _ReelItemState extends State<ReelItem> {
       builder: (ctx) => SafeArea(
         child: Column(
           mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: Icon(
-                Icons.edit,
-                color: isDark ? Colors.white : Colors.black,
-              ),
-              title: Text(
-                "Edit Caption",
-                style: TextStyle(color: isDark ? Colors.white : Colors.black),
-              ),
-              onTap: () {
-                Navigator.pop(ctx);
-                _editReel();
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.delete, color: Colors.red),
-              title: const Text(
-                "Delete Reel",
-                style: TextStyle(color: Colors.red),
-              ),
-              onTap: () {
-                Navigator.pop(ctx);
-                _deleteReel();
-              },
-            ),
-          ],
+          children: isOwner
+              ? [
+                  ListTile(
+                    leading: Icon(
+                      Icons.edit,
+                      color: isDark ? Colors.white : Colors.black,
+                    ),
+                    title: Text(
+                      "Edit Caption",
+                      style: TextStyle(
+                        color: isDark ? Colors.white : Colors.black,
+                      ),
+                    ),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _editReel();
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.delete, color: Colors.red),
+                    title: const Text(
+                      "Delete Reel",
+                      style: TextStyle(color: Colors.red),
+                    ),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _deleteReel();
+                    },
+                  ),
+                ]
+              : [
+                  ListTile(
+                    leading: const Icon(Icons.report, color: Colors.orange),
+                    title: const Text(
+                      "Report Reel",
+                      style: TextStyle(color: Colors.orange),
+                    ),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _reportReel();
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.block, color: Colors.red),
+                    title: const Text(
+                      "Block User",
+                      style: TextStyle(color: Colors.red),
+                    ),
+                    onTap: () {
+                      Navigator.pop(ctx);
+                      _blockUser();
+                    },
+                  ),
+                ],
         ),
       ),
     );
@@ -795,18 +917,16 @@ class _ReelItemState extends State<ReelItem> {
                 onPressed: _toggleSave,
               ),
 
-              // 🌟 MORE OPTIONS (3-DOTS) ONLY FOR OWNER
-              if (isOwner) ...[
-                const SizedBox(height: 10),
-                IconButton(
-                  icon: const Icon(
-                    Icons.more_vert,
-                    color: Colors.white,
-                    size: 30,
-                  ),
-                  onPressed: _showReelOptions,
+              // 🌟 THE FIX: MORE OPTIONS (3-DOTS) AVAILABLE FOR EVERYONE NOW
+              const SizedBox(height: 10),
+              IconButton(
+                icon: const Icon(
+                  Icons.more_vert,
+                  color: Colors.white,
+                  size: 30,
                 ),
-              ],
+                onPressed: _showReelOptions,
+              ),
             ],
           ),
         ),

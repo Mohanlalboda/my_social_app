@@ -18,7 +18,6 @@ import 'cached_media_widget.dart';
 import '../screens/posts/comments_screen.dart';
 import '../screens/profile/other_user_profile_screen.dart';
 import '../screens/profile/user_list_screen.dart';
-// 🌟 THE FIX: మీరు క్రియేట్ చేసిన ఫుల్ స్క్రీన్ ఫైల్ ని ఇక్కడ ఇంపోర్ట్ చేసాం
 import '../screens/posts/full_screen_image_screen.dart';
 
 class PostWidget extends StatefulWidget {
@@ -421,6 +420,101 @@ class _PostWidgetState extends State<PostWidget> {
     );
   }
 
+  // 🌟 NEW: Report Post Logic
+  void _reportPost() {
+    List<String> reasons = [
+      "Spam",
+      "Nudity or sexual content",
+      "Hate speech or symbols",
+      "Violence or dangerous organizations",
+      "False information",
+      "Bullying or harassment",
+    ];
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) => Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(15.0),
+            child: Text(
+              "Why are you reporting this post?",
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+          ),
+          ...reasons.map(
+            (reason) => ListTile(
+              title: Text(reason),
+              onTap: () async {
+                Navigator.pop(ctx);
+                await FirebaseFirestore.instance.collection('reports').add({
+                  'reporterId': currentUid,
+                  'postId': widget.post['postId'],
+                  'reportedUserId': widget.post['ownerId'],
+                  'reason': reason,
+                  'timestamp': FieldValue.serverTimestamp(),
+                });
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        "Post reported successfully. Admin will review it.",
+                      ),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              },
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
+      ),
+    );
+  }
+
+  // 🌟 NEW: Block User Logic
+  void _blockUser() async {
+    bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text("Block User?"),
+        content: const Text(
+          "Are you sure? You will no longer see posts or reels from this user.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("Cancel"),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text("Block", style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        await FirebaseFirestore.instance
+            .collection('users')
+            .doc(currentUid)
+            .update({
+              'blockedUsers': FieldValue.arrayUnion([widget.post['ownerId']]),
+            });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("User blocked. Refresh feed to apply changes."),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+        }
+      } catch (e) {}
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
@@ -463,24 +557,47 @@ class _PostWidgetState extends State<PostWidget> {
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
             subtitle: Text(timeStr, style: const TextStyle(fontSize: 12)),
-            trailing: widget.post['ownerId'] == currentUid
-                ? PopupMenuButton<String>(
-                    onSelected: (val) {
-                      if (val == 'edit') _editPost();
-                      if (val == 'delete') _deletePost();
-                    },
-                    itemBuilder: (ctx) => [
-                      const PopupMenuItem(value: 'edit', child: Text("Edit")),
-                      const PopupMenuItem(
-                        value: 'delete',
-                        child: Text(
-                          "Delete",
-                          style: TextStyle(color: Colors.red),
-                        ),
+
+            // 🌟 THE FIX: ఇక్కడ ఓనర్ అయితే Edit/Delete, వేరేవాళ్లదైతే Report/Block
+            trailing: PopupMenuButton<String>(
+              onSelected: (val) {
+                if (val == 'edit') _editPost();
+                if (val == 'delete') _deletePost();
+                if (val == 'report') _reportPost();
+                if (val == 'block') _blockUser();
+              },
+              itemBuilder: (ctx) {
+                if (widget.post['ownerId'] == currentUid) {
+                  return [
+                    const PopupMenuItem(
+                      value: 'edit',
+                      child: Text("Edit Caption"),
+                    ),
+                    const PopupMenuItem(
+                      value: 'delete',
+                      child: Text(
+                        "Delete Post",
+                        style: TextStyle(color: Colors.red),
                       ),
-                    ],
-                  )
-                : null,
+                    ),
+                  ];
+                } else {
+                  return [
+                    const PopupMenuItem(
+                      value: 'report',
+                      child: Text("Report Post"),
+                    ),
+                    const PopupMenuItem(
+                      value: 'block',
+                      child: Text(
+                        "Block User",
+                        style: TextStyle(color: Colors.red),
+                      ),
+                    ),
+                  ];
+                }
+              },
+            ),
           ),
 
           if (postType == 'auto_reel' && images.isNotEmpty)
@@ -524,18 +641,15 @@ class _PostWidgetState extends State<PostWidget> {
                     itemCount: images.length,
                     itemBuilder: (context, index) {
                       String imgData = images[index];
-                      // 🌟 THE FIX: ఇక్కడ onTap కనెక్ట్ చేసాం
                       return GestureDetector(
                         onDoubleTap: _handleDoubleTap,
                         onTap: () {
-                          // పోస్ట్ ఫోటో మీద నొక్కితే ఫుల్ స్క్రీన్ కి వెళ్తుంది
                           Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (_) => FullScreenImageScreen(
-                                imageUrls: images, // అన్ని ఫోటోలు పంపుతున్నాం
-                                initialIndex:
-                                    index, // ఏ ఫోటో మీద నొక్కారో దాని ఇండెక్స్
+                                imageUrls: images,
+                                initialIndex: index,
                               ),
                             ),
                           );

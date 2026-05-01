@@ -6,7 +6,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:google_mobile_ads/google_mobile_ads.dart'; // 🌟 యాడ్స్ కోసం
+import 'dart:async'; // 🌟 కాల్ సబ్‌స్క్రిప్షన్ కోసం
 
+import 'screens/chat/incoming_call_screen.dart'; // 🌟 కాల్ వస్తే ఈ స్క్రీన్ ఓపెన్ అవుతుంది
 import 'screens/create/add_post_screen.dart';
 import 'services/notification_service.dart';
 import 'services/social_service.dart';
@@ -23,6 +26,7 @@ import 'utils/constants.dart';
 
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.system);
 
+// 🌟 వాట్సాప్ లాగా యాప్ క్లోజ్ లో ఉన్నప్పుడు పుష్ నోటిఫికేషన్స్ కోసం
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -33,6 +37,11 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // 🌟 యాడ్స్ ని ముందుగానే స్టార్ట్ చేయడం
+  await MobileAds.instance.initialize();
+
+  // 🌟 పుష్ నోటిఫికేషన్స్ సెటప్
   await PushNotificationService.initialize();
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
@@ -134,10 +143,9 @@ class _MainNavigationState extends State<MainNavigation>
     with WidgetsBindingObserver {
   int _selectedIndex = 0;
 
-  // 🌟 THE FIX: స్వైప్ చేయడానికి PageController ని యాడ్ చేశాం
   late PageController _pageController;
+  StreamSubscription? _callSubscription; // 🌟 కాల్స్ గమనించడానికి
 
-  // 🌟 THE FIX: ఇప్పుడు InboxScreen ని ఒక టాబ్ లాగా పెట్టేసాం
   final List<Widget> _screens = [
     const HomeScreen(),
     const SearchScreen(),
@@ -149,17 +157,55 @@ class _MainNavigationState extends State<MainNavigation>
   @override
   void initState() {
     super.initState();
-    // 🌟 PageController ని మొదటి స్క్రీన్ (0) తో స్టార్ట్ చేస్తున్నాం
     _pageController = PageController(initialPage: _selectedIndex);
 
     _updateOnlineStatus(true);
     WidgetsBinding.instance.addObserver(this);
     SocialService.cleanupOldMoments();
+
+    // 🌟 యాప్ ఓపెన్ చేయగానే ఎవరైనా కాల్ చేస్తున్నారేమో అని చెక్ చేస్తుంది
+    _listenForIncomingCalls();
   }
 
+  // 🌟 THE FIX: ఇక్కడే కాల్స్ కోసం ఫైర్‌బేస్ ని వింటుంటాం
+ // 🌟 THE FIX: ఇక్కడే కాల్స్ కోసం ఫైర్‌బేస్ ని వింటుంటాం
+  void _listenForIncomingCalls() {
+    final currentUid = FirebaseAuth.instance.currentUser?.uid;
+    if (currentUid == null) return;
+
+    _callSubscription = FirebaseFirestore.instance
+        .collection('calls')
+        .where('receiverId', isEqualTo: currentUid)
+        .where('status', isEqualTo: 'ringing') // రింగ్ అవుతుంటేనే..
+        .snapshots()
+        .listen((snapshot) {
+      if (snapshot.docs.isNotEmpty) {
+        var callDoc = snapshot.docs.first;
+        var callData = callDoc.data();
+        
+        // 🌟 THE FIX: ఎర్రర్ రాకుండా mounted చెక్ యాడ్ చేసాం
+        if (!mounted) return;
+
+        // వెంటనే ఇన్-కమింగ్ కాల్ స్క్రీన్ ఓపెన్ చేస్తుంది!
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => IncomingCallScreen(
+              callId: callDoc.id,
+              callerName: callData['callerName'] ?? 'Someone',
+              callerPic: callData['callerPic'] ?? '',
+              isVideoCall: callData['isVideoCall'] ?? false,
+              channelId: callData['channelId'] ?? callDoc.id,
+            ),
+          ),
+        );
+      }
+    });
+  }
   @override
   void dispose() {
-    // 🌟 కంట్రోలర్ ని క్లోజ్ చేయాలి
+    _callSubscription
+        ?.cancel(); // 🌟 యాప్ క్లోజ్ చేసినప్పుడు ఇది కూడా ఆగిపోవాలి
     _pageController.dispose();
     _updateOnlineStatus(false);
     WidgetsBinding.instance.removeObserver(this);
@@ -199,7 +245,6 @@ class _MainNavigationState extends State<MainNavigation>
     final currentUser = FirebaseAuth.instance.currentUser;
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
 
-    // 🌟 Inbox, Reels, Profile స్క్రీన్స్ కి పైన యాప్ బార్ వద్దు కాబట్టి హైడ్ చేస్తున్నాం
     bool hideAppBar = _selectedIndex >= 2;
 
     return Scaffold(
@@ -272,7 +317,7 @@ class _MainNavigationState extends State<MainNavigation>
                   padding: const EdgeInsets.only(right: 15),
                   child: IconButton(
                     icon: Icon(
-                      Icons.add_box_outlined, // 🌟 పైన ప్లస్ ఐకాన్
+                      Icons.add_box_outlined,
                       color: isDarkMode ? Colors.white : Colors.black,
                       size: 28,
                     ),
@@ -287,12 +332,10 @@ class _MainNavigationState extends State<MainNavigation>
               ],
             ),
 
-      // 🌟 THE FIX: ఇక్కడ PageView తో స్వైప్ చేసేలా సెట్ చేశాం
       body: PageView(
         controller: _pageController,
-        physics: const BouncingScrollPhysics(), // స్మూత్ స్వైపింగ్ కోసం
+        physics: const BouncingScrollPhysics(),
         onPageChanged: (index) {
-          // స్క్రీన్ స్వైప్ చేసినప్పుడు కింద టాబ్ కలర్ కూడా మారాలి
           setState(() {
             _selectedIndex = index;
           });
@@ -303,7 +346,6 @@ class _MainNavigationState extends State<MainNavigation>
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
         onTap: (i) {
-          // కింద టాబ్స్ మీద టచ్ చేసినా సరే స్మూత్ గా ఆ స్క్రీన్ కి స్లైడ్ అవుతుంది
           _pageController.animateToPage(
             i,
             duration: const Duration(milliseconds: 300),

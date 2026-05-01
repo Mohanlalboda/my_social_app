@@ -1,4 +1,4 @@
-// ignore_for_file: use_build_context_synchronously
+// ignore_for_file: use_build_context_synchronously, curly_braces_in_flow_control_structures
 
 import 'dart:io';
 import 'package:flutter/material.dart';
@@ -8,6 +8,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:image_cropper/image_cropper.dart';
+import 'package:url_launcher/url_launcher.dart'; // 🌟 ప్రైవసీ పాలసీ లింక్ ఓపెన్ చేయడానికి ఇది కావాలి
 
 import '../../utils/constants.dart';
 import '../../services/upload_manager.dart';
@@ -26,7 +27,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final String uid = FirebaseAuth.instance.currentUser!.uid;
 
-  // 🌟 THE GHOST CLEANUP FUNCTION (బ్యాక్‌గ్రౌండ్ లో రన్ అవుతుంది)
+  // 🌟 GHOST CLEANUP FUNCTION
   Future<void> _cleanGhostUsers(
     List currentFollowers,
     List currentFollowing,
@@ -67,52 +68,244 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
   }
 
-  // ⚙️ Settings
-  void _showSettings(bool currentPrivateStatus) {
+  // ⚙️ 🌟 UPDATED SETTINGS (Privacy, Password, Delete Account)
+  void _showSettings(bool currentPrivateStatus, String currentName) {
     bool isDark = Theme.of(context).brightness == Brightness.dark;
     showModalBottomSheet(
       context: context,
+      isScrollControlled: true,
       backgroundColor: isDark ? Colors.grey[900] : Colors.white,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
       builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(15.0),
-              child: Text(
-                "Settings and privacy",
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: isDark ? Colors.white : Colors.black,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(15.0),
+                child: Text(
+                  "Settings & Privacy",
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: isDark ? Colors.white : Colors.black,
+                  ),
                 ),
               ),
-            ),
-            const Divider(),
-            SwitchListTile(
-              secondary: const Icon(Icons.lock_outline),
-              title: Text(
-                "Private Account",
-                style: TextStyle(color: isDark ? Colors.white : Colors.black),
+              const Divider(),
+
+              // 1. Private Account Toggle
+              SwitchListTile(
+                secondary: Icon(
+                  Icons.lock_outline,
+                  color: isDark ? Colors.white : Colors.black,
+                ),
+                title: Text(
+                  "Private Account",
+                  style: TextStyle(
+                    color: isDark ? Colors.white : Colors.black,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                subtitle: const Text(
+                  "Only followers can see your photos and videos",
+                  style: TextStyle(fontSize: 12),
+                ),
+                value: currentPrivateStatus,
+                activeThumbColor: const Color(0xFFFD1D1D),
+                onChanged: (val) async {
+                  Navigator.pop(ctx);
+                  await FirebaseFirestore.instance
+                      .collection('users')
+                      .doc(uid)
+                      .update({'isPrivate': val});
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text(
+                        val
+                            ? "Account is now Private"
+                            : "Account is now Public",
+                      ),
+                    ),
+                  );
+                },
               ),
-              value: currentPrivateStatus,
-              activeThumbColor: const Color(0xFFFD1D1D),
-              onChanged: (val) async {
-                Navigator.pop(ctx);
-                await FirebaseFirestore.instance
-                    .collection('users')
-                    .doc(uid)
-                    .update({'isPrivate': val});
-              },
-            ),
-            const SizedBox(height: 20),
-          ],
+
+              // 2. Change Username / Profile Info
+              ListTile(
+                leading: Icon(
+                  Icons.person_outline,
+                  color: isDark ? Colors.white : Colors.black,
+                ),
+                title: Text(
+                  "Change Username & Bio",
+                  style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _showEditDialog(currentName, "");
+                },
+              ),
+
+              // 3. Change Password
+              ListTile(
+                leading: Icon(
+                  Icons.security,
+                  color: isDark ? Colors.white : Colors.black,
+                ),
+                title: Text(
+                  "Change Password",
+                  style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                ),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  try {
+                    String email = FirebaseAuth.instance.currentUser!.email!;
+                    await FirebaseAuth.instance.sendPasswordResetEmail(
+                      email: email,
+                    );
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text("Password reset link sent to $email"),
+                        backgroundColor: Colors.green,
+                      ),
+                    );
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Failed to send reset link"),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+                },
+              ),
+
+              // 4. Privacy Policy Link (Google Play Requirement)
+              ListTile(
+                leading: Icon(
+                  Icons.privacy_tip_outlined,
+                  color: isDark ? Colors.white : Colors.black,
+                ),
+                title: Text(
+                  "Privacy Policy",
+                  style: TextStyle(color: isDark ? Colors.white : Colors.black),
+                ),
+                trailing: const Icon(
+                  Icons.open_in_new,
+                  size: 16,
+                  color: Colors.grey,
+                ),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  // 🌟 ఇక్కడ మీ ఒరిజినల్ ప్రైవసీ పాలసీ లింక్ ఇవ్వండి
+                  final Uri url = Uri.parse(
+                    'https://docs.google.com/document/d/e/2PACX-1vQTNVeG8-x5T-XcD3hyvzE4ph0vD655He5oSj-30OIodXieFKeyWQRjuVn2tw2WAZtuWjwN6CpPCjsd/pub',
+                  );
+                  if (!await launchUrl(url)) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text("Could not open Privacy Policy"),
+                      ),
+                    );
+                  }
+                },
+              ),
+
+              const Divider(),
+
+              // 5. Logout
+              ListTile(
+                leading: const Icon(Icons.logout, color: Colors.orange),
+                title: const Text(
+                  "Log Out",
+                  style: TextStyle(
+                    color: Colors.orange,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  FirebaseAuth.instance.signOut();
+                },
+              ),
+
+              // 6. Delete Account (Google Play Strict Requirement)
+              ListTile(
+                leading: const Icon(Icons.delete_forever, color: Colors.red),
+                title: const Text(
+                  "Delete Account",
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _deleteAccountWarning();
+                },
+              ),
+              const SizedBox(height: 20),
+            ],
+          ),
         ),
       ),
     );
+  }
+
+  // ⚠️ Delete Account Warning & Logic
+  void _deleteAccountWarning() async {
+    bool? confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text(
+          "Delete Account? ⚠️",
+          style: TextStyle(color: Colors.red),
+        ),
+        content: const Text(
+          "Are you absolutely sure? This will permanently delete your profile, posts, reels, and all data. This action cannot be undone.",
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text("Cancel"),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              "Delete Everything",
+              style: TextStyle(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      try {
+        // 1. Firestore Data Delete
+        await FirebaseFirestore.instance.collection('users').doc(uid).delete();
+
+        // 2. Firebase Auth Delete
+        await FirebaseAuth.instance.currentUser!.delete();
+
+        // Logout automatically happens when user is deleted
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                "Failed to delete account. Please re-login and try again.",
+              ),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    }
   }
 
   // 📷 Profile Pic Action
@@ -158,48 +351,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // 🍔 Menu
-  void _showInstagramMenu(String name, String bio, bool isPrivate) {
-    bool isDark = Theme.of(context).brightness == Brightness.dark;
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: isDark ? Colors.grey[900] : Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => SafeArea(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              leading: Icon(
-                Icons.settings_outlined,
-                color: isDark ? Colors.white : Colors.black,
-              ),
-              title: Text(
-                "Settings and privacy",
-                style: TextStyle(color: isDark ? Colors.white : Colors.black),
-              ),
-              onTap: () {
-                Navigator.pop(ctx);
-                _showSettings(isPrivate);
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.logout, color: Colors.red),
-              title: const Text("Logout", style: TextStyle(color: Colors.red)),
-              onTap: () {
-                Navigator.pop(ctx);
-                FirebaseAuth.instance.signOut();
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // 📝 Edit Profile
+  // 📝 Edit Profile (Name & Bio)
   void _showEditDialog(String currentName, String currentBio) {
     final nameCtrl = TextEditingController(text: currentName);
     final bioCtrl = TextEditingController(text: currentBio);
@@ -212,7 +364,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: [
             TextField(
               controller: nameCtrl,
-              decoration: const InputDecoration(labelText: "Name"),
+              decoration: const InputDecoration(labelText: "Name / Username"),
             ),
             TextField(
               controller: bioCtrl,
@@ -246,7 +398,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // 🖼️ Update Profile Pic
+  // 🖼️ Update Profile Pic Background
   Future<void> _updateProfilePic() async {
     final ImagePicker picker = ImagePicker();
     final XFile? image = await picker.pickImage(
@@ -351,7 +503,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           List followers = userData['followers'] ?? [];
           List following = userData['following'] ?? [];
 
-          // 🌟 THE FIX: ఇక్కడ స్కాన్ రన్ అవుతుంది, దెయ్యాలు ఉంటే ఎగిరిపోతాయి!
+          // 🌟 THE FIX: దెయ్యాల స్కాన్
           _cleanGhostUsers(followers, following);
 
           return Scaffold(
@@ -390,13 +542,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     MaterialPageRoute(builder: (_) => const AddPostScreen()),
                   ),
                 ),
+                // 🌟 మెనూ బటన్ (నొక్కితే సెట్టింగ్స్ ఓపెన్ అవుతాయి)
                 IconButton(
                   icon: Icon(
                     Icons.menu,
                     size: 28,
                     color: isDark ? Colors.white : Colors.black,
                   ),
-                  onPressed: () => _showInstagramMenu(name, bio, isPrivate),
+                  onPressed: () => _showSettings(isPrivate, name),
                 ),
               ],
             ),
