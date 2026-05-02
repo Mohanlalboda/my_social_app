@@ -1,15 +1,23 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
+import '../../services/fcm_sender_service.dart';
 
 class CallScreen extends StatefulWidget {
-  final String channelName; // ఇది మన ఫైర్‌బేస్ చాట్ రూమ్ ఐడీ (roomId)
-  final bool isVideoCall; // వీడియో కాలా? ఆడియో కాలా?
+  final String channelName;
+  final bool isVideoCall;
+  final bool isGroupCall; // 🌟 యాడ్ చేశాం
 
   const CallScreen({
     super.key,
     required this.channelName,
     this.isVideoCall = true,
+    this.isGroupCall = false,
   });
 
   @override
@@ -17,44 +25,97 @@ class CallScreen extends StatefulWidget {
 }
 
 class _CallScreenState extends State<CallScreen> {
-  // 🌟 ఇక్కడ మీరు కాపీ చేసిన అగోరా App ID వేయండి (కోటేషన్స్ మధ్యలో)
+  // 🌟 మీ ఆగోరా App ID (Testing Mode)
   final String appId = "e6cb84377d584afe8852fb6ed2e20818";
-  final String token = ""; // టెస్టింగ్ మోడ్ అయితే ఇది ఖాళీగా వదిలేయండి
+  final String token = "";
 
-  int? _remoteUid;
+  final List<int> _remoteUids = [];
   bool _localUserJoined = false;
   bool _muted = false;
   late RtcEngine _engine;
+
+  StreamSubscription? _callSubscription;
+  StreamSubscription? _fcmSubscription;
+  Timer? _ringingTimer;
 
   @override
   void initState() {
     super.initState();
     initAgora();
+
+    _callSubscription = FirebaseFirestore.instance
+        .collection('calls')
+        .doc(widget.channelName)
+        .snapshots()
+        .listen((snapshot) {
+          if (snapshot.exists) {
+            String status = snapshot.data()?['status'] ?? '';
+            if (!widget.isGroupCall &&
+                (status == 'ended' ||
+                    status == 'declined' ||
+                    status == 'rejected')) {
+              _closeScreenInstantly();
+            }
+          }
+        });
+
+    _fcmSubscription = FirebaseMessaging.onMessage.listen((
+      RemoteMessage message,
+    ) {
+      if (!widget.isGroupCall && message.data['type'] == 'end_call') {
+        _closeScreenInstantly();
+      }
+    });
+
+    _ringingTimer = Timer(const Duration(seconds: 35), () {
+      if (_remoteUids.isEmpty && mounted) {
+        _onCallEnd();
+      }
+    });
+  }
+
+  void _closeScreenInstantly() {
+    FlutterCallkitIncoming.endAllCalls();
+    if (mounted) Navigator.pop(context);
   }
 
   Future<void> initAgora() async {
-    // 1. పర్మిషన్స్ అడగడం
     await [Permission.microphone, Permission.camera].request();
 
-    // 2. ఆగోరా ఇంజిన్ స్టార్ట్ చేయడం
     _engine = createAgoraRtcEngine();
+
+    // 🌟 THE FIX 1: Communication బదులు LiveBroadcasting వాడాలి
     await _engine.initialize(
       RtcEngineContext(
         appId: appId,
-        channelProfile: ChannelProfileType.channelProfileCommunication,
+        channelProfile: ChannelProfileType.channelProfileLiveBroadcasting,
       ),
     );
+    // 🌟 THE FIX 2: అందరినీ Broadcaster గా సెట్ చేయాలి
+    await _engine.setClientRole(role: ClientRoleType.clientRoleBroadcaster);
 
-    // 3. ఎవరు కాల్ లిఫ్ట్ చేశారు, కట్ చేశారు అని ట్రాక్ చేయడానికి
     _engine.registerEventHandler(
       RtcEngineEventHandler(
+        onError: (ErrorCodeType err, String msg) {
+          debugPrint("❌ Agora Error: $err - $msg");
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text("Agora Error: $msg"),
+                backgroundColor: Colors.red,
+              ),
+            );
+          }
+        },
         onJoinChannelSuccess: (RtcConnection connection, int elapsed) {
-          debugPrint("Local user ${connection.localUid} joined");
           setState(() => _localUserJoined = true);
         },
         onUserJoined: (RtcConnection connection, int remoteUid, int elapsed) {
-          debugPrint("Remote user $remoteUid joined");
-          setState(() => _remoteUid = remoteUid);
+          setState(() {
+            if (!widget.isGroupCall) _remoteUids.clear();
+            if (!_remoteUids.contains(remoteUid)) _remoteUids.add(remoteUid);
+          });
+          _ringingTimer?.cancel();
         },
         onUserOffline:
             (
@@ -62,15 +123,16 @@ class _CallScreenState extends State<CallScreen> {
               int remoteUid,
               UserOfflineReasonType reason,
             ) {
-              debugPrint("Remote user $remoteUid left channel");
-              setState(() => _remoteUid = null);
-              // అవతలి వాళ్ళు కాల్ కట్ చేస్తే మనం కూడా బ్యాక్ కి వెళ్ళిపోవాలి
-              Navigator.pop(context);
+              setState(() {
+                _remoteUids.remove(remoteUid);
+              });
+              if (!widget.isGroupCall && _remoteUids.isEmpty) {
+                _closeScreenInstantly();
+              }
             },
       ),
     );
 
-    // 4. వీడియో కాలా లేక ఆడియో కాలా అని చెక్ చేయడం
     if (widget.isVideoCall) {
       await _engine.enableVideo();
       await _engine.startPreview();
@@ -78,17 +140,27 @@ class _CallScreenState extends State<CallScreen> {
       await _engine.disableVideo();
     }
 
-    // 5. కాల్ రూమ్ లోకి ఎంటర్ అవ్వడం
+    ChannelMediaOptions options = const ChannelMediaOptions(
+      autoSubscribeVideo: true,
+      autoSubscribeAudio: true,
+      publishCameraTrack: true,
+      publishMicrophoneTrack: true,
+      clientRoleType: ClientRoleType.clientRoleBroadcaster,
+    );
+
     await _engine.joinChannel(
-      token: token.isEmpty ? "" : token,
+      token: token,
       channelId: widget.channelName,
       uid: 0,
-      options: const ChannelMediaOptions(),
+      options: options,
     );
   }
 
   @override
   void dispose() {
+    _callSubscription?.cancel();
+    _fcmSubscription?.cancel();
+    _ringingTimer?.cancel();
     _engine.leaveChannel();
     _engine.release();
     super.dispose();
@@ -99,12 +171,32 @@ class _CallScreenState extends State<CallScreen> {
     _engine.muteLocalAudioStream(_muted);
   }
 
-  void _onSwitchCamera() {
-    _engine.switchCamera();
-  }
+  void _onSwitchCamera() => _engine.switchCamera();
 
-  void _onCallEnd(BuildContext context) {
-    Navigator.pop(context);
+  void _onCallEnd() async {
+    if (widget.isGroupCall) {
+      _closeScreenInstantly();
+    } else {
+      await FirebaseFirestore.instance
+          .collection('calls')
+          .doc(widget.channelName)
+          .set({'status': 'ended'}, SetOptions(merge: true));
+      String currentUid = FirebaseAuth.instance.currentUser?.uid ?? '';
+      var callDoc = await FirebaseFirestore.instance
+          .collection('calls')
+          .doc(widget.channelName)
+          .get();
+      if (callDoc.exists) {
+        String callerId = callDoc.data()?['callerId'] ?? '';
+        String receiverId = callDoc.data()?['receiverId'] ?? '';
+        String otherUserId = (currentUid == callerId) ? receiverId : callerId;
+        FcmSenderService.sendEndCallSignal(
+          receiverId: otherUserId,
+          channelId: widget.channelName,
+        );
+      }
+      _closeScreenInstantly();
+    }
   }
 
   @override
@@ -114,10 +206,7 @@ class _CallScreenState extends State<CallScreen> {
       body: SafeArea(
         child: Stack(
           children: [
-            // అవతలి వాళ్ళ వీడియో
             Center(child: _remoteVideo()),
-
-            // మన చిన్న వీడియో (పైన కుడి మూల)
             if (widget.isVideoCall)
               Align(
                 alignment: Alignment.topRight,
@@ -148,8 +237,6 @@ class _CallScreenState extends State<CallScreen> {
                   ),
                 ),
               ),
-
-            // కింద బటన్స్ (కట్ చేయడం, మ్యూట్ చేయడం)
             _toolbar(),
           ],
         ),
@@ -158,39 +245,69 @@ class _CallScreenState extends State<CallScreen> {
   }
 
   Widget _remoteVideo() {
-    if (_remoteUid != null) {
-      if (widget.isVideoCall) {
+    if (_remoteUids.isEmpty) {
+      return Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          const CircularProgressIndicator(color: Colors.blueAccent),
+          const SizedBox(height: 20),
+          Text(
+            widget.isGroupCall
+                ? 'Waiting for others to join ⏳'
+                : 'Ringing... Waiting to join ⏳',
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.white, fontSize: 18),
+          ),
+        ],
+      );
+    }
+
+    if (widget.isVideoCall) {
+      if (widget.isGroupCall) {
+        return GridView.builder(
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+            crossAxisCount: _remoteUids.length > 2 ? 2 : 1,
+            childAspectRatio: 0.8,
+          ),
+          itemCount: _remoteUids.length,
+          itemBuilder: (context, index) {
+            return Padding(
+              padding: const EdgeInsets.all(2.0),
+              child: AgoraVideoView(
+                controller: VideoViewController.remote(
+                  rtcEngine: _engine,
+                  canvas: VideoCanvas(uid: _remoteUids[index]),
+                  connection: RtcConnection(channelId: widget.channelName),
+                ),
+              ),
+            );
+          },
+        );
+      } else {
         return AgoraVideoView(
           controller: VideoViewController.remote(
             rtcEngine: _engine,
-            canvas: VideoCanvas(uid: _remoteUid),
+            canvas: VideoCanvas(uid: _remoteUids.first),
             connection: RtcConnection(channelId: widget.channelName),
           ),
         );
-      } else {
-        return const Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.person, size: 120, color: Colors.white54),
-            SizedBox(height: 20),
-            Text(
-              "Voice Call Connected 📞",
-              style: TextStyle(color: Colors.white, fontSize: 20),
-            ),
-            Text("00:00", style: TextStyle(color: Colors.grey, fontSize: 16)),
-          ],
-        );
       }
     } else {
-      return const Column(
+      return Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          CircularProgressIndicator(color: Colors.blueAccent),
-          SizedBox(height: 20),
+          Icon(
+            widget.isGroupCall ? Icons.group : Icons.person,
+            size: 120,
+            color: Colors.white54,
+          ),
+          const SizedBox(height: 20),
           Text(
-            'Ringing... Waiting to join ⏳',
+            widget.isGroupCall
+                ? "Group Voice Call 📞\n(${_remoteUids.length} Active)"
+                : "Voice Call Connected 📞",
+            style: const TextStyle(color: Colors.white, fontSize: 20),
             textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.white, fontSize: 18),
           ),
         ],
       );
@@ -204,7 +321,6 @@ class _CallScreenState extends State<CallScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: <Widget>[
-          // మ్యూట్ బటన్
           RawMaterialButton(
             onPressed: _onToggleMute,
             shape: const CircleBorder(),
@@ -218,10 +334,8 @@ class _CallScreenState extends State<CallScreen> {
             ),
           ),
           const SizedBox(width: 15),
-
-          // కాల్ కట్ బటన్
           RawMaterialButton(
-            onPressed: () => _onCallEnd(context),
+            onPressed: _onCallEnd,
             shape: const CircleBorder(),
             elevation: 2.0,
             fillColor: Colors.redAccent,
@@ -229,8 +343,6 @@ class _CallScreenState extends State<CallScreen> {
             child: const Icon(Icons.call_end, color: Colors.white, size: 35.0),
           ),
           const SizedBox(width: 15),
-
-          // కెమెరా మార్చే బటన్
           if (widget.isVideoCall)
             RawMaterialButton(
               onPressed: _onSwitchCamera,

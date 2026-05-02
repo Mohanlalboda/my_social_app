@@ -15,6 +15,8 @@ import '../../widgets/safe_elements.dart';
 import '../../widgets/cached_media_widget.dart';
 import '../common/full_screen_media.dart';
 import '../../widgets/audio_message_widget.dart';
+import '../chat/call_screen.dart'; // 🌟 THE FIX: కాలింగ్ పేజీ కోసం
+import '../../services/fcm_sender_service.dart'; // 🌟 నోటిఫికేషన్స్ కోసం
 
 class CommunityChatScreen extends StatefulWidget {
   final String communityId;
@@ -42,7 +44,6 @@ class _CommunityChatScreenState extends State<CommunityChatScreen> {
   bool _isRecording = false;
   final ValueNotifier<bool> _isTypingNotifier = ValueNotifier(false);
 
-  // 🌟 PAGINATION: మెసేజ్ లోడ్ లిమిట్ & స్క్రోల్ కంట్రోలర్
   int _messageLimit = 30;
   final ScrollController _scrollController = ScrollController();
 
@@ -51,7 +52,6 @@ class _CommunityChatScreenState extends State<CommunityChatScreen> {
     super.initState();
     _fetchMyData();
 
-    // స్క్రోల్ పైకి వెళ్ళగానే ఇంకో 30 మెసేజ్ లు లాగుతాం
     _scrollController.addListener(() {
       if (_scrollController.position.pixels ==
           _scrollController.position.maxScrollExtent) {
@@ -80,6 +80,62 @@ class _CommunityChatScreenState extends State<CommunityChatScreen> {
       if (doc.exists && mounted) setState(() => myUserData = doc.data());
     } catch (e) {
       debugPrint("UserData Fetch Error: $e");
+    }
+  }
+
+  // 🌟 THE FIX: గ్రూప్ కాల్ స్టార్ట్ చేయడానికి ఫంక్షన్
+  void _startGroupCall(bool isVideo) async {
+    // 1. హిస్టరీ కోసం ఫైర్‌బేస్ లో రికార్డ్ చేస్తున్నాం
+    await FirebaseFirestore.instance
+        .collection('calls')
+        .doc(widget.communityId)
+        .set({
+          'callerId': currentUid,
+          'callerName': widget.communityName, // గ్రూప్ పేరు
+          'callerPic': widget.communityIcon,
+          'receiverId': widget.communityId, // గ్రూప్ ఐడీ
+          'channelId': widget.communityId,
+          'isVideoCall': isVideo,
+          'status': 'group_call',
+          'isGroupCall': true,
+          'timestamp': FieldValue.serverTimestamp(),
+        });
+
+    // 2. గ్రూప్ లో ఉన్న మెంబర్స్ అందరికీ రింగ్ అవ్వడానికి నోటిఫికేషన్స్ పంపుతున్నాం
+    try {
+      var communityDoc = await FirebaseFirestore.instance
+          .collection('communities')
+          .doc(widget.communityId)
+          .get();
+      if (communityDoc.exists) {
+        List members = communityDoc.data()?['members'] ?? [];
+        for (String memberId in members) {
+          if (memberId != currentUid) {
+            // మనకు మనం కాల్ చేసుకోము కదా!
+            FcmSenderService.sendCallNotification(
+              receiverId: memberId,
+              callerName: widget.communityName, // గ్రూప్ పేరుతో కాల్ వెళ్తుంది
+              callerPic: widget.communityIcon,
+              channelId: widget.communityId,
+              isVideo: isVideo,
+              isGroupCall: true,
+            );
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Group Call Notification Error: $e");
+    }
+
+    // 3. మన ఫోన్లో కాలింగ్ స్క్రీన్ కి వెళ్తున్నాం
+    if (mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) =>
+              CallScreen(channelName: widget.communityId, isVideoCall: isVideo, isGroupCall: true),
+        ),
+      );
     }
   }
 
@@ -365,7 +421,18 @@ class _CommunityChatScreenState extends State<CommunityChatScreen> {
           },
         ),
         actions: [
-          // 🌟 THE FIX: కేవలం ఒక్క 'Group Info' ఆప్షన్ మాత్రమే ఉంచాం
+          // 🌟 THE FIX: గ్రూప్ కాలింగ్ బటన్స్
+          IconButton(
+            icon: Icon(
+              Icons.videocam,
+              color: isDark ? Colors.white : Colors.black,
+            ),
+            onPressed: () => _startGroupCall(true),
+          ),
+          IconButton(
+            icon: Icon(Icons.call, color: isDark ? Colors.white : Colors.black),
+            onPressed: () => _startGroupCall(false),
+          ),
           PopupMenuButton<String>(
             icon: Icon(
               Icons.more_vert,
@@ -408,7 +475,7 @@ class _CommunityChatScreenState extends State<CommunityChatScreen> {
                   .doc(widget.communityId)
                   .collection('messages')
                   .orderBy('timestamp', descending: true)
-                  .limit(_messageLimit) // 🌟 THE FIX: ప్యాజినేషన్ లిమిట్
+                  .limit(_messageLimit)
                   .snapshots(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -433,8 +500,7 @@ class _CommunityChatScreenState extends State<CommunityChatScreen> {
                 }
 
                 return ListView.builder(
-                  controller:
-                      _scrollController, // 🌟 THE FIX: స్క్రోల్ కంట్రోలర్ యాడ్ చేసాం
+                  controller: _scrollController,
                   reverse: true,
                   itemCount: messages.length,
                   itemBuilder: (context, index) {

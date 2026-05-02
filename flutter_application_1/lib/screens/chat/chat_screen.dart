@@ -20,7 +20,7 @@ import '../posts/scrolling_posts_screen.dart';
 import '../reels/scrolling_reels_screen.dart';
 import '../../widgets/audio_message_widget.dart';
 import '../common/full_screen_media.dart';
-import 'call_screen.dart'; // 🌟 కాలింగ్ స్క్రీన్ కి వెళ్ళడానికి ఇది యాడ్ చేసాం
+import 'call_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   final String receiverId;
@@ -394,7 +394,6 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
-  // 🌟 THE FIX: కాల్ చేయగానే ఫైర్‌బేస్ లో 'కాల్ వెళ్తోంది' అని సేవ్ చేయడానికి
   void _startCall(bool isVideo) async {
     var myDoc = await FirebaseFirestore.instance
         .collection('users')
@@ -403,7 +402,6 @@ class _ChatScreenState extends State<ChatScreen> {
     String myName = myDoc.data()?['username'] ?? 'User';
     String myPic = myDoc.data()?['profilePic'] ?? '';
 
-    // ఫైర్‌బేస్ లో కాల్ డేటా క్రియేట్ చేస్తున్నాం
     await FirebaseFirestore.instance.collection('calls').doc(roomId).set({
       'callerId': currentUid,
       'callerName': myName,
@@ -411,15 +409,18 @@ class _ChatScreenState extends State<ChatScreen> {
       'receiverId': widget.receiverId,
       'channelId': roomId,
       'isVideoCall': isVideo,
-      'status': 'ringing', // రింగ్ అవుతోంది అని సిగ్నల్
+      'status': 'ringing',
       'timestamp': FieldValue.serverTimestamp(),
     });
 
-    _sendPushNotification(
-      isVideo ? "📞 Incoming Video Call..." : "📞 Incoming Voice Call...",
+    FcmSenderService.sendCallNotification(
+      receiverId: widget.receiverId,
+      callerName: myName,
+      callerPic: myPic,
+      channelId: roomId,
+      isVideo: isVideo,
     );
 
-    // మనల్ని కాల్ స్క్రీన్ కి తీసుకెళ్తుంది
     if (mounted) {
       Navigator.push(
         context,
@@ -614,7 +615,6 @@ class _ChatScreenState extends State<ChatScreen> {
         debugPrint("Storage File Delete Error: $e");
       }
     }
-
     await FirebaseFirestore.instance
         .collection('chatRooms')
         .doc(roomId)
@@ -727,82 +727,88 @@ class _ChatScreenState extends State<ChatScreen> {
                   : 'U',
             ),
             const SizedBox(width: 10),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  widget.receiverName,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
+            // 🌟 THE FIX: ఇక్కడ Expanded యాడ్ చేశాం (ఓవర్‌ఫ్లో ఎర్రర్ రాకుండా)
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    widget.receiverName,
+                    maxLines: 1, // ఒకే లైన్ లో ఆగిపోయేలా
+                    overflow: TextOverflow
+                        .ellipsis, // పేరు పెద్దదైతే చుక్కలు వస్తాయి (...)
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
-                ),
-                StreamBuilder<DocumentSnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('chatRooms')
-                      .doc(roomId)
-                      .snapshots(),
-                  builder: (context, roomSnap) {
-                    bool isTyping = false;
-                    if (roomSnap.hasData && roomSnap.data!.exists) {
-                      isTyping =
-                          (roomSnap.data!.data()
-                              as Map<
-                                String,
-                                dynamic
-                              >)['typing_${widget.receiverId}'] ??
-                          false;
-                    }
+                  StreamBuilder<DocumentSnapshot>(
+                    stream: FirebaseFirestore.instance
+                        .collection('chatRooms')
+                        .doc(roomId)
+                        .snapshots(),
+                    builder: (context, roomSnap) {
+                      bool isTyping = false;
+                      if (roomSnap.hasData && roomSnap.data!.exists) {
+                        isTyping =
+                            (roomSnap.data!.data()
+                                as Map<
+                                  String,
+                                  dynamic
+                                >)['typing_${widget.receiverId}'] ??
+                            false;
+                      }
 
-                    if (isTyping) {
-                      return const Text(
-                        "typing...",
-                        style: TextStyle(
-                          color: Colors.greenAccent,
-                          fontSize: 12,
-                          fontStyle: FontStyle.italic,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      );
-                    }
-
-                    return StreamBuilder<DocumentSnapshot>(
-                      stream: FirebaseFirestore.instance
-                          .collection('users')
-                          .doc(widget.receiverId)
-                          .snapshots(),
-                      builder: (context, userSnap) {
-                        bool isOnline =
-                            (userSnap.hasData && userSnap.data!.exists)
-                            ? ((userSnap.data!.data()
-                                      as Map<String, dynamic>)['isOnline'] ??
-                                  false)
-                            : false;
-                        return Text(
-                          isOnline ? "Active now" : "Offline",
-                          style: const TextStyle(
-                            color: Colors.white70,
+                      if (isTyping) {
+                        return const Text(
+                          "typing...",
+                          style: TextStyle(
+                            color: Colors.greenAccent,
                             fontSize: 12,
+                            fontStyle: FontStyle.italic,
+                            fontWeight: FontWeight.bold,
                           ),
                         );
-                      },
-                    );
-                  },
-                ),
-              ],
+                      }
+
+                      return StreamBuilder<DocumentSnapshot>(
+                        stream: FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(widget.receiverId)
+                            .snapshots(),
+                        builder: (context, userSnap) {
+                          bool isOnline =
+                              (userSnap.hasData && userSnap.data!.exists)
+                              ? ((userSnap.data!.data()
+                                        as Map<String, dynamic>)['isOnline'] ??
+                                    false)
+                              : false;
+                          return Text(
+                            isOnline ? "Active now" : "Offline",
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                            ),
+                          );
+                        },
+                      );
+                    },
+                  ),
+                ],
+              ),
             ),
           ],
         ),
         actions: [
-          // 🌟 THE FIX: ఇక్కడ కాల్ బటన్స్ ని _startCall తో అప్డేట్ చేసాం
           IconButton(
             icon: const Icon(Icons.videocam, color: Colors.white),
-            onPressed: () => _startCall(true), // వీడియో కాల్
+            onPressed: () => _startCall(true),
           ),
           IconButton(
             icon: const Icon(Icons.call, color: Colors.white),
-            onPressed: () => _startCall(false), // ఆడియో కాల్
+            onPressed: () => _startCall(false),
           ),
           IconButton(
             icon: Icon(

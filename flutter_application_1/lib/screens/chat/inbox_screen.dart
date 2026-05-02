@@ -8,6 +8,8 @@ import 'package:timeago/timeago.dart' as timeago;
 import '../../widgets/safe_elements.dart';
 import 'chat_screen.dart';
 import '../community/community_list_screen.dart';
+import '../chat/call_screen.dart'; // 🌟 కాల్ స్క్రీన్ కోసం
+import '../../services/fcm_sender_service.dart'; // 🌟 సిగ్నల్ పంపడానికి
 
 class InboxScreen extends StatefulWidget {
   const InboxScreen({super.key});
@@ -18,6 +20,51 @@ class InboxScreen extends StatefulWidget {
 
 class _InboxScreenState extends State<InboxScreen> {
   final String currentUid = FirebaseAuth.instance.currentUser!.uid;
+
+  // 🌟 THE FIX: హిస్టరీ ట్యాబ్ లోంచి మళ్ళీ కాల్ చేయడానికి ఫంక్షన్
+  void _startCallFromHistory(
+    bool isVideo,
+    String receiverId,
+    String roomId,
+  ) async {
+    var myDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(currentUid)
+        .get();
+    String myName = myDoc.data()?['username'] ?? 'User';
+    String myPic = myDoc.data()?['profilePic'] ?? '';
+
+    // డేటాబేస్ లో కాల్ మళ్ళీ స్టార్ట్ అయిందని రాస్తున్నాం
+    await FirebaseFirestore.instance.collection('calls').doc(roomId).set({
+      'callerId': currentUid,
+      'callerName': myName,
+      'callerPic': myPic,
+      'receiverId': receiverId,
+      'channelId': roomId,
+      'isVideoCall': isVideo,
+      'status': 'ringing',
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+
+    // అవతలి వాడికి రింగ్ అవ్వడానికి సిగ్నల్ (FCM) పంపుతున్నాం
+    FcmSenderService.sendCallNotification(
+      receiverId: receiverId,
+      callerName: myName,
+      callerPic: myPic,
+      channelId: roomId,
+      isVideo: isVideo,
+    );
+
+    // కాలింగ్ స్క్రీన్ కి వెళ్తున్నాం
+    if (mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CallScreen(channelName: roomId, isVideoCall: isVideo),
+        ),
+      );
+    }
+  }
 
   void _showFollowersToChat() async {
     showModalBottomSheet(
@@ -151,7 +198,7 @@ class _InboxScreenState extends State<InboxScreen> {
         title: const Text("Share a thought..."),
         content: TextField(
           controller: noteController,
-          maxLength: 60, // 🌟 THE FIX: నోట్ మరీ పెద్దగా లేకుండా 60 కి మార్చాను
+          maxLength: 60,
           decoration: InputDecoration(
             hintText: "What's on your mind?",
             hintStyle: const TextStyle(color: Colors.grey),
@@ -249,18 +296,16 @@ class _InboxScreenState extends State<InboxScreen> {
         String myNoteText = hasMyNote ? myNoteData!['text'] : "Note...";
 
         return Container(
-          height: 145, // 🌟 THE FIX: పర్ఫెక్ట్ హైట్
+          height: 145,
           padding: const EdgeInsets.only(top: 15, bottom: 5),
           child: ListView(
             scrollDirection: Axis.horizontal,
             padding: const EdgeInsets.symmetric(horizontal: 10),
             children: [
-              // ------------------- 1. My Note -------------------
               GestureDetector(
                 onTap: () => _showAddNoteDialog(myUserData),
                 child: Container(
-                  width:
-                      80, // 🌟 THE FIX: ఫిక్స్‌డ్ విడ్త్ వల్ల బబుల్స్ ఓవర్‌లాప్ అవ్వవు
+                  width: 80,
                   margin: const EdgeInsets.symmetric(horizontal: 5),
                   child: Column(
                     children: [
@@ -269,9 +314,7 @@ class _InboxScreenState extends State<InboxScreen> {
                         alignment: Alignment.topCenter,
                         children: [
                           Padding(
-                            padding: const EdgeInsets.only(
-                              top: 18,
-                            ), // బబుల్ కి ప్లేస్ ఇచ్చాం
+                            padding: const EdgeInsets.only(top: 18),
                             child: SafeProfilePic(
                               base64String: myUserData['profilePic'] ?? '',
                               radius: 32,
@@ -305,7 +348,6 @@ class _InboxScreenState extends State<InboxScreen> {
                                   ),
                                 ],
                               ),
-                              // 🌟 THE FIX: Marquee తీసేసి నార్మల్ Text వాడాం, క్లీన్ గా కనిపిస్తుంది
                               child: Text(
                                 myNoteText,
                                 textAlign: TextAlign.center,
@@ -361,8 +403,6 @@ class _InboxScreenState extends State<InboxScreen> {
                   ),
                 ),
               ),
-
-              // ------------------- 2. Friends' Notes -------------------
               ...allNotes.map((doc) {
                 var noteData = doc.data() as Map<String, dynamic>;
                 String friendId = noteData['uid'];
@@ -384,7 +424,7 @@ class _InboxScreenState extends State<InboxScreen> {
                     }
 
                     return Container(
-                      width: 80, // 🌟 THE FIX: ఇక్కడ కూడా ఫిక్స్‌డ్ విడ్త్
+                      width: 80,
                       margin: const EdgeInsets.symmetric(horizontal: 5),
                       child: Column(
                         children: [
@@ -445,7 +485,6 @@ class _InboxScreenState extends State<InboxScreen> {
                                       ),
                                     ],
                                   ),
-                                  // 🌟 THE FIX: ఇక్కడ కూడా Marquee తీసేసి నార్మల్ Text వాడాం
                                   child: Text(
                                     friendNoteText,
                                     textAlign: TextAlign.center,
@@ -816,19 +855,195 @@ class _InboxScreenState extends State<InboxScreen> {
             // 🌟 2. COMMUNITIES TAB
             const CommunityListScreen(),
 
-            // 🌟 3. CALLS TAB
-            const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.call, size: 80, color: Colors.grey),
-                  SizedBox(height: 10),
-                  Text(
-                    "Audio & Video Calls Coming Soon!",
-                    style: TextStyle(fontSize: 18, color: Colors.grey),
-                  ),
-                ],
-              ),
+            // 🌟 3. CALLS TAB (కాల్ హిస్టరీ - THE FIX ఇక్కడే)
+            StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance
+                  .collection('calls')
+                  .orderBy('timestamp', descending: true)
+                  .snapshots(),
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+                  return const Center(
+                    child: Text(
+                      "No Call History 📞",
+                      style: TextStyle(color: Colors.grey, fontSize: 16),
+                    ),
+                  );
+                }
+
+                // నా కాల్స్ మాత్రమే ఫిల్టర్ చేస్తున్నాం
+                var myCalls = snapshot.data!.docs.where((doc) {
+                  var data = doc.data() as Map<String, dynamic>;
+                  return data['callerId'] == currentUid ||
+                      data['receiverId'] == currentUid ||
+                      data['isGroupCall'] == true;
+                }).toList();
+
+                if (myCalls.isEmpty) {
+                  return const Center(
+                    child: Text(
+                      "No Call History 📞",
+                      style: TextStyle(color: Colors.grey, fontSize: 16),
+                    ),
+                  );
+                }
+
+                return ListView.builder(
+                  itemCount: myCalls.length,
+                  itemBuilder: (context, index) {
+                    var callData =
+                        myCalls[index].data() as Map<String, dynamic>;
+                    bool isVideo = callData['isVideoCall'] ?? false;
+                    bool isMeCaller = callData['callerId'] == currentUid;
+                    bool isGroup = callData['isGroupCall'] == true;
+                    String channelId = callData['channelId'] ?? '';
+
+                    DateTime time =
+                        (callData['timestamp'] as Timestamp?)?.toDate() ??
+                        DateTime.now();
+
+                    // 1. ఇది గ్రూప్ కాల్ అయితే
+                    if (isGroup) {
+                      String groupName =
+                          callData['callerName'] ?? 'Community Call';
+                      String groupPic = callData['callerPic'] ?? '';
+                      return ListTile(
+                        leading: SafeProfilePic(
+                          base64String: groupPic,
+                          radius: 25,
+                          fallbackText: 'C',
+                        ),
+                        title: Text(
+                          groupName,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            color: isDark ? Colors.white : Colors.black,
+                          ),
+                        ),
+                        subtitle: Row(
+                          children: [
+                            const Icon(
+                              Icons.group,
+                              size: 16,
+                              color: Colors.blue,
+                            ),
+                            const SizedBox(width: 5),
+                            Text(
+                              timeago.format(time, locale: 'en_short'),
+                              style: const TextStyle(color: Colors.grey),
+                            ),
+                          ],
+                        ),
+                        trailing: IconButton(
+                          icon: Icon(
+                            isVideo ? Icons.videocam : Icons.call,
+                            color: Colors.green,
+                          ),
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => CallScreen(
+                                  channelName: callData['receiverId'],
+                                  isVideoCall: isVideo,
+                                  isGroupCall: true,
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      );
+                    }
+
+                    // 2. ఇది మామూలు కాల్ అయితే (FutureBuilder తో అవతలి వాడి పేరు పట్టుకొస్తున్నాం)
+                    String otherUserId = isMeCaller
+                        ? callData['receiverId']
+                        : callData['callerId'];
+
+                    return FutureBuilder<DocumentSnapshot>(
+                      future: FirebaseFirestore.instance
+                          .collection('users')
+                          .doc(otherUserId)
+                          .get(),
+                      builder: (context, userSnap) {
+                        if (!userSnap.hasData || !userSnap.data!.exists)
+                          return const SizedBox();
+
+                        var userData =
+                            userSnap.data!.data() as Map<String, dynamic>;
+                        String otherName = userData['username'] ?? 'User';
+                        String otherPic = userData['profilePic'] ?? '';
+
+                        return ListTile(
+                          leading: SafeProfilePic(
+                            base64String: otherPic,
+                            radius: 25,
+                            fallbackText: otherName.isNotEmpty
+                                ? otherName[0].toUpperCase()
+                                : 'U',
+                          ),
+                          title: Text(
+                            otherName,
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: isDark ? Colors.white : Colors.black,
+                            ),
+                          ),
+                          subtitle: Row(
+                            children: [
+                              Icon(
+                                isMeCaller
+                                    ? Icons.call_made
+                                    : Icons.call_received,
+                                size: 16,
+                                color: isMeCaller ? Colors.green : Colors.red,
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                timeago.format(time, locale: 'en_short'),
+                                style: const TextStyle(color: Colors.grey),
+                              ),
+                            ],
+                          ),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              // ఆడియో కాల్ బటన్
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.call,
+                                  color: Colors.green,
+                                ),
+                                onPressed: () => _startCallFromHistory(
+                                  false,
+                                  otherUserId,
+                                  channelId,
+                                ),
+                              ),
+                              // వీడియో కాల్ బటన్
+                              IconButton(
+                                icon: const Icon(
+                                  Icons.videocam,
+                                  color: Colors.blue,
+                                ),
+                                onPressed: () => _startCallFromHistory(
+                                  true,
+                                  otherUserId,
+                                  channelId,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    );
+                  },
+                );
+              },
             ),
           ],
         ),

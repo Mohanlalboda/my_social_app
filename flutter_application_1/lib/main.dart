@@ -7,11 +7,11 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:google_mobile_ads/google_mobile_ads.dart'; // 🌟 యాడ్స్ కోసం
-import 'dart:async'; // 🌟 కాల్ సబ్‌స్క్రిప్షన్ కోసం
+import 'dart:async';
 
-import 'screens/chat/incoming_call_screen.dart'; // 🌟 కాల్ వస్తే ఈ స్క్రీన్ ఓపెన్ అవుతుంది
+import 'services/notification_service.dart'; // 🌟 THE FIX 1: ఇది కచ్చితంగా ఉండాలి (navigatorKey ఇక్కడే ఉంది కాబట్టి)
+import 'screens/chat/incoming_call_screen.dart';
 import 'screens/create/add_post_screen.dart';
-import 'services/notification_service.dart';
 import 'services/social_service.dart';
 import 'firebase_options.dart';
 import 'screens/auth/login_screen.dart';
@@ -26,7 +26,6 @@ import 'utils/constants.dart';
 
 final ValueNotifier<ThemeMode> themeNotifier = ValueNotifier(ThemeMode.system);
 
-// 🌟 వాట్సాప్ లాగా యాప్ క్లోజ్ లో ఉన్నప్పుడు పుష్ నోటిఫికేషన్స్ కోసం
 @pragma('vm:entry-point')
 Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
@@ -38,10 +37,8 @@ void main() async {
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
-  // 🌟 యాడ్స్ ని ముందుగానే స్టార్ట్ చేయడం
   await MobileAds.instance.initialize();
 
-  // 🌟 పుష్ నోటిఫికేషన్స్ సెటప్
   await PushNotificationService.initialize();
   FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
@@ -57,6 +54,8 @@ class MySocialApp extends StatelessWidget {
       valueListenable: themeNotifier,
       builder: (context, ThemeMode currentMode, child) {
         return MaterialApp(
+          navigatorKey:
+              navigatorKey, // 🌟 THE FIX 2: కాల్ లిఫ్ట్ చేయగానే యాప్ ఓపెన్ అవ్వడానికి ఇది గుండెకాయ లాంటిది!
           debugShowCheckedModeBanner: false,
           title: 'MyBanjara',
 
@@ -144,7 +143,7 @@ class _MainNavigationState extends State<MainNavigation>
   int _selectedIndex = 0;
 
   late PageController _pageController;
-  StreamSubscription? _callSubscription; // 🌟 కాల్స్ గమనించడానికి
+  StreamSubscription? _callSubscription;
 
   final List<Widget> _screens = [
     const HomeScreen(),
@@ -163,12 +162,9 @@ class _MainNavigationState extends State<MainNavigation>
     WidgetsBinding.instance.addObserver(this);
     SocialService.cleanupOldMoments();
 
-    // 🌟 యాప్ ఓపెన్ చేయగానే ఎవరైనా కాల్ చేస్తున్నారేమో అని చెక్ చేస్తుంది
     _listenForIncomingCalls();
   }
 
-  // 🌟 THE FIX: ఇక్కడే కాల్స్ కోసం ఫైర్‌బేస్ ని వింటుంటాం
- // 🌟 THE FIX: ఇక్కడే కాల్స్ కోసం ఫైర్‌బేస్ ని వింటుంటాం
   void _listenForIncomingCalls() {
     final currentUid = FirebaseAuth.instance.currentUser?.uid;
     if (currentUid == null) return;
@@ -176,36 +172,37 @@ class _MainNavigationState extends State<MainNavigation>
     _callSubscription = FirebaseFirestore.instance
         .collection('calls')
         .where('receiverId', isEqualTo: currentUid)
-        .where('status', isEqualTo: 'ringing') // రింగ్ అవుతుంటేనే..
+        .where('status', isEqualTo: 'ringing')
         .snapshots()
         .listen((snapshot) {
-      if (snapshot.docs.isNotEmpty) {
-        var callDoc = snapshot.docs.first;
-        var callData = callDoc.data();
-        
-        // 🌟 THE FIX: ఎర్రర్ రాకుండా mounted చెక్ యాడ్ చేసాం
-        if (!mounted) return;
+          if (snapshot.docs.isNotEmpty) {
+            var callDoc = snapshot.docs.first;
+            var callData = callDoc.data();
 
-        // వెంటనే ఇన్-కమింగ్ కాల్ స్క్రీన్ ఓపెన్ చేస్తుంది!
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => IncomingCallScreen(
-              callId: callDoc.id,
-              callerName: callData['callerName'] ?? 'Someone',
-              callerPic: callData['callerPic'] ?? '',
-              isVideoCall: callData['isVideoCall'] ?? false,
-              channelId: callData['channelId'] ?? callDoc.id,
-            ),
-          ),
-        );
-      }
-    });
+            if (!mounted) return;
+
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => IncomingCallScreen(
+                  callId: callDoc.id,
+                  callerName: callData['callerName'] ?? 'Someone',
+                  callerPic: callData['callerPic'] ?? '',
+                  isVideoCall: callData['isVideoCall'] ?? false,
+                  channelId: callData['channelId'] ?? callDoc.id,
+                  isGroupCall:
+                      callData['isGroupCall'] ??
+                      false, // 🌟 THE FIX: ఇక్కడ పాస్ చేస్తున్నాం!
+                ),
+              ),
+            );
+          }
+        });
   }
+
   @override
   void dispose() {
-    _callSubscription
-        ?.cancel(); // 🌟 యాప్ క్లోజ్ చేసినప్పుడు ఇది కూడా ఆగిపోవాలి
+    _callSubscription?.cancel();
     _pageController.dispose();
     _updateOnlineStatus(false);
     WidgetsBinding.instance.removeObserver(this);

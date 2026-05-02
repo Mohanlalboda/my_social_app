@@ -9,9 +9,15 @@
    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
    <uses-permission android:name="android.permission.WAKE_LOCK" />
+   <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+   <uses-permission android:name="android.permission.DISABLE_KEYGUARD" />
    
+   <!-- 🌟 నోటిఫికేషన్స్ కోసం పర్మిషన్స్ -->
+   <uses-permission android:name="android.permission.VIBRATE" />
+   <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+  
    <application
        android:label="MyBanjara"
        android:name="${applicationName}"
@@ -20,9 +26,15 @@
        android:usesCleartextTraffic="true"
        android:requestLegacyExternalStorage="true">
        
+       <!-- 🌟 గూగుల్ యాడ్స్ (AdMob) కీ -->
        <meta-data
            android:name="com.google.android.gms.ads.APPLICATION_ID"
-           android:value="ca-app-pub-7426724746409466~2937898998"/>
+           android:value="ca-app-pub-7426724746409466~2937898998" />
+
+       <!-- 🌟 THE FIX: ఫైర్‌బేస్ నోటిఫికేషన్ పాప్-అప్ ఛానెల్ (దీన్ని సపరేట్ గా పెట్టాం) -->
+       <meta-data
+           android:name="com.google.firebase.messaging.default_notification_channel_id"
+           android:value="super_high_importance_channel" />
 
        <activity
            android:name=".MainActivity"

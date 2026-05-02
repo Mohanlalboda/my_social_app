@@ -4,11 +4,12 @@ import '../../widgets/safe_elements.dart';
 import 'call_screen.dart';
 
 class IncomingCallScreen extends StatefulWidget {
-  final String callId; // ఇది మన రూమ్ ఐడీ
+  final String callId;
   final String callerName;
   final String callerPic;
   final bool isVideoCall;
   final String channelId;
+  final bool isGroupCall; // 🌟 కొత్తగా యాడ్ చేశాం
 
   const IncomingCallScreen({
     super.key,
@@ -17,6 +18,7 @@ class IncomingCallScreen extends StatefulWidget {
     required this.callerPic,
     required this.isVideoCall,
     required this.channelId,
+    this.isGroupCall = false, // 🌟 డిఫాల్ట్ సెట్టింగ్
   });
 
   @override
@@ -24,7 +26,6 @@ class IncomingCallScreen extends StatefulWidget {
 }
 
 class _IncomingCallScreenState extends State<IncomingCallScreen> {
-  // 🌟 కాల్ లిఫ్ట్ చేస్తే..
   void _acceptCall() async {
     await FirebaseFirestore.instance
         .collection('calls')
@@ -37,13 +38,14 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
           builder: (_) => CallScreen(
             channelName: widget.channelId,
             isVideoCall: widget.isVideoCall,
+            isGroupCall:
+                widget.isGroupCall, // 🌟 THE FIX: ఇక్కడ పాస్ చేస్తున్నాం
           ),
         ),
       );
     }
   }
 
-  // 🌟 కాల్ కట్ చేస్తే..
   void _rejectCall() async {
     await FirebaseFirestore.instance
         .collection('calls')
@@ -94,7 +96,6 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                // 🔴 కట్ బటన్ (Decline)
                 GestureDetector(
                   onTap: _rejectCall,
                   child: Column(
@@ -119,7 +120,6 @@ class _IncomingCallScreenState extends State<IncomingCallScreen> {
                     ],
                   ),
                 ),
-                // 🟢 లిఫ్ట్ బటన్ (Accept)
                 GestureDetector(
                   onTap: _acceptCall,
                   child: Column(
