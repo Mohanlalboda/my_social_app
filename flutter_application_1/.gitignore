@@ -45,3 +45,4 @@ app.*.map.json
 /android/app/release
 
 assets/service/service_account.json
+lib/services/fcm_sender_service.dart
