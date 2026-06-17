@@ -46,3 +46,4 @@ app.*.map.json
 
 assets/service/service_account.json
 lib/services/fcm_sender_service.dart
+.env
