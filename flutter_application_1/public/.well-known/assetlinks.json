@@ -1,0 +1,18 @@
+[
+  {
+    "relation": [
+      "delegate_permission/common.handle_all_urls",
+      "delegate_permission/common.get_login_creds"
+    ],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "in.mybanjara.app",
+      "sha256_cert_fingerprints": [
+        "4A:05:49:B9:E4:05:00:C9:DC:00:41:82:09:3B:F9:69:AB:09:01:EC:7F:54:62:58:4C:AD:49:D7:93:C8:38:B7",
+        "F8:46:42:AC:FA:81:0D:5A:97:A7:53:E9:4D:06:22:51:B4:C3:A3:B5:E5:56:CD:05:B1:A1:38:4F:A2:A2:38",
+        "F8:46:42:AC:FA:81:0D:5A:97:A7:53:E9:4D:06:22:51:B4:C3:A3:B5:E5:36:CD:05:B1:A1:38:4F:A2:A2:38",
+        "F8:46:42:AC:FA:81:0D:5A:97:A7:53:E9:4D:06:22:51:B4:C3:A3:B5:E5:36:CD:05:B1:A1:38:1C:99:AA:E5:5F"
+      ]
+    }
+  }
+]

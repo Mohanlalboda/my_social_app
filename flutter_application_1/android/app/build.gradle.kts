@@ -4,6 +4,7 @@ import java.io.FileInputStream
 plugins {
     id("com.android.application")
     id("com.google.gms.google-services")
+    id("com.google.firebase.crashlytics") // 🌟 THE FIX: ఇక్కడ యాడ్ చేసాం బాస్!
     id("kotlin-android")
     id("dev.flutter.flutter-gradle-plugin")
 }
@@ -29,10 +30,24 @@ android {
         jvmTarget = "17"
     }
 
+    // 🌟 ఫ్లేవర్స్ సెటప్ ఇక్కడ చేసాము
+    flavorDimensions.add("default")
+    productFlavors {
+        create("dev") {
+            dimension = "default"
+            applicationIdSuffix = ".dev"
+            resValue("string", "app_name", "MyBanjara Dev")
+        }
+        create("prod") {
+            dimension = "default"
+            resValue("string", "app_name", "MyBanjara")
+        }
+    }
+
     defaultConfig {
         applicationId = "in.mybanjara.app"
         minSdk = 24
-        targetSdk = 35
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         multiDexEnabled = true
@@ -52,7 +67,6 @@ android {
 
     buildTypes {
         getByName("release") {
-            // రియల్ యాప్ కోసం సైనింగ్ కాన్ఫిగరేషన్
             signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             isShrinkResources = false

@@ -7,9 +7,11 @@
 #include "generated_plugin_registrant.h"
 
 #include <agora_rtc_engine/agora_rtc_engine_plugin.h>
+#include <app_links/app_links_plugin_c_api.h>
 #include <audioplayers_windows/audioplayers_windows_plugin.h>
 #include <cloud_firestore/cloud_firestore_plugin_c_api.h>
 #include <file_selector_windows/file_selector_windows.h>
+#include <firebase_app_check/firebase_app_check_plugin_c_api.h>
 #include <firebase_auth/firebase_auth_plugin_c_api.h>
 #include <firebase_core/firebase_core_plugin_c_api.h>
 #include <firebase_database/firebase_database_plugin_c_api.h>
@@ -24,12 +26,16 @@
 void RegisterPlugins(flutter::PluginRegistry* registry) {
   AgoraRtcEnginePluginRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("AgoraRtcEnginePlugin"));
+  AppLinksPluginCApiRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("AppLinksPluginCApi"));
   AudioplayersWindowsPluginRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("AudioplayersWindowsPlugin"));
   CloudFirestorePluginCApiRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("CloudFirestorePluginCApi"));
   FileSelectorWindowsRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("FileSelectorWindows"));
+  FirebaseAppCheckPluginCApiRegisterWithRegistrar(
+      registry->GetRegistrarForPlugin("FirebaseAppCheckPluginCApi"));
   FirebaseAuthPluginCApiRegisterWithRegistrar(
       registry->GetRegistrarForPlugin("FirebaseAuthPluginCApi"));
   FirebaseCorePluginCApiRegisterWithRegistrar(

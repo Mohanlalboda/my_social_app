@@ -1,0 +1,27 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "MyBanjara (DEV)",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main.dart",
+            "args": [
+                "--flavor",
+                "dev",
+                "--dart-define=FLAVOR=dev"
+            ]
+        },
+        {
+            "name": "MyBanjara (PROD)",
+            "request": "launch",
+            "type": "dart",
+            "program": "lib/main.dart",
+            "args": [
+                "--flavor",
+                "prod",
+                "--dart-define=FLAVOR=prod"
+            ]
+        }
+    ]
+}

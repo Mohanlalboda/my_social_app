@@ -13,8 +13,7 @@ class SignUpScreen extends StatefulWidget {
 class _SignUpScreenState extends State<SignUpScreen> {
   final TextEditingController _usernameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
-  final TextEditingController _phoneController =
-      TextEditingController(); // 🌟 మొబైల్ నంబర్ కోసం
+  final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   bool _isLoading = false;
 
@@ -23,7 +22,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
         _passwordController.text.isEmpty ||
         _usernameController.text.isEmpty ||
         _phoneController.text.isEmpty) {
-      // 🌟 వాలిడేషన్ అప్‌డేట్
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Please fill all fields! ⚠️")),
       );
@@ -44,15 +42,16 @@ class _SignUpScreenState extends State<SignUpScreen> {
             'uid': userCred.user!.uid,
             'username': _usernameController.text.trim(),
             'email': _emailController.text.trim(),
-            'phone': _phoneController.text
-                .trim(), // 🌟 డేటాబేస్ లో ఫోన్ నంబర్ సేవ్
+            'phone': _phoneController.text.trim(),
             'profilePic': '',
             'followers': [],
             'following': [],
             'bio': '',
           });
 
-      if (mounted) Navigator.pop(context);
+      if (mounted) {
+        Navigator.of(context).popUntil((route) => route.isFirst);
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(
@@ -97,8 +96,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     ),
                   ),
                   const SizedBox(height: 40),
-
-                  // Username Field
                   TextField(
                     controller: _usernameController,
                     style: TextStyle(color: textColor),
@@ -118,8 +115,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     ),
                   ),
                   const SizedBox(height: 15),
-
-                  // 🌟 Phone Field
                   TextField(
                     controller: _phoneController,
                     keyboardType: TextInputType.phone,
@@ -140,8 +135,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     ),
                   ),
                   const SizedBox(height: 15),
-
-                  // Email Field
                   TextField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
@@ -162,8 +155,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     ),
                   ),
                   const SizedBox(height: 15),
-
-                  // Password Field
                   TextField(
                     controller: _passwordController,
                     obscureText: true,
@@ -184,7 +175,6 @@ class _SignUpScreenState extends State<SignUpScreen> {
                     ),
                   ),
                   const SizedBox(height: 30),
-
                   GestureDetector(
                     onTap: _isLoading ? null : _signUp,
                     child: Container(

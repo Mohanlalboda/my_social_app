@@ -1,5 +1,17 @@
 import com.android.build.gradle.LibraryExtension 
 
+// 🌟 THE FIX: Crashlytics కోసం buildscript యాడ్ చేసాం
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        // Crashlytics Gradle plugin
+        classpath("com.google.firebase:firebase-crashlytics-gradle:2.9.9")
+    }
+}
+
 allprojects {
     repositories {
         google()

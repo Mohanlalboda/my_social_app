@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>MyBanjara Community</title>
+
+    <meta property="og:title" content="MyBanjara Community" />
+    <meta property="og:description" content="మన బంజారా కమ్యూనిటీ యాప్ - ఇప్పుడే జాయిన్ అవ్వండి!" />
+    <meta property="og:image" content="https://my-social-app-d3394.web.app/assets/logo.png" />
+    <meta property="og:url" content="https://my-social-app-d3394.web.app" />
+    <meta property="og:type" content="website" />
+
+    <script defer src="/__/firebase/12.13.0/firebase-app-compat.js"></script>
+    <script defer src="/__/firebase/12.13.0/firebase-auth-compat.js"></script>
+    <script defer src="/__/firebase/12.13.0/firebase-firestore-compat.js"></script>
+    <script defer src="/__/firebase/init.js?useEmulator=true"></script>
+
+    <style media="screen">
+      body { background: #ECEFF1; color: rgba(0,0,0,0.87); font-family: Roboto, Helvetica, Arial, sans-serif; margin: 0; padding: 0; }
+      #message { background: white; max-width: 360px; margin: 100px auto 16px; padding: 32px 24px; border-radius: 8px; text-align: center; }
+      #message h2 { color: #ffa100; font-weight: bold; font-size: 18px; margin: 0 0 8px; }
+      #message h1 { font-size: 20px; font-weight: 300; color: rgba(0,0,0,0.6); margin: 0 0 16px;}
+      #message p { line-height: 140%; margin: 16px 0 24px; font-size: 14px; }
+      #message a { display: block; background: #039be5; text-transform: uppercase; text-decoration: none; color: white; padding: 16px; border-radius: 4px; font-weight: bold; }
+      #message, #message a { box-shadow: 0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.24); }
+      @media (max-width: 600px) {
+        body, #message { margin-top: 50px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="message">
+      <h2>Welcome to MyBanjara</h2>
+      <h1>Stay Connected with your Community</h1>
+      <p>ఈ పోస్ట్ చూడాలంటే, మన అఫీషియల్ యాప్ ని ఇన్‌స్టాల్ చేసుకోండి.</p>
+      
+      <a href="https://play.google.com/store/apps/details?id=in.mybanjara.app&pcampaignid=web_share">Install MyBanjara App</a>
+    </div>
+
+    <script>
+      document.addEventListener('DOMContentLoaded', function() {
+        // ఇది యాప్ ఉంటే ఆటోమేటిక్ గా యాప్ కి తీసుకెళ్తుంది (Deep Linking)
+        const urlParams = new URLSearchParams(window.location.search);
+        // ఇక్కడ ఆటోమేటిక్ రీడైరెక్ట్ లాజిక్ అవసరం లేదు, Android Intent ఆటోమేటిక్ గా పనిచేస్తుంది.
+      });
+    </script>
+  </body>
+</html>

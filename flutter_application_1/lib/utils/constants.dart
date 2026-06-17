@@ -1,15 +1,19 @@
 import 'package:flutter/material.dart';
 
-// 🌟 మీ ఇమేజ్ నుండి తీసుకున్న కొత్త నియాన్ కలర్స్ (Neon Cyberpunk Theme)
+// 🌟 బంజారా సాంప్రదాయ రంగులు (Traditional Banjara Theme)
 const LinearGradient brandGradient = LinearGradient(
   colors: [
-    Color(0xFF00E5FF), // Neon Cyan (గ్లోయింగ్ బ్లూ)
-    Color(0xFF7A00FF), // Deep Purple (డార్క్ పర్పుల్)
-    Color(0xFFFF007F), // Electric Pink (నియాన్ పింక్)
+    Color(0xFF833AB4), // Purple
+    Color(0xFFD32F2F), // ఎరుపు (Red - సాంప్రదాయ ఎంబ్రాయిడరీ వర్క్ లాగా)
+    Color(0xFFF57C00), // కాషాయం (Orange - బంతి పూల రంగు)
+    Color(0xFFFBC02D), // పసుపు (Yellow - పసుపు/కుంకుమ ఫీల్)
   ],
   begin: Alignment.topLeft,
   end: Alignment.bottomRight,
 );
 
-// 🌟 యాప్ బ్యాక్‌గ్రౌండ్స్ లో ఎక్కడైనా ఈ డార్క్ థీమ్ వాడాలనుకుంటే
-const Color brandDarkBackground = Color(0xFF0A0A0C); // రిచ్ డార్క్ కలర్
+// 🌟 డార్క్ థీమ్ బ్యాక్‌గ్రౌండ్ (మరీ బ్లాక్ కాకుండా ఎర్తి (Earthy) డార్క్)
+const Color brandDarkBackground = Color(0xFF120C0A);
+
+// 🌟 మెయిన్ హైలైట్/గ్లో కలర్ (బంజారా ఆరెంజ్)
+const Color brandAccentColor = Color(0xFFF57C00);

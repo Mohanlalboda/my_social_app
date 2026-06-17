@@ -1,0 +1,20 @@
+{
+  "project_info": {
+    "project_number": "202576424225",
+    "project_id": "mybanjara-dev",
+    "storage_bucket": "mybanjara-dev.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:202576424225:android:595e9825e2147ed492e260",
+        "android_client_info": {
+          "package_name": "in.mybanjara.app.dev"
+        }
+      },
+      "api_key": [{ "current_key": "AIzaSyCwO50seSfz-3oqpsGBPygCeStmtMAtmgw" }],
+      "services": { "appinvite_service": { "other_platform_oauth_client": [] } }
+    }
+  ],
+  "configuration_version": "1"
+}
